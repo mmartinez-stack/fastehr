@@ -1,2 +1,12 @@
+packages:
+  - apps/*
+  - packages/*
+
 allowBuilds:
   msw: true
+  # native bindings for eslint-import-resolver-typescript (via eslint-config-next)
+  unrs-resolver: true
+
+# pnpm 11 reads settings from this file; the `pnpm` field in package.json is ignored.
+overrides:
+  hono: 4.12.25

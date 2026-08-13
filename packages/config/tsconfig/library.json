@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "FastEHR Library (framework-free)",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"]
+  }
+}

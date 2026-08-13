@@ -1,0 +1,20 @@
+{
+  "extends": "@fastehr/config/tsconfig/next.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./*"]
+    },
+    // TODO: re-enable once lib/mock-data.ts is replaced by @fastehr/db.
+    // The generated mockup indexes fixture arrays by random offsets in ~30
+    // places; the flag stays on for every package under packages/.
+    "noUncheckedIndexedAccess": false
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": ["node_modules", ".next", ".turbo"]
+}
