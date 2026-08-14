@@ -57,6 +57,19 @@ apps/web/
 
 `@/*` resolves to `./src/*` and nothing else — [ADR 13](docs/adr/013-single-path-alias-root.md).
 
+**Where a component goes** is decided by how many routes use it:
+
+| | |
+| --- | --- |
+| one route | the route's own directory |
+| several routes, one domain | `src/features/<domain>/` |
+| several routes, no one domain | `src/components/` |
+| shadcn CLI output | `src/components/ui/` — never hand-edited |
+
+Write it in the route directory; move it when a second route needs it. Nothing
+goes in a shared directory in anticipation. `src/components/ui` is fenced by
+lint so it stays regenerable by `shadcn add` — [ADR 20](docs/adr/020-component-placement.md).
+
 ### The server layer
 
 ```

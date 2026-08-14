@@ -471,6 +471,29 @@ finding 12 practical.
 
 ### 14. UI structure: write down the promotion rule
 
+> **Done** (2026-08-13). [ADR 20](adr/020-component-placement.md), plus a lint
+> fence keeping `src/components/ui` regenerable, and a short table in the README.
+>
+> The rule was written against the tree rather than from taste, and it ratifies
+> the current layout with **no moves required**: every route-colocated component
+> is used by exactly one route, and `page-header` (11 routes) and
+> `status-badges` (7) span patients, queues and RFI, so `src/components/` is the
+> right home for both. `src/features/` is described but not created — the first
+> promotion creates it.
+>
+> **The enforceable half turned out to be the `ui` directory, not the promotion
+> rule.** Promotion is a judgment call lint cannot make; "generated code must
+> stay regenerable" is mechanical, and the failure is nasty — a primitive that
+> imports a domain type is silently overwritten by the next `shadcn add`, and
+> the file still compiles afterwards. It now may import only `@/lib/utils` and
+> its siblings.
+>
+> Worth recording: my first version of that fence used a gitignore-style
+> negation (`'!@/components/ui/**'`) and broke eleven real files, because the
+> negation does not carve siblings back out of the broader pattern. A `regex`
+> with `(?!ui/)` does. Caught by running lint on the tree rather than only on a
+> probe — the probe alone would have looked like a pass.
+
 Route-directory colocation is Next-idiomatic and correct at this size. The rule
 worth stating before it is needed: promote a component to `src/features/<domain>/`
 when a second route uses it; `src/components/ui` stays shadcn CLI output and is

@@ -29,6 +29,7 @@ first and produced a bug that type-checked.
 | [17](017-client-seam.md) | RSC calls the router in-process; the browser hydrates | `apps/web/src/trpc` |
 | [18](018-two-test-tiers.md) | Two test tiers, and a timezone pinned west of UTC | `packages/db` · CI |
 | [19](019-ci-builds-cold.md) | CI builds cold, and the database job is separate | CI |
+| [20](020-component-placement.md) | Where a component lives | `apps/web/src/components` |
 
 ## Adding one
 
