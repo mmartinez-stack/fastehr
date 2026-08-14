@@ -1,0 +1,68 @@
+name: CI
+
+# Runs on pull requests and on pushes to the default branch. Nothing here needs
+# a database: `prisma generate` deliberately does not require DATABASE_URL (see
+# packages/db/prisma.config.ts), and no test touches a live connection yet. The
+# day one does, it gets a Postgres service container — not a shared instance.
+on:
+  push:
+    branches: [feat/fastehr-ui-mockup]
+  pull_request:
+
+# A superseded run on the same ref tells you nothing.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: lint · typecheck · test · build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # Must precede setup-node, which needs pnpm on PATH to resolve its store
+      # for caching. The version comes from `packageManager` in package.json —
+      # not repeated here, so there is one place to bump it.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # First, because it is a dry run and takes a second: it asserts that
+      # `@fastehr/db#generate` is still ordered before `@fastehr/web#typecheck`,
+      # and that turbo.json still declares the topological `^generate` that
+      # carries the edge through any package inserted between the app and db.
+      # A regression here surfaces below as a confusing TS2307; catching it by
+      # name first is worth the second.
+      - name: Guard the generate task graph
+        run: pnpm check:graph
+
+      # `--force` bypasses the turbo cache on purpose.
+      #
+      # This job exists primarily to be the cold build. The `^generate` race the
+      # guard above protects is invisible against a warm cache — `src/generated`
+      # is already on disk, so the ordering never gets tested — which is exactly
+      # why the README calls it a failure that "only bites on a cold build: CI,
+      # or a fresh clone". A cache here would hide the one thing CI is best
+      # placed to catch.
+      #
+      # The whole workspace builds cold in under ten seconds, so there is
+      # nothing to optimise yet. When that stops being true, the answer is a
+      # second cached job for fast feedback, keeping this one cold — not
+      # caching this one. Affected-only filtering
+      # (`--filter=...[origin/<base>]`) is the same trade and equally premature
+      # at five packages.
+      #
+      # The pnpm store *is* cached, above. That speeds installs without
+      # affecting task ordering.
+      - name: Verify (cold)
+        run: pnpm turbo run lint typecheck test build --force

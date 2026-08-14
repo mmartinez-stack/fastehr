@@ -259,6 +259,24 @@ input. Decide this before the first real query, not after.
 
 ### 8. There is no CI
 
+> **Done** (2026-08-13). `.github/workflows/ci.yml` — one job on PRs and pushes
+> to the default branch: `pnpm install --frozen-lockfile`, `pnpm check:graph`,
+> then `turbo run lint typecheck test build --force`.
+>
+> Rehearsed against a fresh `git clone` with no node_modules, no `.turbo`, no
+> generated client and no `.env`: 16/16 tasks, 12 tests, 8.6s. Both regressions
+> the job exists to catch were simulated in that clone and both fail it —
+> deleting `generate.dependsOn: ["^generate"]` from turbo.json exits `check:graph`
+> non-zero with its explanatory message, and an out-of-sync manifest is rejected
+> by `--frozen-lockfile`.
+>
+> **Departure from the finding as written.** It proposed remote caching plus a
+> separate cold job. The job is cold *only*, with no turbo cache at all: at
+> ten seconds cold, caching buys nothing and would mask the `^generate` race,
+> which is the specific thing CI is here to catch. Affected-only filtering was
+> skipped on the same reasoning. Both are noted in the workflow and the README
+> as the first thing to revisit when the build stops being this fast.
+
 `check:graph`, the cold-cache `TS2307` race, and `envMode: "strict"` are all
 machinery built for a CI that does not exist. The README is explicit that the
 `^generate` failure "is invisible locally … it only bites on a cold build — CI,

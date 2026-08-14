@@ -409,6 +409,34 @@ have deleted it as dead config.
 asserts `@fastehr/db#generate` is ordered before `@fastehr/web#typecheck`, *and*
 that `turbo.json` still declares `generate.dependsOn: ["^generate"]`.
 
+## CI
+
+`.github/workflows/ci.yml`, on pull requests and pushes to the default branch.
+One job: install with `--frozen-lockfile`, `pnpm check:graph`, then
+`turbo run lint typecheck test build`.
+
+**It runs `--force`, with no turbo cache, deliberately.** This job's main value
+is being the cold build. The `^generate` race is invisible against a warm
+cache — `src/generated/` is already on disk, so the ordering is never
+exercised — which is why the failure "only bites on a cold build: CI, or a
+fresh clone". Caching task outputs here would hide the one thing CI is best
+placed to catch. The pnpm *store* is cached, which speeds installs without
+touching task ordering.
+
+The whole workspace builds cold in under ten seconds, so there is nothing to
+optimise yet. When that changes, the answer is a second, cached job for fast
+feedback while this one stays cold — not caching this one. Affected-only
+filtering (`--filter=...[origin/<base>]`) is the same trade, and equally
+premature at five packages.
+
+`check:graph` runs before the heavy tasks: it is a dry run, and a regression it
+catches would otherwise surface further down as a confusing `TS2307`.
+
+**No secrets, and no database.** `prisma generate` does not require
+`DATABASE_URL` (see `packages/db/prisma.config.ts`), and no test opens a
+connection yet. When one does, it gets a Postgres service container — not a
+shared instance.
+
 ## Routes
 
 `/_smoke` is the workspace wiring smoke test: it renders an app-local component
