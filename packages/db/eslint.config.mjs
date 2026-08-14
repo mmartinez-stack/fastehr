@@ -1,3 +1,3 @@
-import library from '@fastehr/config/eslint/library'
+import base from '@fastehr/config/eslint'
 
-export default library
+export default base

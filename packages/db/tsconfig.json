@@ -1,8 +1,5 @@
 {
-  "extends": "@fastehr/config/tsconfig/library.json",
-  "compilerOptions": {
-    "noEmit": true
-  },
+  "extends": "@fastehr/config/tsconfig.base.json",
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "coverage"]
+  "exclude": ["node_modules", "src/generated"]
 }

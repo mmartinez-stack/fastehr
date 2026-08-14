@@ -1,12 +1,14 @@
+import { PrismaClient } from './generated/client/index.js'
+
+export { PrismaClient }
+export type * from './generated/client/index.js'
+
 /**
- * Persistence layer.
- *
- * No ORM is selected yet — that is a later ticket, and it will add the schema,
- * migrations, and generated client under this package. What is fixed now is the
- * direction of the dependency: `db` implements the ports that `@fastehr/core`
- * declares, and `core` never imports `db`.
- *
- * `createInMemoryPatientRepository` is the placeholder implementation that keeps
- * the wiring honest until the real client lands.
+ * Single Prisma instance. In dev, Next's module reloading would otherwise open
+ * a new connection pool on every HMR pass.
  */
-export { createInMemoryPatientRepository } from './repositories/in-memory-patient-repository.js'
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient }
+
+export const prisma: PrismaClient = globalForPrisma.prisma ?? new PrismaClient()
+
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma

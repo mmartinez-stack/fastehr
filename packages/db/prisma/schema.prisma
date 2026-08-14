@@ -1,0 +1,25 @@
+// Placeholder schema. The real model set lands with the persistence ticket —
+// one model is enough to prove `prisma generate` runs and is cacheable.
+//
+// `output` deliberately points INSIDE the package (packages/db/src/generated)
+// rather than the default node_modules/.prisma, so Turborepo can treat the
+// generated client as a declared task output and cache it.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Patient {
+  id        String   @id @default(uuid())
+  firstName String
+  lastName  String
+  createdAt DateTime @default(now())
+
+  @@map("patients")
+}
