@@ -15,26 +15,28 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { PillIcon } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { topMedications } from "@/lib/mock-data"
+import { PillIcon, CheckIcon } from "lucide-react"
 import { toast } from "sonner"
+import { MedicationPicker } from "./medication-picker"
 
-const MEDICATIONS = ["Semaglutide", "Tirzepatide", "Liraglutide", "Phentermine"]
 const DOSES = ["0.25 mg", "0.5 mg", "1.0 mg", "1.7 mg", "2.4 mg", "5 mg", "7.5 mg"]
+
+/** The most-prescribed medication, which is the right thing to open on. */
+function defaultMedication(): string {
+  return topMedications(1)[0]?.name ?? ""
+}
 
 export function RefillDialog({ patientName }: { patientName: string }) {
   const [open, setOpen] = useState(false)
+  const [medication, setMedication] = useState(defaultMedication)
+  const [dose, setDose] = useState("0.5 mg")
 
   function submit() {
     setOpen(false)
     toast.success("Refill request submitted", {
-      description: `Sent to pharmacy for ${patientName}.`,
+      description: `${medication} ${dose} sent to pharmacy for ${patientName}.`,
     })
   }
 
@@ -48,42 +50,46 @@ export function RefillDialog({ patientName }: { patientName: string }) {
           </Button>
         }
       />
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Request Refill</DialogTitle>
           <DialogDescription>Send a new prescription refill to the pharmacy.</DialogDescription>
         </DialogHeader>
         <FieldGroup>
-          <Field>
-            <FieldLabel>Medication</FieldLabel>
-            <Select defaultValue="Semaglutide" items={MEDICATIONS.map((m) => ({ label: m, value: m }))}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MEDICATIONS.map((m) => (
-                  <SelectItem key={m} value={m}>
-                    {m}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
+          <MedicationPicker value={medication} onChange={setMedication} />
+
+          {/*
+            The dose list is short and fixed, so it is laid out rather than
+            hidden behind a second dropdown — the sync's complaint about this
+            flow was the number of menus it took to write a routine refill.
+          */}
           <Field>
             <FieldLabel>Dose</FieldLabel>
-            <Select defaultValue="0.5 mg" items={DOSES.map((d) => ({ label: d, value: d }))}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DOSES.map((d) => (
-                  <SelectItem key={d} value={d}>
+            <div className="flex flex-wrap gap-1.5">
+              {DOSES.map((d) => {
+                const selected = d === dose
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setDose(d)}
+                    aria-pressed={selected}
+                    className={cn(
+                      "flex items-center gap-1 rounded-md border px-2.5 py-1 text-sm font-medium tabular-nums transition-colors",
+                      "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                      selected
+                        ? "border-primary bg-accent text-accent-foreground ring-2 ring-primary"
+                        : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
+                    )}
+                  >
+                    {selected && <CheckIcon className="size-3.5" />}
                     {d}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  </button>
+                )
+              })}
+            </div>
           </Field>
+
           <Field>
             <FieldLabel htmlFor="refill-qty">Quantity (weeks)</FieldLabel>
             <Input id="refill-qty" type="number" defaultValue={4} min={1} max={12} />
