@@ -1,3 +1,3 @@
-import library from './eslint/library.mjs'
+import base from './eslint/index.mjs'
 
-export default library
+export default base

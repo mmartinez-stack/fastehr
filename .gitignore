@@ -25,6 +25,12 @@ next-env.d.ts
 dist/
 
 # ---------------------------------------------------------------
+# Prisma client generated into packages/db (see turbo `generate` task).
+# It is a build output: ignoring it keeps it out of Turbo's input hashes.
+# ---------------------------------------------------------------
+packages/db/src/generated/
+
+# ---------------------------------------------------------------
 # Turbopack / Turborepo
 # ---------------------------------------------------------------
 .turbo/

@@ -2,22 +2,20 @@
   "name": "@fastehr/web",
   "version": "0.1.0",
   "private": true,
-  "license": "UNLICENSED",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests",
-    "clean": "rm -rf .next .turbo *.tsbuildinfo"
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
     "@fastehr/contracts": "workspace:*",
     "@fastehr/core": "workspace:*",
     "@fastehr/db": "workspace:*",
-    "@fastehr/ui": "workspace:*",
+    "@trpc/server": "^11.18.0",
     "@vercel/analytics": "1.6.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
