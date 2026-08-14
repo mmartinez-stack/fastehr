@@ -119,6 +119,34 @@ at build time. Styling follows the CSS-variables convention
 (`cssVariables: true`), so restyling means editing tokens, not component
 classes.
 
+### Prisma, Turbopack, and output tracing
+
+Generating the Prisma client into `packages/db/src/generated` (required so turbo
+can cache it) puts it inside a transpiled workspace package instead of
+node_modules. Next therefore **bundles** Prisma rather than externalising it as
+it would a normal install, and Prisma's runtime uses
+`path.join(process.cwd(), …)` to locate its schema, engine, and `.env.vault`.
+
+Turbopack reads that as unbounded filesystem access and falls back to tracing
+the whole project. That is not cosmetic — measured on the tRPC route:
+
+| | files | size | `public/` | app source |
+| --- | ---: | ---: | ---: | ---: |
+| before | 190 | 19.5 MB | 9 | 66 |
+| after | 115 | 19.2 MB | 0 | 0 |
+
+`serverExternalPackages` cannot fix it: the import is relative from inside a
+transpiled package, so Next never sees a package specifier, and the generated
+package's own name is content-hashed per schema. `outputFileTracingExcludes`
+bounds the trace instead — see the comments in `apps/web/next.config.mjs`, and
+note the escaped glob key, since a bare `[trpc]` is a character class that
+matches nothing. The remaining 19 MB is the Prisma engine binary and wasm, which
+are genuinely needed at runtime.
+
+`turbopack.ignoreIssue` then suppresses the now-handled warning, scoped to the
+generated path and that one title. Both settings should be deleted together if
+the client ever moves back to node_modules.
+
 ## Decisions
 
 ### 1. Internal packages ship raw TypeScript (JIT)
