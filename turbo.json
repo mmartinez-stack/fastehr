@@ -1,33 +1,23 @@
 {
-  "$schema": "https://turborepo.com/schema.json",
-  "ui": "stream",
-  "cacheDir": ".turbo/cache",
-  "globalDependencies": [".nvmrc", "pnpm-workspace.yaml"],
+  "$schema": "https://turbo.build/schema.json",
+  "envMode": "strict",
+  "globalDependencies": ["pnpm-lock.yaml", ".nvmrc"],
   "globalEnv": ["NODE_ENV"],
   "tasks": {
+    "generate": {
+      "dependsOn": ["^generate"],
+      "inputs": ["prisma/schema.prisma", "prisma/migrations/**"],
+      "outputs": ["src/generated/**"],
+      "cache": true
+    },
     "build": {
-      "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", "!**/*.test.ts", "!**/*.test.tsx"],
-      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+      "dependsOn": ["^build", "^generate", "generate"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"],
+      "env": ["NEXT_PUBLIC_*", "DATABASE_URL"]
     },
-    "lint": {
-      "dependsOn": ["^build"],
-      "outputs": []
-    },
-    "typecheck": {
-      "dependsOn": ["^build"],
-      "outputs": []
-    },
-    "test": {
-      "dependsOn": ["^build"],
-      "outputs": []
-    },
-    "dev": {
-      "cache": false,
-      "persistent": true
-    },
-    "clean": {
-      "cache": false
-    }
+    "typecheck": { "dependsOn": ["^generate", "generate"] },
+    "lint": { "dependsOn": ["^generate", "generate"] },
+    "test": { "dependsOn": ["^generate", "generate"], "outputs": ["coverage/**"] },
+    "dev": { "cache": false, "persistent": true }
   }
 }
