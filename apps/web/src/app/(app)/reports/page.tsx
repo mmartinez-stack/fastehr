@@ -33,13 +33,13 @@ function revenueByMonth() {
   // deterministic pseudo-distribution across months, scaled to total revenue
   const total = visits.reduce((s, v) => s + v.amount, 0)
   const weights = [0.13, 0.15, 0.16, 0.17, 0.19, 0.2]
-  return MONTHS.map((month, i) => ({ month, revenue: Math.round((total * weights[i]) / 100) * 100 }))
+  return MONTHS.map((month, i) => ({ month, revenue: Math.round((total * (weights[i] ?? 0)) / 100) * 100 }))
 }
 
 function visitsByMonth() {
   const base = Math.round(visits.length / 6)
   const deltas = [-3, -1, 1, 2, 4, 6]
-  return MONTHS.map((month, i) => ({ month, visits: base + deltas[i] }))
+  return MONTHS.map((month, i) => ({ month, visits: base + (deltas[i] ?? 0) }))
 }
 
 function paymentBreakdown() {

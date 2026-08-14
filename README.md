@@ -315,9 +315,9 @@ Root-level `-w` is reserved for repo-wide tooling (`turbo`, `typescript`).
 `apps/web` still carries the v0 mockup: pages read from
 `apps/web/src/lib/mock-data.ts` and no database is wired up.
 
-`noUncheckedIndexedAccess` is disabled for `apps/web` only, because the
-generated mockup indexes fixture arrays unchecked in ~30 places. It is on for
-every package under `packages/`.
+`noUncheckedIndexedAccess` is on everywhere, with no per-package exceptions —
+the mockup's fixture lookups go through a checked helper
+([ADR 21](docs/adr/021-strict-index-access-everywhere.md)).
 
 Legacy migration mapping lives in [`docs/legacy-data-mapping.md`](docs/legacy-data-mapping.md).
 

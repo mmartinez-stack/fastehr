@@ -53,7 +53,8 @@ export default async function PatientDetailPage({
   const feet = Math.floor(patient.heightIn / 12)
   const inches = patient.heightIn % 12
   const latest = visits[0]
-  const startWeight = visits.length ? visits[visits.length - 1].weight : 0
+  const earliest = visits[visits.length - 1]
+  const startWeight = earliest?.weight ?? 0
   const currentWeight = latest?.weight ?? 0
   const lost = startWeight - currentWeight
 

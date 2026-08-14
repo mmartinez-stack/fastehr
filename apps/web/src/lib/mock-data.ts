@@ -1,6 +1,26 @@
 // Centralized mock data for the iCardio EHR mockup. No backend — everything here
 // is deterministic, plausible clinical data used across the app.
 
+/**
+ * Indexed read from a fixture list, checked.
+ *
+ * Every lookup in this file is provably in range — `at(list, i % list.length)`, or
+ * a fixed index into a list of known length — but `noUncheckedIndexedAccess`
+ * cannot see that, and it is right not to try. This throws rather than
+ * asserting with `!`, so a list that is emptied or shortened fails loudly at
+ * import (which is to say, at build) instead of seeding `undefined` through
+ * thirty fixtures.
+ *
+ * Deleting this file deletes the helper with it; see ADR 21.
+ */
+function at<T>(items: readonly T[], index: number): T {
+  const value = items[index]
+  if (value === undefined) {
+    throw new Error(`mock-data: index ${index} is out of range for a list of ${items.length}`)
+  }
+  return value
+}
+
 export type Office = "Downtown" | "Eastside" | "At Home"
 export type Language = "ENG" | "SPA"
 export type PatientStatus = "active" | "inactive"
@@ -263,12 +283,12 @@ function makePatients(): Patient[] {
     const spanish = i % 3 === 1
     const female = i % 2 === 0
     const first = spanish
-      ? firstNamesSpa[i % firstNamesSpa.length]
-      : firstNamesEng[i % firstNamesEng.length]
+      ? at(firstNamesSpa, i % firstNamesSpa.length)
+      : at(firstNamesEng, i % firstNamesEng.length)
     const last = spanish
-      ? lastNamesSpa[i % lastNamesSpa.length]
-      : lastNamesEng[i % lastNamesEng.length]
-    const office = OFFICES[i % 3]
+      ? at(lastNamesSpa, i % lastNamesSpa.length)
+      : at(lastNamesEng, i % lastNamesEng.length)
+    const office = at(OFFICES, i % 3)
     const atHome = office === "At Home"
     const inactive = i === 4 || i === 11
     const missing = CONSENT_TYPES.filter((_, ci) => (i + ci) % 5 === 0).slice(0, 3)
@@ -286,14 +306,14 @@ function makePatients(): Patient[] {
       email: `${first.toLowerCase()}.${last.toLowerCase()}@email.com`,
       address: {
         street: `${120 + i * 13} ${["Oak", "Palm", "Maple", "Cedar", "Birch"][i % 5]} St`,
-        city: cities[i % cities.length],
+        city: at(cities, i % cities.length),
         state: "CA",
         zip: `9${2500 + i}`,
       },
       office,
       language: spanish ? "SPA" : "ENG",
       status: inactive ? "inactive" : "active",
-      referralSource: referralSources[i % referralSources.length],
+      referralSource: at(referralSources, i % referralSources.length),
       atHome,
       program: atHome ? "At-Home GLP-1" : undefined,
       medsHistory:
@@ -344,7 +364,7 @@ function makeVisits(): Visit[] {
       const daysAgo = (9 - v) * 14 + (pi % 5)
       const type: ApptType =
         v === 0 ? "Initial" : p.atHome ? "At-Home" : "Follow-up"
-      const medName = MEDICATIONS[(pi + v) % MEDICATIONS.length]
+      const medName = at(MEDICATIONS, (pi + v) % MEDICATIONS.length)
       const signed = v > 0
       const amount = 120 + ((pi + v) % 5) * 20
       out.push({
@@ -357,24 +377,22 @@ function makeVisits(): Visit[] {
           { name: medName, dosage: `${0.25 * (((v % 4) + 1))} mg` },
           ...(v % 2 === 0 ? [{ name: "B12", dosage: "1 mL" }] : []),
         ],
-        provider: PROVIDERS[(pi + v) % PROVIDERS.length],
+        provider: at(PROVIDERS, (pi + v) % PROVIDERS.length),
         signed,
-        signedBy: signed ? PROVIDERS[(pi + v) % PROVIDERS.length] : undefined,
+        signedBy: signed ? at(PROVIDERS, (pi + v) % PROVIDERS.length) : undefined,
         signedAt: signed ? iso(daysAgo - 2) : undefined,
         openedAt: iso(daysAgo),
         tracking:
           type === "At-Home" && v % 2 === 0
             ? `9405511105${String(500000000 + (pi * 97 + v * 13) * 3571).slice(0, 9)}`
             : undefined,
-        paymentMethod: (["Cash", "Card", "Zelle", "Insurance"] as const)[
-          (pi + v) % 4
-        ],
+        paymentMethod: at(["Cash", "Card", "Zelle", "Insurance"] as const, (pi + v) % 4),
         amount,
         paid: !(v === 0 && pi % 4 === 0),
         notes:
           v === 0
             ? "Initial consult. Reviewed goals and medical history. Started GLP-1 titration. Discussed diet, hydration, and expected side effects. Welcome package to be sent. Baseline weight recorded. Goal weight discussed. RTC in 2 weeks."
-            : FOLLOWUP_NOTES[(pi + v) % FOLLOWUP_NOTES.length],
+            : at(FOLLOWUP_NOTES, (pi + v) % FOLLOWUP_NOTES.length),
         photo: v % 3 === 0,
       })
     }
@@ -407,7 +425,7 @@ export const appointments: Appointment[] = [
   {
     id: "a1",
     patientId: "p1",
-    patientName: fullName(patients[0]),
+    patientName: fullName(at(patients, 0)),
     start: apptISO(0, 9),
     end: apptISO(0, 9, 45),
     type: "Follow-up",
@@ -417,7 +435,7 @@ export const appointments: Appointment[] = [
   {
     id: "a2",
     patientId: "p2",
-    patientName: fullName(patients[1]),
+    patientName: fullName(at(patients, 1)),
     start: apptISO(0, 11),
     end: apptISO(0, 12),
     type: "Initial",
@@ -428,7 +446,7 @@ export const appointments: Appointment[] = [
   {
     id: "a3",
     patientId: "p3",
-    patientName: fullName(patients[2]),
+    patientName: fullName(at(patients, 2)),
     start: apptISO(1, 10),
     end: apptISO(1, 11),
     type: "At-Home",
@@ -438,7 +456,7 @@ export const appointments: Appointment[] = [
   {
     id: "a4",
     patientId: "p4",
-    patientName: fullName(patients[3]),
+    patientName: fullName(at(patients, 3)),
     start: apptISO(1, 14),
     end: apptISO(1, 14, 45),
     type: "Follow-up",
@@ -448,7 +466,7 @@ export const appointments: Appointment[] = [
   {
     id: "a5",
     patientId: "p5",
-    patientName: fullName(patients[4]),
+    patientName: fullName(at(patients, 4)),
     start: apptISO(2, 8, 30),
     end: apptISO(2, 9, 30),
     type: "Initial",
@@ -459,7 +477,7 @@ export const appointments: Appointment[] = [
   {
     id: "a6",
     patientId: "p6",
-    patientName: fullName(patients[5]),
+    patientName: fullName(at(patients, 5)),
     start: apptISO(2, 13),
     end: apptISO(2, 13, 45),
     type: "Follow-up",
@@ -469,7 +487,7 @@ export const appointments: Appointment[] = [
   {
     id: "a7",
     patientId: "p7",
-    patientName: fullName(patients[6]),
+    patientName: fullName(at(patients, 6)),
     start: apptISO(3, 10, 30),
     end: apptISO(3, 11, 15),
     type: "Follow-up",
@@ -479,7 +497,7 @@ export const appointments: Appointment[] = [
   {
     id: "a8",
     patientId: "p8",
-    patientName: fullName(patients[7]),
+    patientName: fullName(at(patients, 7)),
     start: apptISO(4, 15),
     end: apptISO(4, 16),
     type: "At-Home",
@@ -489,7 +507,7 @@ export const appointments: Appointment[] = [
   {
     id: "a9",
     patientId: "p9",
-    patientName: fullName(patients[8]),
+    patientName: fullName(at(patients, 8)),
     start: apptISO(4, 9),
     end: apptISO(4, 9, 45),
     type: "Follow-up",
@@ -504,8 +522,8 @@ export const smsThreads: SmsThread[] = [
   {
     id: "s1",
     patientId: "p2",
-    patientName: fullName(patients[1]),
-    phone: patients[1].phone,
+    patientName: fullName(at(patients, 1)),
+    phone: at(patients, 1).phone,
     lastMessage: "Hola, necesito reprogramar mi cita del jueves.",
     timestamp: iso(0, 9, 12),
     unread: true,
@@ -518,8 +536,8 @@ export const smsThreads: SmsThread[] = [
   {
     id: "s2",
     patientId: "p1",
-    patientName: fullName(patients[0]),
-    phone: patients[0].phone,
+    patientName: fullName(at(patients, 0)),
+    phone: at(patients, 0).phone,
     lastMessage: "Thanks! See you then.",
     timestamp: iso(0, 8, 40),
     unread: false,
@@ -532,8 +550,8 @@ export const smsThreads: SmsThread[] = [
   {
     id: "s3",
     patientId: "p6",
-    patientName: fullName(patients[5]),
-    phone: patients[5].phone,
+    patientName: fullName(at(patients, 5)),
+    phone: at(patients, 5).phone,
     lastMessage: "Reminder: your visit is tomorrow at 1:00 PM.",
     timestamp: iso(1, 13, 0),
     unread: false,
@@ -544,8 +562,8 @@ export const smsThreads: SmsThread[] = [
   {
     id: "s4",
     patientId: "p7",
-    patientName: fullName(patients[6]),
-    phone: patients[6].phone,
+    patientName: fullName(at(patients, 6)),
+    phone: at(patients, 6).phone,
     lastMessage: "Can I switch to the monthly plan?",
     timestamp: iso(2, 11, 20),
     unread: true,
@@ -573,7 +591,7 @@ export const refillRequests: RefillRequest[] = patients
     dob: p.dob,
     language: p.language,
     date: iso(i),
-    medication: MEDICATIONS[i % MEDICATIONS.length],
+    medication: at(MEDICATIONS, i % MEDICATIONS.length),
     dosage: `${0.5 * ((i % 3) + 1)} mg`,
     notes:
       i % 2 === 0
@@ -590,17 +608,20 @@ export const callbacks: Callback[] = patients.slice(0, 7).map((p, i) => ({
   patientId: p.id,
   patientName: fullName(p),
   phone: p.phone,
-  reason: [
-    "Side effect question",
-    "Billing question",
-    "Reschedule",
-    "Prior auth follow-up",
-    "Missed appointment",
-    "Refill status",
-    "General question",
-  ][i],
+  reason: at(
+    [
+      "Side effect question",
+      "Billing question",
+      "Reschedule",
+      "Prior auth follow-up",
+      "Missed appointment",
+      "Refill status",
+      "General question",
+    ],
+    i,
+  ),
   notes: "",
-  assignedTo: PROVIDERS[i % PROVIDERS.length],
+  assignedTo: at(PROVIDERS, i % PROVIDERS.length),
   done: i === 5,
 }))
 

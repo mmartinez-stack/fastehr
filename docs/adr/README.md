@@ -30,6 +30,7 @@ first and produced a bug that type-checked.
 | [18](018-two-test-tiers.md) | Two test tiers, and a timezone pinned west of UTC | `packages/db` · CI |
 | [19](019-ci-builds-cold.md) | CI builds cold, and the database job is separate | CI |
 | [20](020-component-placement.md) | Where a component lives | `apps/web/src/components` |
+| [21](021-strict-index-access-everywhere.md) | `noUncheckedIndexedAccess` is on everywhere, mockup included | `apps/web` · `packages/config` |
 
 ## Adding one
 

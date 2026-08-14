@@ -18,7 +18,9 @@ function initials(name: string) {
 }
 
 export default function SmsPage() {
-  const [activeId, setActiveId] = useState(smsThreads[0].id)
+  const [activeId, setActiveId] = useState(smsThreads[0]?.id ?? "")
+  // `find` can miss and the list can be empty: `active` is genuinely optional,
+  // and the conversation pane below renders an empty state rather than assuming.
   const active = smsThreads.find((t) => t.id === activeId) ?? smsThreads[0]
 
   return (
@@ -72,7 +74,13 @@ export default function SmsPage() {
                 </button>
               ))}
             </div>
-            <Conversation thread={active} />
+            {active === undefined ? (
+              <div className="flex items-center justify-center p-8 text-sm text-muted-foreground">
+                No conversations yet.
+              </div>
+            ) : (
+              <Conversation thread={active} />
+            )}
           </Card>
         </TabsContent>
 

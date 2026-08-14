@@ -14,10 +14,8 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    // TODO: re-enable once src/lib/mock-data.ts is replaced by @fastehr/db.
-    // The generated mockup indexes fixture arrays unchecked in ~30 places;
-    // the flag stays on for every package under packages/.
-    "noUncheckedIndexedAccess": false
+    // `noUncheckedIndexedAccess` is NOT overridden here: it comes from the base
+    // config, on, like everywhere else in the workspace. See ADR 21.
   },
   "include": [
     "next-env.d.ts",
