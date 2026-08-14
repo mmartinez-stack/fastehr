@@ -4,10 +4,14 @@ import * as React from "react"
 import Link from "next/link"
 import { MessageSquareText, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useSurfaces } from "@/components/role-provider"
 
 export function SmsBanner() {
   const [dismissed, setDismissed] = React.useState(false)
-  if (dismissed) return null
+  const { clerical } = useSurfaces()
+  // Inbound patient texts are front-desk work; a provider charting a visit is
+  // not the person who answers them.
+  if (dismissed || !clerical) return null
 
   return (
     <div className="border-b border-primary/20 bg-accent">

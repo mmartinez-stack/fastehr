@@ -21,10 +21,13 @@ import {
 } from "@/components/ui/table"
 import { PageHeader } from "@/components/page-header"
 import { LanguageTag, PatientStatusBadge } from "@/components/status-badges"
+import { useSurfaces } from "@/components/role-provider"
 import { patients, fullName, fmtDateLong } from "@/lib/mock-data"
 
 export default function PatientsPage() {
   const [query, setQuery] = React.useState("")
+  // Contact details are clerical, on the roster as much as on the record.
+  const { clerical } = useSurfaces()
 
   const filtered = patients.filter((p) => {
     const q = query.toLowerCase()
@@ -65,7 +68,7 @@ export default function PatientsPage() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>DOB</TableHead>
-                <TableHead>Phone</TableHead>
+                {clerical && <TableHead>Phone</TableHead>}
                 <TableHead>Office</TableHead>
                 <TableHead>Lang</TableHead>
                 <TableHead>Status</TableHead>
@@ -86,7 +89,9 @@ export default function PatientsPage() {
                   <TableCell className="text-muted-foreground">
                     {fmtDateLong(p.dob)}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{p.phone}</TableCell>
+                  {clerical && (
+                    <TableCell className="text-muted-foreground">{p.phone}</TableCell>
+                  )}
                   <TableCell>{p.office}</TableCell>
                   <TableCell>
                     <LanguageTag language={p.language} />
@@ -101,7 +106,10 @@ export default function PatientsPage() {
               ))}
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell
+                    colSpan={clerical ? 7 : 6}
+                    className="py-8 text-center text-muted-foreground"
+                  >
                     No patients match your search.
                   </TableCell>
                 </TableRow>
