@@ -446,6 +446,23 @@ the payoff for the entire design, and nothing uses it. In priority order:
 
 ### 13. `createContext` hardcodes the Prisma singleton
 
+> **Done** (2026-08-13). `createContext({ actor, db? })`, defaulting to the
+> shared repositories. The finding said "one line", and the change itself is —
+> but a parameter with no caller is untestable API, so this also adds the first
+> router that reads data (`routers/patient.ts`: `byId`, `list`) and five
+> procedure tests driven with fake repositories: no database, no Prisma, no
+> environment, no HTTP.
+>
+> Because `Db` is an interface of contract types, a fake is an object literal.
+> That is a downstream benefit of finding 3 — had `db` still exported
+> `PrismaClient`, faking it would mean mocking a query builder.
+>
+> Mutation-tested: making `createContext` ignore the parameter fails three of
+> the five with `DATABASE_URL is not set`, so the injection is load-bearing. The
+> other two — input rejection and the unauthenticated refusal — pass either way,
+> correctly, because they never reach the repository. That the authorization
+> test can assert `findById` was *not called* is the part worth having.
+
 `createContext({ actor })` closes over the module-level `prisma`, so no test can
 inject a transaction-scoped client and no alternative host can supply its own.
 Make it a parameter defaulting to the singleton — one line, and it is what makes

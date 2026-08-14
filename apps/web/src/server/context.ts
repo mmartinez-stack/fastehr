@@ -30,7 +30,21 @@ export interface Context {
  * Request-scoped context factory. The caller — the route handler, or whatever
  * host mounts this router — is responsible for resolving the actor from its own
  * transport and passing it in.
+ *
+ * `db` defaults to the shared repositories and exists as a parameter for two
+ * reasons. A test can pass fakes and exercise a procedure with no database, no
+ * Prisma, and no environment — which is what makes the middleware chain and the
+ * procedures above it cheap enough to test properly. And a caller that needs
+ * several repositories inside one transaction can pass a transaction-scoped
+ * `Db` built by `createDb`, rather than the router reaching for a client of its
+ * own.
  */
-export function createContext({ actor }: { actor: Actor | null }): Context {
-  return { actor, db }
+export function createContext({
+  actor,
+  db: repositories = db,
+}: {
+  actor: Actor | null
+  db?: Db
+}): Context {
+  return { actor, db: repositories }
 }

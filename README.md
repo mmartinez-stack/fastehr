@@ -115,6 +115,26 @@ by whom, never the PHI itself.
 with a fabricated actor: no HTTP, no database, no session. That the security
 behaviour is this cheap to test is the direct payoff for rule 1.
 
+### Testing procedures without a database
+
+`createContext` takes `db` as an optional parameter, defaulting to the shared
+repositories:
+
+```ts
+const caller = appRouter.createCaller(
+  createContext({ actor, db: { patients: { findById: async () => ADA, listByLastName: async () => [] } } }),
+)
+```
+
+Because `Db` is an interface of contract types, a fake is an object literal —
+there is no client to mock and no query builder to stub. Procedure tests then
+cover what procedures own (authorization order, input rejection, what reaches
+the repository) while the database's own behaviour stays in `packages/db`'s
+integration suite, which is the only place that can actually speak to it.
+
+The same parameter is how a caller passes a transaction-scoped `Db` from
+`createDb`, rather than a router reaching for a client of its own.
+
 ### The wire format is superjson
 
 `initTRPC.create({ transformer: superjson })`. Plain JSON has no `Date`, so
