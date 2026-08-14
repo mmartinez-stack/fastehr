@@ -1,5 +1,5 @@
 import { initTRPC, TRPCError } from '@trpc/server'
-import { prisma } from '@fastehr/db'
+import { db, type Db } from '@fastehr/db'
 
 /**
  * tRPC initialisation, context shape, and the middleware chain.
@@ -20,7 +20,12 @@ export interface Actor {
 
 export interface Context {
   actor: Actor | null
-  prisma: typeof prisma
+  /**
+   * Repositories, not a Prisma client. `@fastehr/db` exposes no persistence
+   * types (README decision 3), so a procedure can only ask for contract-shaped
+   * data — there is no `ctx.prisma` to reach past it with.
+   */
+  db: Db
 }
 
 /**
@@ -29,7 +34,7 @@ export interface Context {
  * transport and passing it in.
  */
 export function createContext({ actor }: { actor: Actor | null }): Context {
-  return { actor, prisma }
+  return { actor, db }
 }
 
 const t = initTRPC.context<Context>().create()

@@ -28,7 +28,12 @@ model Patient {
   id        String   @id @default(uuid())
   firstName String
   lastName  String
-  createdAt DateTime @default(now())
+  // `@db.Date` is a calendar date with no time and no zone, which is what a
+  // date of birth is. Prisma still surfaces it as a JS `Date` at UTC midnight —
+  // the mapper converts it to the `YYYY-MM-DD` string the contract declares.
+  // That conversion is the boundary decision 3 describes, made concrete.
+  dateOfBirth DateTime @db.Date
+  createdAt   DateTime @default(now())
 
   @@map("patients")
 }

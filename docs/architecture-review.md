@@ -105,6 +105,14 @@ converted at the contract boundary long before that point.
 
 ### 3. `packages/db` contradicts decision 3 at its own boundary
 
+> **Done** (2026-08-13). `packages/db` now exports a `Db` of repositories and
+> nothing else; `PrismaClient`, the generated types, and the mappers are behind
+> the single-entry `exports` map and fail with `TS2307` from outside the
+> package (verified). Context holds `db` instead of `prisma`. `dateOfBirth` was
+> added to the placeholder model so the first mapper is real rather than
+> illustrative. Finding 13 (injectable client) is untouched — `createDb()` takes
+> the client as a parameter, but `createContext` still resolves the default.
+
 **What.** README decision 3: "*`db` returns contract-shaped objects at its
 boundary; persistence shapes never cross into domain code.*" But
 `packages/db/src/index.ts` is:
