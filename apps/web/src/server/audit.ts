@@ -39,10 +39,14 @@ export interface AuditEvent {
 }
 
 /**
- * Records an audit event. Placeholder sink: stdout, structured, one event per
- * line, so it is at least greppable and shippable by a log collector until the
- * audit table exists.
+ * Records an audit event. Placeholder sink: stdout until the audit table
+ * exists.
+ *
+ * The event is stringified rather than passed as an object because Node's
+ * console pretty-prints objects across multiple lines, and a line-oriented log
+ * collector reads that as several unrelated records. One event, one line, valid
+ * JSON.
  */
 export function recordAuditEvent(event: AuditEvent): void {
-  console.info('[phi-audit]', event)
+  console.info('[phi-audit]', JSON.stringify(event))
 }

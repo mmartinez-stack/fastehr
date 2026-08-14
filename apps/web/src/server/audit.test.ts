@@ -28,7 +28,9 @@ function recordedEvents(): readonly AuditEvent[] {
 beforeEach(() => {
   recorded.length = 0
   vi.spyOn(console, 'info').mockImplementation((...args: unknown[]) => {
-    if (args[0] === '[phi-audit]') recorded.push(args[1] as AuditEvent)
+    // The sink writes one line of JSON per event; parsing it back here means
+    // the test also asserts that what lands in the log is machine-readable.
+    if (args[0] === '[phi-audit]') recorded.push(JSON.parse(String(args[1])) as AuditEvent)
   })
 })
 

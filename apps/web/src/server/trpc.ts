@@ -1,4 +1,5 @@
 import { initTRPC, TRPCError } from '@trpc/server'
+import superjson from 'superjson'
 import { db, type Db } from '@fastehr/db'
 import { recordAuditEvent, type AuditEvent } from './audit.ts'
 
@@ -38,7 +39,28 @@ export function createContext({ actor }: { actor: Actor | null }): Context {
   return { actor, db }
 }
 
-const t = initTRPC.context<Context>().create()
+/**
+ * `transformer` is not optional here, and the reason is the same one behind
+ * decision 3.
+ *
+ * Plain JSON has no `Date`. Without a transformer a procedure typed as
+ * returning one hands the client a string while the inferred type still says
+ * `Date` — the value type-checks perfectly at every call site and is wrong at
+ * runtime. That is precisely the `Decimal` hazard decision 3 describes, moved
+ * from the ORM boundary to the transport boundary, and in this domain it lands
+ * on dates of birth, appointment times, and dose timestamps.
+ *
+ * Contracts currently keep dates as ISO strings (`z.iso.date()`), so nothing
+ * relies on this today — it is the guarantee that the first `z.date()` or bare
+ * `new Date()` in a procedure result behaves the way its type promises, rather
+ * than becoming a bug that only shows up as an invalid-date render.
+ *
+ * **Any client must configure the same transformer**, and in tRPC v11 it goes
+ * on the link (`httpBatchLink` / `httpBatchStreamLink`), not the client root.
+ * A caller built with `createCaller` — an Electron main process, a test —
+ * never serialises at all and is unaffected.
+ */
+const t = initTRPC.context<Context>().create({ transformer: superjson })
 
 export const router = t.router
 export const publicProcedure = t.procedure

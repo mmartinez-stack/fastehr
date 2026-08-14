@@ -86,6 +86,21 @@ methodology and the table format, and the numbers there become historical.
 
 ### 2. No tRPC transformer — `Date` values lie over the wire
 
+> **Done** (2026-08-13). superjson on `initTRPC.create()`, pinned by
+> `src/server/transformer.test.ts` over a real fetch-adapter round-trip; both
+> tests fail with the transformer removed. Responses are now enveloped
+> (`{"result":{"data":{"json":…}}}`), and any future client must set the same
+> transformer on its **link** — noted in the README for finding 11.
+>
+> **Scope correction worth recording.** No procedure returns a `Date` today,
+> because contracts express dates as ISO strings (`z.iso.date()`). This was
+> therefore latent rather than an active bug — the original finding overstated
+> it. The fix still earns its place as the guarantee for the first `z.date()`
+> that appears, but if you would rather the contract layer own the wire format
+> outright, the alternative is `.output(schema)` on every procedure, which
+> makes a non-JSON-safe return a runtime failure instead. The two are
+> compatible; only the second is enforcement.
+
 **What.** `apps/web/src/server/trpc.ts` calls
 `initTRPC.context<Context>().create()` with no `transformer`.
 
