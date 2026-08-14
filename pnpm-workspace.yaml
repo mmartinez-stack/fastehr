@@ -3,7 +3,10 @@ packages:
   - packages/*
 
 allowBuilds:
-  # prisma downloads its query engine binaries in a postinstall script
+  # Prisma 7's client is Rust-free, but the CLI still ships a native
+  # schema-engine binary for `migrate`/`db`, downloaded in a postinstall script.
+  # It is a dev-time dependency of the CLI only — it never reaches the app
+  # bundle, which is why next.config.mjs no longer has to work around it.
   '@prisma/client': true
   '@prisma/engines': true
   prisma: true

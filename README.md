@@ -119,33 +119,56 @@ at build time. Styling follows the CSS-variables convention
 (`cssVariables: true`), so restyling means editing tokens, not component
 classes.
 
-### Prisma, Turbopack, and output tracing
+### Prisma 7
 
-Generating the Prisma client into `packages/db/src/generated` (required so turbo
-can cache it) puts it inside a transpiled workspace package instead of
-node_modules. Next therefore **bundles** Prisma rather than externalising it as
-it would a normal install, and Prisma's runtime uses
-`path.join(process.cwd(), …)` to locate its schema, engine, and `.env.vault`.
+`packages/db` runs Prisma 7, which is Rust-free: the query engine is TypeScript
+plus a wasm query compiler, a **driver adapter is mandatory**, and the
+`prisma-client` generator emits ESM TypeScript source into the repository rather
+than a binary into node_modules. Three consequences shape the setup here.
 
-Turbopack reads that as unbounded filesystem access and falls back to tracing
-the whole project. That is not cosmetic — measured on the tRPC route:
+**Generated source is what a JIT package wants.** The generator writes nine `.ts`
+files (~100 KB) to `packages/db/src/generated/client`, carrying `@ts-nocheck` and
+`eslint-disable`. Emitting inside the package used to be a workaround forced by
+Turbo's requirement that cached outputs live in a workspace; under `prisma-client`
+it is the only option, since `output` is required. It is also exactly what
+decision 1 already asks for — the app compiles real source, not a `.d.ts`
+round-trip.
+
+**The connection string lives in three places, none of them the schema.**
+`datasource db` carries only `provider`; `url` there is a hard error in 7 (P1012).
+At runtime the URL reaches Prisma through the pg driver adapter in
+`packages/db/src/index.ts`. For the CLI it comes from `prisma.config.ts`, which
+replaces the old `package.json#prisma` key and no longer auto-loads `.env` —
+hence the explicit `dotenv/config` import there.
+
+> `prisma.config.ts` deliberately does **not** declare `datasource.url`. The
+> config's `env()` helper resolves eagerly at config-load time, so declaring it
+> would make `prisma generate` fail without a database URL — and `generate` runs
+> in CI and on a fresh clone, where there is none. Commands that actually
+> connect (`migrate`, `db`, `studio`) need it supplied; `generate` does not.
+
+**Next.js needs no Prisma-specific configuration.** Under Prisma 6 this repo
+carried an `outputFileTracingExcludes` entry plus a matching
+`turbopack.ignoreIssue` suppression, because the Rust engine's
+`path.join(process.cwd(), …)` probe read to Turbopack as unbounded filesystem
+access and made it trace the whole project. There is no engine and no probe in 7,
+so both were deleted. Measured on the tRPC route, same method throughout:
 
 | | files | size | `public/` | app source |
 | --- | ---: | ---: | ---: | ---: |
-| before | 190 | 19.5 MB | 9 | 66 |
-| after | 115 | 19.2 MB | 0 | 0 |
+| Prisma 6, no excludes | 190 | 19.5 MB | 9 | 66 |
+| Prisma 6, with excludes | 115 | 19.2 MB | 0 | 0 |
+| **Prisma 7, no excludes** | **200** | **7.1 MB** | **0** | **0** |
 
-`serverExternalPackages` cannot fix it: the import is relative from inside a
-transpiled package, so Next never sees a package specifier, and the generated
-package's own name is content-hashed per schema. `outputFileTracingExcludes`
-bounds the trace instead — see the comments in `apps/web/next.config.mjs`, and
-note the escaped glob key, since a bare `[trpc]` is a character class that
-matches nothing. The remaining 19 MB is the Prisma engine binary and wasm, which
-are genuinely needed at runtime.
+The file count rises because a Rust binary is one file and a TypeScript runtime
+is many; the number that matters is that `public/` and app source are at zero
+with nothing bounding the trace. 4.7 MB of the remaining 7.1 is the base64-embedded
+postgres query compiler in `@prisma/client/runtime`, which Next externalises
+correctly now that the generated code imports it by package specifier.
 
-`turbopack.ignoreIssue` then suppresses the now-handled warning, scoped to the
-generated path and that one title. Both settings should be deleted together if
-the client ever moves back to node_modules.
+The CLI still downloads a native **schema** engine for `migrate` and `db` — that
+is why the `allowBuilds` entries in `pnpm-workspace.yaml` remain. It is a
+dev-time dependency of the CLI and never reaches the app bundle.
 
 ## Decisions
 
@@ -233,10 +256,11 @@ No Dockerfiles, no compose files.
 
 ## Turborepo
 
-`prisma generate` is a first-class task. The generator writes to
-`packages/db/src/generated/client` — **inside** the package — rather than the
-default `node_modules/.prisma`, because Turbo can only cache outputs that live
-within a workspace.
+`prisma generate` is a first-class task, with `prisma/schema.prisma`,
+`prisma/migrations/**`, and `prisma.config.ts` as its inputs. The generator
+writes to `packages/db/src/generated/client` — **inside** the package — which
+Turbo requires in order to cache the output at all, and which Prisma 7 requires
+independently.
 
 `lint` and `typecheck` depend on `^generate` and `generate`, **not** `^build`.
 With JIT packages there is no build output to wait for, so `^build` would

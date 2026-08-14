@@ -1,18 +1,27 @@
 // Placeholder schema. The real model set lands with the persistence ticket —
 // one model is enough to prove `prisma generate` runs and is cacheable.
 //
-// `output` deliberately points INSIDE the package (packages/db/src/generated)
-// rather than the default node_modules/.prisma, so Turborepo can treat the
-// generated client as a declared task output and cache it.
+// `output` points INSIDE the package (packages/db/src/generated) so Turborepo
+// can treat the generated client as a declared task output and cache it. Under
+// the `prisma-client` generator that is also the only option: Prisma 7 requires
+// `output` and no longer writes into node_modules.
+//
+// The generator emits ESM TypeScript source, which is exactly what a JIT
+// package consumes (README decision 1) — there is no Rust engine binary and no
+// runtime filesystem probe, so Next.js has nothing to over-trace.
 
 generator client {
-  provider = "prisma-client-js"
-  output   = "../src/generated/client"
+  provider     = "prisma-client"
+  output       = "../src/generated/client"
+  runtime      = "nodejs"
+  moduleFormat = "esm"
 }
 
+// `url` is no longer permitted here in Prisma 7 (P1012). Connection URLs for
+// the CLI live in prisma.config.ts; the runtime gets its connection from the pg
+// driver adapter in src/index.ts.
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model Patient {

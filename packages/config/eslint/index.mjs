@@ -42,6 +42,9 @@ export const sharedRules = {
         '**/*.spec.{ts,tsx}',
         '**/vitest.config.{ts,mts}',
         '**/eslint.config.mjs',
+        // Prisma 7 CLI config. Runs only under the CLI, never at runtime, so
+        // its imports (`prisma/config`, `dotenv`) are devDependencies.
+        '**/prisma.config.ts',
       ],
       optionalDependencies: false,
       peerDependencies: true,
