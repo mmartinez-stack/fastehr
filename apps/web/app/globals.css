@@ -2,8 +2,8 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
-/* Design-token contract: dark variant, @theme mapping, base layer. */
-@import '@fastehr/config/tailwind/preset.css';
+/* Shared design-token contract: dark variant, @theme mapping, base layer. */
+@import '@fastehr/config/tailwind/base.css';
 
 /* Palette — the values behind the tokens the preset maps. */
 :root {

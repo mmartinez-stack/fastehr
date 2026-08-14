@@ -1,3 +1,7 @@
-// `cn` lives in the design system. Re-exported here so `@/lib/utils` stays the
-// import path the shadcn components already use.
-export { cn } from '@fastehr/ui/cn'
+import { clsx, type ClassValue } from 'clsx'
+import { twMerge } from 'tailwind-merge'
+
+/** Merge Tailwind class lists, last-wins on conflicting utilities. */
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
