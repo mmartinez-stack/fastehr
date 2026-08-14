@@ -1,3 +1,5 @@
+import path from 'node:path'
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   /**
@@ -22,6 +24,19 @@ const nextConfig = {
    * settings were deleted together, as the comment they replaced said they
    * should be.
    */
+
+  /**
+   * `standalone` emits a self-contained server plus only the node_modules the
+   * app actually reaches, which is what makes a small runtime image possible:
+   * the final stage copies that output and never installs dependencies.
+   *
+   * `outputFileTracingRoot` must point at the workspace root. Tracing defaults
+   * to the app directory, and in a monorepo that misses everything under
+   * ../../packages and ../../node_modules — the build succeeds and the
+   * container fails at import. See ADR 23.
+   */
+  output: 'standalone',
+  outputFileTracingRoot: path.join(import.meta.dirname, '../../'),
 
   images: {
     unoptimized: true,

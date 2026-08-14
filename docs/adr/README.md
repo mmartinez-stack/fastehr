@@ -15,7 +15,7 @@ first and produced a bug that type-checked.
 | [3](003-contracts-own-domain-types.md) | `core` takes its types from `contracts`, never from Prisma | `core` · `db` · `contracts` |
 | [4](004-tailwind-v4-css.md) | Tailwind v4 configuration is CSS | `packages/config/tailwind` |
 | [5](005-zod-pinned.md) | Zod is pinned exactly, in one package | `packages/contracts` |
-| [6](006-no-docker.md) | Docker is out of scope | the repository |
+| [6](006-no-docker.md) | ~~Docker is out of scope~~ — superseded by 23 | the repository |
 | [7](007-no-third-party-telemetry.md) | No third-party telemetry on PHI-bearing routes | `apps/web` |
 | [8](008-five-packages.md) | Five packages, not seven | the workspace |
 | [9](009-server-layer-boundaries.md) | The server layer stays extractable, and unavoidable | `apps/web/src/server` |
@@ -32,6 +32,7 @@ first and produced a bug that type-checked.
 | [20](020-component-placement.md) | Where a component lives | `apps/web/src/components` |
 | [21](021-strict-index-access-everywhere.md) | `noUncheckedIndexedAccess` is on everywhere, mockup included | `apps/web` · `packages/config` |
 | [22](022-office-scoping.md) | The office is part of the actor, not of the request | `apps/web` · `packages/contracts` |
+| [23](023-docker-image.md) | A production image for `apps/web` | `Dockerfile` · `apps/web` |
 
 ## Adding one
 

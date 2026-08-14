@@ -285,6 +285,24 @@ incremental cache, not a build product.
 not `/health`, and why the directory is `%5Fsmoke`:
 [ADR 16](docs/adr/016-smoke-route-not-health.md).
 
+## Container image
+
+```bash
+docker build -t fastehr-web .                 # from the repository root
+docker run --rm -p 3000:3000 \
+  -e DATABASE_URL=postgresql://… fastehr-web
+```
+
+Three stages: install, `turbo run build` (which runs `prisma generate` first),
+then a runner holding only Next's `standalone` output. No `DATABASE_URL` is
+needed to build.
+
+`NEXT_PUBLIC_*` values are **build arguments** — Next inlines them into the
+client bundle, so an image cannot be promoted between environments that differ
+in them. Migrations do not run on start; `prisma migrate deploy` is its own
+deployment step. Details and the traps in
+[ADR 23](docs/adr/023-docker-image.md).
+
 ## Adding a new package
 
 Only add one if it earns the boundary — see [ADR 8](docs/adr/008-five-packages.md).
