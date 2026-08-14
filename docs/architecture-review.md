@@ -214,6 +214,19 @@ inputs are never logged**, only `path`, `type`, actor, and outcome.
 
 ### 6. Vercel Analytics runs on routes whose URLs contain patient identifiers
 
+> **Done** (2026-08-13). `<Analytics />` removed from the root layout,
+> `@vercel/analytics` dropped from the app's dependencies, and the
+> `generator: 'v0.app'` metadata tag removed with it. Recorded as README
+> decision 7, which also states what a compliant analytics story would look
+> like if one is wanted later. An audit of `apps/web/src` found no other
+> external host; `next/font` self-hosts Inter at build time and is not an
+> exception.
+>
+> Taken as the straightforward reading of "remove it, or gate it behind an
+> explicit decision" — it is one line and trivially reversible. If you do want
+> product analytics, say so and the server-side shape in decision 7 is the
+> place to start.
+
 **What.** `apps/web/src/app/layout.tsx` renders `<Analytics />` in production.
 Routes include `/patients/[id]` and `/queues/start-treatment/[id]`.
 

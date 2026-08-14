@@ -1,8 +1,17 @@
-import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
+
+/**
+ * No third-party telemetry is mounted here, deliberately — see README,
+ * decision 7. Route paths in this app carry patient identifiers
+ * (`/patients/[id]`), so page-view reporting is a PHI disclosure, not a
+ * metrics choice.
+ *
+ * `next/font` is not an exception: it downloads Inter at build time and serves
+ * it from this origin, so no request reaches Google from a patient's browser.
+ */
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
@@ -10,7 +19,6 @@ export const metadata: Metadata = {
   title: 'Fastehr — Clinic EHR',
   description:
     'Fastehr clinical EHR: patient queues, scheduling, charting, refills, SMS, and reporting for weight-management clinics.',
-  generator: 'v0.app',
 }
 
 export const viewport: Viewport = {
@@ -28,7 +36,6 @@ export default function RootLayout({
       <body className="font-sans antialiased">
         {children}
         <Toaster position="top-right" />
-        {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
   )
