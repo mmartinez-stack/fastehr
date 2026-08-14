@@ -409,6 +409,49 @@ have deleted it as dead config.
 asserts `@fastehr/db#generate` is ordered before `@fastehr/web#typecheck`, *and*
 that `turbo.json` still declares `generate.dependsOn: ["^generate"]`.
 
+## Environment and migrations
+
+`.env.example` lists every variable and is the file to copy. Today that is one:
+`DATABASE_URL`.
+
+**Nothing needs it to build.** `pnpm install`, `turbo run build`, and CI all run
+with no environment at all — `prisma generate` takes no connection, and no test
+opens one. That property is load-bearing enough to be pinned by a test
+(`packages/db/src/env.test.ts`): importing `@fastehr/db` must neither read nor
+require configuration.
+
+**Validation happens at first query**, not at import. `requireDatabaseUrl()`
+parses `process.env.DATABASE_URL` through `@fastehr/contracts` and throws
+naming the variable, so a misconfigured deployment fails on its first request
+with `DATABASE_URL is not set. See .env.example` rather than an opaque driver
+error. The schema lives in `contracts` because decision 5 makes it the only
+package allowed a direct Zod dependency — an environment variable is a shape
+agreement like any other.
+
+The client is built lazily for the same reason, memoised per process, with the
+`globalThis` handle kept only so dev survives HMR.
+
+### Migrations
+
+```bash
+# schema change → migration, applied to your local database
+pnpm --filter @fastehr/db exec prisma migrate dev --name <change>
+
+# deploy: apply committed migrations, never generate them
+pnpm --filter @fastehr/db exec prisma migrate deploy
+```
+
+`prisma/migrations/` is committed and append-only. `db push` is not part of the
+workflow at any point: in a regulated system the migration history *is* the
+record of how the schema got here, and a pushed change leaves no trace of
+itself. `20260814025641_init` is the baseline for the placeholder model; the
+persistence ticket builds on it rather than starting from empty.
+
+Both commands need `DATABASE_URL` — they are the ones that connect. Prisma
+takes it from `prisma.config.ts`, which reads `process.env` directly rather than
+through the config package's eager `env()` helper, so `generate` keeps working
+where no URL exists.
+
 ## CI
 
 `.github/workflows/ci.yml`, on pull requests and pushes to the default branch.

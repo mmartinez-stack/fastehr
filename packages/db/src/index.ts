@@ -1,4 +1,4 @@
-import { prisma, type PrismaClient } from './client.ts'
+import { getPrismaClient, type PrismaClient } from './client.ts'
 import { createPatientRepository, type PatientRepository } from './repositories/patient.ts'
 
 /**
@@ -20,21 +20,24 @@ export interface Db {
 }
 
 /**
- * Builds a `Db` over a Prisma client, defaulting to the package singleton.
+ * Builds a `Db`, defaulting to this package's lazily-constructed client.
  *
- * The parameter exists so a caller can supply a transaction-scoped client — a
- * test wrapping each case in a rolled-back transaction, or a future procedure
- * that needs several repositories inside one `$transaction`. It is typed as the
- * internal client on purpose: a consumer outside this package cannot name that
- * type, so in practice the argument is only reachable from inside `db` itself.
+ * The parameter is a *getter*, which keeps `createDb()` free of I/O and of any
+ * configuration requirement — important because `db` below is constructed at
+ * import, in a build that has no DATABASE_URL. It also lets a caller supply a
+ * transaction-scoped client: a test wrapping each case in a rolled-back
+ * transaction, or a future procedure needing several repositories inside one
+ * `$transaction`. It is typed as the internal client on purpose: a consumer
+ * outside this package cannot name that type, so in practice the argument is
+ * only reachable from inside `db` itself.
  */
-export function createDb(client: PrismaClient = prisma): Db {
+export function createDb(getClient: () => PrismaClient = getPrismaClient): Db {
   return {
-    patients: createPatientRepository(client),
+    patients: createPatientRepository(getClient),
   }
 }
 
-/** Default `Db`, over the shared connection pool. */
+/** Default `Db`. Constructing it opens no connection and reads no config. */
 export const db: Db = createDb()
 
 export type { PatientRepository }

@@ -15,20 +15,24 @@ import { defineConfig } from 'prisma/config'
  * `generate` script), and the schema, migrations, and generated client are all
  * owned by this package.
  *
- * `datasource.url` is deliberately NOT set here. The config's `env()` helper
- * resolves eagerly, at config-load time, so declaring it would make every CLI
- * invocation — `generate` included — fail without a database URL. `generate`
- * does not need one, and it runs in CI and on a fresh clone where none exists.
- * The URL stays in the schema's `datasource` block, where `env()` is resolved
- * lazily and only by the commands that actually connect (`migrate`, `db`,
- * `studio`).
+ * `datasource.url` reads `process.env` directly rather than through the config
+ * package's `env()` helper. `env()` resolves eagerly at config-load time, so
+ * with it every CLI invocation — `generate` included — fails when no database
+ * URL is set. `generate` needs no connection, and it runs in CI and on a fresh
+ * clone where there is none. Passing the value through leaves it `undefined`
+ * there, and only the commands that actually connect (`migrate`, `db`,
+ * `studio`) complain.
  *
- * At runtime the URL reaches the client through the pg driver adapter instead
- * (see src/index.ts); Prisma 7 never reads the datasource block itself.
+ * At runtime the URL does not come from here at all: Prisma 7 takes it from the
+ * pg driver adapter (see src/client.ts), which validates it through
+ * `@fastehr/contracts`.
  */
 export default defineConfig({
   schema: 'prisma/schema.prisma',
   migrations: {
     path: 'prisma/migrations',
+  },
+  datasource: {
+    url: process.env.DATABASE_URL as string,
   },
 })

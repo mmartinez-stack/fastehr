@@ -288,6 +288,34 @@ Use `--filter=...[origin/<base>]` for affected-only runs on PRs.
 
 ### 9. No migrations, no `.env.example`, no env validation
 
+> **Done** (2026-08-13). All three parts, verified against a throwaway
+> Postgres 17 container rather than reasoned about:
+>
+> - **Migrations.** `20260814025641_init` generated *and applied* by
+>   `prisma migrate dev`, with `migration_lock.toml`. The table was inspected in
+>   the database afterwards — `dateOfBirth` is a real `DATE` column. Workflow and
+>   the no-`db push` rule are in the README.
+> - **Env validation.** `databaseUrlSchema` / `serverEnvSchema` in
+>   `@fastehr/contracts` (decision 5 forbids a second Zod dependency, so it goes
+>   where Zod already lives), parsed by `requireDatabaseUrl()` in `packages/db`.
+>   Checked in both directions: unset and wrong-protocol produce messages naming
+>   the variable, and importing the package with no env still works.
+> - **`.env.example`** added; `.gitignore` already had the negation for it.
+>
+> **Two things this turned up.** Validation had to be lazy — at first query, not
+> at import — or `next build` and the CI job from finding 8 would need a fake
+> DATABASE_URL, trading a loud failure for a value that looks configured. The
+> client is now memoised and built on demand, and repositories take a getter so
+> `createDb()` stays free of I/O. Separately, `prisma.config.ts` had lost its
+> `datasource.url` during the Prisma 7 work, which left `migrate` with no URL
+> source at all; it now reads `process.env` directly, which `generate` tolerates
+> and `migrate` requires.
+>
+> While a real database was up, finding 3's mapper was re-checked against it
+> under `TZ=America/Los_Angeles`: a `DATE` of `1815-12-10` comes back as
+> `"1815-12-10"`, not the previous day. The UTC assumption holds against real
+> Postgres, not just a synthetic `Date`.
+
 `turbo.json` lists `prisma/migrations/**` as a `generate` input for a directory
 that does not exist, and declares `DATABASE_URL` as a build cache key that
 nothing validates. Under `envMode: "strict"` a missing variable is quietly

@@ -17,15 +17,20 @@ export interface PatientRepository {
   listByLastName(): Promise<Patient[]>
 }
 
-export function createPatientRepository(prisma: PrismaClient): PatientRepository {
+/**
+ * Takes a *getter* rather than a client so that building a `Db` stays free of
+ * I/O and configuration. The client — and with it the DATABASE_URL check — is
+ * resolved on the first query, not when the repository is constructed.
+ */
+export function createPatientRepository(getClient: () => PrismaClient): PatientRepository {
   return {
     async findById(id) {
-      const row = await prisma.patient.findUnique({ where: { id } })
+      const row = await getClient().patient.findUnique({ where: { id } })
       return row === null ? null : toPatient(row)
     },
 
     async listByLastName() {
-      const rows = await prisma.patient.findMany({
+      const rows = await getClient().patient.findMany({
         orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
       })
       return rows.map(toPatient)
