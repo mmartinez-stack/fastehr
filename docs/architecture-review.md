@@ -135,6 +135,21 @@ line is the leak and should go.
 
 ### 4. Nothing stops a page from importing `@fastehr/db` directly
 
+> **Done** (2026-08-13). A `no-restricted-imports` override in
+> `apps/web/eslint.config.mjs` bans `@fastehr/db` — and the relative path into
+> `packages/db` — everywhere except `src/server/**`. Verified by probe in both
+> directions: the ban fires on a page and on a component, the server layer is
+> still free to import `db`, and rule 2's `next/*` ban still fires there.
+> README, "The server layer", now documents three rules rather than two.
+>
+> **Residual, deliberately left open.** `createContext` is exported from
+> `@/server`, so a Server Component could still construct a context with an
+> actor of its own invention and call `appRouter.createCaller(…)`. Lint cannot
+> distinguish that from the legitimate RSC caller, which needs exactly the same
+> import. The answer is finding 11: one file resolves the actor and exports the
+> caller, and *that* file gets the exemption — which is only decidable once the
+> RSC seam exists. Worth remembering when it does.
+
 **What.** `apps/web` depends on `@fastehr/db` at the app level. The only import
 restriction in `apps/web/eslint.config.mjs` is `src/server/**` ↛ `next/*`.
 
