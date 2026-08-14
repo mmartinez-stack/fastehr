@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import { Toaster } from '@/components/ui/sonner'
+import { TRPCProvider } from '@/trpc/client'
 import './globals.css'
 
 /**
@@ -34,7 +35,12 @@ export default function RootLayout({
   return (
     <html lang="en" className={`light ${inter.variable} bg-background`}>
       <body className="font-sans antialiased">
-        {children}
+        {/*
+          The provider is a Client Component, but `children` are passed through
+          it as an already-rendered server tree — so wrapping the whole app
+          costs no page its static rendering.
+        */}
+        <TRPCProvider>{children}</TRPCProvider>
         <Toaster position="top-right" />
       </body>
     </html>

@@ -13,7 +13,8 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "generate": "turbo run generate",
-    "check:graph": "node scripts/check-task-graph.mjs"
+    "check:graph": "node scripts/check-task-graph.mjs",
+    "smoke": "node scripts/smoke.mjs"
   },
   "devDependencies": {
     "turbo": "2.10.9",

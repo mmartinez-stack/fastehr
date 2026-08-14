@@ -362,6 +362,34 @@ audit log: error messages never echo input.
 
 ### 11. There is no client seam yet
 
+> **Done** (2026-08-13). `src/trpc/{server.tsx, client.tsx, query-client.ts,
+> actor.ts}`: `createHydrationHelpers` for the RSC caller and prefetch,
+> `createTRPCReact` + `httpBatchStreamLink` for the browser, provider mounted in
+> the root layout. `/_smoke` now exercises the whole path and `pnpm smoke`
+> asserts it.
+>
+> Verified against a served production build: the Client Component's badge
+> reads `hydrated: ok` **in the server-rendered HTML**, so the prefetch →
+> dehydrate → hydrate path genuinely carried the data rather than the browser
+> fetching after mount. Also checked that no server code reached the client
+> bundle — `PrismaClient`, `@prisma`, `phi-audit`, `DATABASE_URL` and the router
+> internals appear in zero of 44 chunks — which is the type-only
+> `@/lib/api-types` import doing its job. Every mockup page stayed statically
+> rendered, so wrapping the app in the provider cost nothing.
+>
+> **Consequence worth knowing:** `/_smoke` was statically prerendered, so a
+> broken seam used to fail `next build`. Calling a procedure made it dynamic and
+> that guarantee silently lapsed. `scripts/smoke.mjs` restores it one level out —
+> serve the build, assert every badge — and CI runs it after the build step. It
+> was mutation-tested: removing the prefetch makes it fail with `missing:
+> hydrated: ok` and a message pointing at the two transformer configs.
+>
+> **Also closed finding 4's residual, by convention rather than by lint.**
+> `actor.ts` is the single place a session becomes an `Actor`, shared by the
+> route handler and the RSC caller — they differ only in where the cookie header
+> comes from. Lint still cannot stop a component calling `createContext` with an
+> invented actor; one file resolving actors is what makes that visible in review.
+
 `apps/web` has no `@trpc/client`, no `@tanstack/react-query`, and no server-side
 `createCaller`. `src/lib/api-types.ts` exports the type surface for a client that
 does not exist.

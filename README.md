@@ -1,6 +1,6 @@
 # FastEHR
 
-A pnpm + Turborepo monorepo. Next.js (App Router), Prisma 6 on PostgreSQL,
+A pnpm + Turborepo monorepo. Next.js (App Router), Prisma 7 on PostgreSQL,
 tRPC, Zod v4, Tailwind v4.
 
 ## Bootstrap
@@ -15,7 +15,7 @@ and `engines.node` (`>=22.12.0`) in the root `package.json`.
 ## Layout
 
 ```
-apps/web            Next.js — routes, UI components, tRPC server
+apps/web            Next.js — routes, UI components, tRPC server and client seam
 packages/core       domain logic, framework-free
 packages/contracts  Zod schemas and inferred types (the leaf)
 packages/db         Prisma schema, repositories, row→contract mappers; future home of NDJSON importers
@@ -106,7 +106,7 @@ recorded. Refused attempts are what an investigation goes looking for, so
 `outcome: 'denied'` is a first-class value in the event, distinct from a
 procedure that merely threw.
 
-The event type in `src/server/audit.ts` has **no field for the procedure
+The event type in `src/server/audit-log.ts` has **no field for the procedure
 input**, and must not acquire one — inputs here are patient identifiers,
 clinical values, and message bodies. The trail records that PHI was reached and
 by whom, never the PHI itself.
@@ -451,6 +451,50 @@ have deleted it as dead config.
 asserts `@fastehr/db#generate` is ordered before `@fastehr/web#typecheck`, *and*
 that `turbo.json` still declares `generate.dependsOn: ["^generate"]`.
 
+## The client seam
+
+```
+src/trpc/
+  server.tsx        RSC: in-process caller + prefetch, and HydrateClient
+  client.tsx        'use client': the tRPC React client and its provider
+  query-client.ts   the React Query config both sides share
+  actor.ts          the one place a session becomes an Actor
+```
+
+**Server Components call the router in-process.** `api.health()` runs no HTTP
+and serialises nothing, but still passes the whole middleware chain, so a
+Server Component reading PHI is authenticated, authorised, and audited exactly
+like a browser request. That is what makes rule 3 (no `@fastehr/db` outside
+`src/server/**`) livable rather than merely strict.
+
+**Prefetch, then hydrate.** A page calls `void api.thing.prefetch()` and wraps
+the subtree in `<HydrateClient>`; a Client Component then uses
+`trpc.thing.useQuery()` and renders from the hydrated cache with no request of
+its own. `void` rather than `await` lets the shell stream while the query
+resolves — a still-pending query is dehydrated too, so the browser picks it up
+rather than starting over.
+
+**Two serialisation boundaries, both superjson.** The tRPC link is one; React
+Query's dehydrate/hydrate is a second, and prefetched data takes only the
+latter. Configuring one and not the other gives `Date`s that survive a fetch and
+arrive as strings when prefetched — the same value with two shapes depending on
+the path it took. `query-client.ts` sets `serializeData` / `deserializeData` for
+exactly this reason.
+
+**The QueryClient is request-scoped on the server** (`cache(makeQueryClient)`)
+and module-scoped in the browser. Both halves matter: a module-level client on
+the server would serve one user's cache into another's render, and a
+per-render client in the browser would discard the hydrated cache.
+
+Actor resolution lives in `actor.ts`, which imports no `next/*` and is shared by
+the route handler and the RSC caller — the two differ only in where the cookie
+header comes from. `src/trpc/server.tsx` is the only module that resolves an
+actor for RSC; `createContext` is exported, so a component *could* invent one,
+and lint cannot tell that apart from the legitimate caller.
+
+`/_smoke` exercises the whole path, and `pnpm smoke` asserts it against a
+running server — see CI, below.
+
 ## Environment and migrations
 
 `.env.example` lists every variable and is the file to copy. Today that is one:
@@ -524,9 +568,16 @@ shared instance.
 
 ## Routes
 
-`/_smoke` is the workspace wiring smoke test: it renders an app-local component
-and parses a `@fastehr/contracts` schema, so broken package wiring or a bad path
-alias fails the build instead of surfacing at runtime.
+`/_smoke` is the workspace wiring smoke test: it renders an app-local component,
+parses a `@fastehr/contracts` schema, calls a tRPC procedure in-process, and
+prefetches one for a Client Component to hydrate from — so broken package
+wiring, a bad path alias, or a mismatched transformer fails a check rather than
+surfacing in a product page.
+
+It used to fail the *build*, because it was statically prerendered. Calling a
+procedure made it dynamic (the caller reads headers), so `next build` no longer
+renders it. `pnpm smoke` restores the guarantee one level out: it serves the
+build and asserts every badge, and CI runs it after the build step.
 
 It is deliberately not `/health`. A liveness probe has to be answerable by a
 load balancer without rendering UI or running schema validation, and `/health`

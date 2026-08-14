@@ -1,5 +1,6 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
-import { appRouter, createContext, type Actor } from '@/server'
+import { appRouter, createContext } from '@/server'
+import { actorFromCookieHeader } from '@/trpc/actor'
 
 /**
  * The tRPC mount point, and the only file permitted to bridge Next.js into the
@@ -13,19 +14,18 @@ import { appRouter, createContext, type Actor } from '@/server'
 export const dynamic = 'force-dynamic'
 
 /**
- * Placeholder actor resolution. The auth ticket replaces this with real session
- * verification; the shape it must return is already fixed by `Actor`.
+ * Actor resolution is shared with the RSC caller (`@/trpc/server`) rather than
+ * written twice — the two hosts differ only in where the cookie header comes
+ * from, and two implementations of "who is this" is one more than a system
+ * should have.
  */
-function resolveActor(_request: Request): Actor | null {
-  return null
-}
-
 function handler(request: Request) {
   return fetchRequestHandler({
     endpoint: '/api/trpc',
     req: request,
     router: appRouter,
-    createContext: () => createContext({ actor: resolveActor(request) }),
+    createContext: () =>
+      createContext({ actor: actorFromCookieHeader(request.headers.get('cookie')) }),
   })
 }
 

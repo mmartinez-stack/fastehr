@@ -66,3 +66,11 @@ jobs:
       # affecting task ordering.
       - name: Verify (cold)
         run: pnpm turbo run lint typecheck test build --force
+
+      # /_smoke is dynamic now that it calls a tRPC procedure, so `next build`
+      # no longer renders it and a broken seam would not fail the step above.
+      # This serves the build and asserts the route reports every seam healthy —
+      # including that prefetched data reaches the client, which only shows up
+      # at runtime.
+      - name: Smoke the built app
+        run: pnpm smoke
