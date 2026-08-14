@@ -45,6 +45,27 @@ export const MEDICATIONS = [
   "B12",
   "Phentermine",
 ] as const
+
+/**
+ * The prescribing mix, weighted rather than uniform.
+ *
+ * The medication quick-pick row ranks by how often a medication is actually
+ * prescribed, so the fixture has to have a shape for that ranking to read.
+ * A uniform round-robin across `MEDICATIONS` ties every entry and makes "top
+ * four" an arbitrary slice of an arbitrary order.
+ */
+const PRESCRIBING_MIX = [
+  "Semaglutide",
+  "Semaglutide",
+  "Semaglutide",
+  "Semaglutide",
+  "Tirzepatide",
+  "Tirzepatide",
+  "Tirzepatide",
+  "Phentermine",
+  "Phentermine",
+  "Lipoden",
+] as const
 export const CONSENT_TYPES = [
   "Treatment",
   "Lipoden",
@@ -190,12 +211,22 @@ export interface StartTreatment {
   goalWeight: number
 }
 
+/**
+ * The three roles discovery has confirmed: provider, medical assistant (which
+ * subsumes front desk), and administrator. DIA-29 makes this a schema in
+ * `@fastehr/contracts` with real assignments behind it; until then the mockup
+ * needs a vocabulary to fork screens against, and inventing a fourth role here
+ * would only have to be unwound later.
+ */
+export const ROLES = ["Provider", "Medical Assistant", "Administrator"] as const
+export type Role = (typeof ROLES)[number]
+
 export interface StaffUser {
   id: string
   name: string
   username: string
   email: string
-  role: "Admin" | "Provider" | "MA" | "Front Desk"
+  role: Role
   office: Office
   active: boolean
 }
@@ -366,10 +397,13 @@ function makeVisits(): Visit[] {
     const startWeight = 210 + ((pi * 11) % 60)
     for (let v = 0; v < 10; v++) {
       const weight = Math.round((startWeight - v * (2 + (pi % 3))) * 10) / 10
-      const daysAgo = (9 - v) * 14 + (pi % 5)
+      // Four-week cadence, which is what the follow-up notes describe and what
+      // pushes a ten-visit history back across a calendar year — the condition
+      // the year labels on the patient history axis exist to disambiguate.
+      const daysAgo = (9 - v) * 28 + (pi % 5)
       const type: ApptType =
         v === 0 ? "Initial" : p.atHome ? "At-Home" : "Follow-up"
-      const medName = at(MEDICATIONS, (pi + v) % MEDICATIONS.length)
+      const medName = at(PRESCRIBING_MIX, (pi * 3 + v) % PRESCRIBING_MIX.length)
       const signed = v > 0
       const amount = 120 + ((pi + v) % 5) * 20
       out.push({
@@ -380,7 +414,12 @@ function makeVisits(): Visit[] {
         weight,
         meds: [
           { name: medName, dosage: `${0.25 * (((v % 4) + 1))} mg` },
-          ...(v % 2 === 0 ? [{ name: "B12", dosage: "1 mL" }] : []),
+          // Keyed on the patient as well as the visit so the B12 total does
+          // not land on a round multiple and tie with a primary medication —
+          // a tie at the head of the quick-pick row would be broken
+          // alphabetically, which is precisely the arbitrary ordering the
+          // frequency ranking exists to replace.
+          ...((pi + v) % 3 === 0 ? [{ name: "B12", dosage: "1 mL" }] : []),
         ],
         provider: at(PROVIDERS, (pi + v) % PROVIDERS.length),
         signed,
@@ -741,9 +780,9 @@ export const staffUsers: StaffUser[] = [
   { id: "u1", name: "Dr. Kevin Nguyen", username: "knguyen", email: "k.nguyen@icardio.com", role: "Provider", office: "Downtown", active: true },
   { id: "u2", name: "Dr. Rosa Alvarez", username: "ralvarez", email: "r.alvarez@icardio.com", role: "Provider", office: "Eastside", active: true },
   { id: "u3", name: "Jordan Carter, NP", username: "jcarter", email: "j.carter@icardio.com", role: "Provider", office: "At Home", active: true },
-  { id: "u4", name: "Amanda Ross", username: "aross", email: "a.ross@icardio.com", role: "Admin", office: "Downtown", active: true },
-  { id: "u5", name: "Diego Morales", username: "dmorales", email: "d.morales@icardio.com", role: "MA", office: "Eastside", active: true },
-  { id: "u6", name: "Chloe Simmons", username: "csimmons", email: "c.simmons@icardio.com", role: "Front Desk", office: "Downtown", active: false },
+  { id: "u4", name: "Amanda Ross", username: "aross", email: "a.ross@icardio.com", role: "Administrator", office: "Downtown", active: true },
+  { id: "u5", name: "Diego Morales", username: "dmorales", email: "d.morales@icardio.com", role: "Medical Assistant", office: "Eastside", active: true },
+  { id: "u6", name: "Chloe Simmons", username: "csimmons", email: "c.simmons@icardio.com", role: "Medical Assistant", office: "Downtown", active: false },
 ]
 
 export const currentUser = staffUsers[0]
@@ -755,6 +794,98 @@ export const macros: Macro[] = [
   { shortcut: "//b12", expansion: "Administered B12 1 mL IM, left deltoid. Tolerated well." },
   { shortcut: "//nv", expansion: "Patient reports mild nausea; advised smaller meals and hydration." },
 ]
+
+// ---- derived prescribing helpers -------------------------------------------
+
+export interface MedicationRank {
+  name: string
+  /** Times prescribed across the window the ranking covers. */
+  count: number
+  /** 1-based position, so the UI can label rather than only colour. */
+  rank: number
+}
+
+/**
+ * Medications ordered most- to least-prescribed.
+ *
+ * **The ranking is derived, never hardcoded.** The Aug 7 sync asked for the
+ * few most frequently prescribed medications to sit at the top of the
+ * prescribing flow, and the transcript's medication names were unreliable
+ * ("fentamine", "tepatide"). Ranking from prescribing data settles the naming
+ * question by not asking it: whatever the clinic actually prescribes is what
+ * surfaces, and the row re-orders itself as practice changes — a new GLP-1
+ * displaces an old one without a code change.
+ *
+ * Here the window is the whole fixture. In the real system this becomes a
+ * query with three parameters still to be decided, and they are product
+ * questions rather than implementation details:
+ *
+ * - **Window** — trailing 90 days, or the current year? Long enough to be
+ *   stable, short enough to follow a change in practice.
+ * - **Scope** — clinic-wide, per office, or per prescriber? A provider's own
+ *   habits rank differently from the clinic's aggregate.
+ * - **Refresh** — recomputed per request, or cached and rebuilt nightly?
+ *
+ * Until those are answered the count is presentational: it explains the order
+ * to whoever is reading the screen and nothing branches on its value.
+ */
+export function medicationsByFrequency(): MedicationRank[] {
+  const counts = new Map<string, number>()
+  for (const v of visits) {
+    for (const m of v.meds) counts.set(m.name, (counts.get(m.name) ?? 0) + 1)
+  }
+  return Array.from(counts, ([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .map((m, i) => ({ ...m, rank: i + 1 }))
+}
+
+/** The head of {@link medicationsByFrequency} — the quick-pick row. */
+export function topMedications(n = 4): MedicationRank[] {
+  return medicationsByFrequency().slice(0, n)
+}
+
+/** Everything the quick-pick row does not cover, for the dropdown behind it. */
+export function remainingMedications(n = 4): string[] {
+  return medicationsByFrequency()
+    .slice(n)
+    .map((m) => m.name)
+}
+
+// ---- derived consent helpers -----------------------------------------------
+
+export interface PendingWaiver {
+  patientId: string
+  patientName: string
+  consent: string
+  /** How long the form has been outstanding, for ordering the column. */
+  daysWaiting: number
+}
+
+/**
+ * Consent forms still outstanding, one row per patient-and-form.
+ *
+ * Clerical, and so administrative-surface only: the Aug 7 sync moved consent
+ * status out of the provider's view entirely.
+ */
+export function pendingWaivers(office?: Office): PendingWaiver[] {
+  return patients
+    .filter((p) => (office ? p.office === office : true))
+    .flatMap((p, pi) =>
+      p.missingConsents.map((consent, ci) => ({
+        patientId: p.id,
+        patientName: fullName(p),
+        consent,
+        daysWaiting: 2 + ((pi * 5 + ci * 3) % 26),
+      })),
+    )
+    .sort((a, b) => b.daysWaiting - a.daysWaiting)
+}
+
+export function appointmentsForPatient(patientId: string): Appointment[] {
+  return appointments
+    .filter((a) => a.patientId === patientId)
+    .sort((a, b) => +new Date(a.start) - +new Date(b.start))
+}
 
 // ---- derived queue helpers -------------------------------------------------
 
