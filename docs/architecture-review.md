@@ -167,6 +167,16 @@ it, DTOs out — which is the architecture this repo already has, minus the fenc
 
 ### 5. Denied PHI access leaves no audit trail
 
+> **Done** (2026-08-13). The audit now runs outermost in `protectedProcedure`,
+> so refusals are recorded with the actor that made them. The payload is a typed
+> `AuditEvent` in the new `src/server/audit.ts`, with `outcome: allowed | denied
+> | error` distinguishing a refusal from a procedure that threw, and **no field
+> for the input** — the type is the enforcement. `recordAuditEvent` is the only
+> thing the audit ticket has to replace. Four tests in `src/server/audit.test.ts`
+> drive the chain through `createCaller`; the two denial tests were confirmed to
+> fail under the old ordering, so they are testing the fix rather than passing
+> vacuously.
+
 **What.** The chain in `trpc.ts` is `requireAuth → requireRole → auditPhiAccess`.
 
 **Why it matters.** A `FORBIDDEN` thrown by `requireRole` never reaches the audit

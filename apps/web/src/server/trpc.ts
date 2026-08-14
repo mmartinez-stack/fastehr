@@ -1,5 +1,6 @@
 import { initTRPC, TRPCError } from '@trpc/server'
 import { db, type Db } from '@fastehr/db'
+import { recordAuditEvent, type AuditEvent } from './audit.ts'
 
 /**
  * tRPC initialisation, context shape, and the middleware chain.
@@ -43,7 +44,47 @@ export const router = t.router
 export const publicProcedure = t.procedure
 
 /**
- * 1/3 — Authentication. Narrows `actor` to non-null for everything downstream.
+ * 1/3 — PHI access audit. Every procedure touching protected health information
+ * must leave a trail, and — this is the part that is easy to get wrong — so
+ * must every procedure that *refuses* to.
+ *
+ * It sits outermost so it observes the outcome of the two middlewares below it.
+ * `next()` resolves rather than throws when something downstream fails, so a
+ * rejected call still produces a record, with `ctx.actor` as whatever the
+ * request actually presented — `anonymous` for an unauthenticated attempt.
+ *
+ * Placeholder only in its sink: see ./audit.ts.
+ */
+const auditPhiAccess = t.middleware(async ({ ctx, path, type, next }) => {
+  const startedAt = Date.now()
+  const result = await next()
+
+  recordAuditEvent({
+    actorId: ctx.actor?.id ?? 'anonymous',
+    path,
+    type,
+    ...describeOutcome(result),
+    durationMs: Date.now() - startedAt,
+  })
+
+  return result
+})
+
+/** Access refused by the chain, as opposed to a procedure that failed. */
+const DENIAL_CODES = new Set<string>(['UNAUTHORIZED', 'FORBIDDEN'])
+
+function describeOutcome(result: {
+  ok: boolean
+  error?: TRPCError
+}): Pick<AuditEvent, 'outcome' | 'code'> {
+  if (result.ok) return { outcome: 'allowed' }
+  const code = result.error?.code
+  if (code === undefined) return { outcome: 'error' }
+  return { outcome: DENIAL_CODES.has(code) ? 'denied' : 'error', code }
+}
+
+/**
+ * 2/3 — Authentication. Narrows `actor` to non-null for everything downstream.
  * Placeholder: real session verification lands with the auth ticket.
  */
 const requireAuth = t.middleware(({ ctx, next }) => {
@@ -52,7 +93,7 @@ const requireAuth = t.middleware(({ ctx, next }) => {
 })
 
 /**
- * 2/3 — Role check (RBAC). Placeholder: currently asserts only that the actor
+ * 3/3 — Role check (RBAC). Placeholder: currently asserts only that the actor
  * carries at least one role. Real permission matrix lands with the RBAC ticket.
  */
 const requireRole = t.middleware(({ ctx, next }) => {
@@ -62,29 +103,17 @@ const requireRole = t.middleware(({ ctx, next }) => {
 })
 
 /**
- * 3/3 — PHI access audit. Every procedure touching protected health information
- * must leave a durable trail. Placeholder: writes to stdout instead of the audit
- * table, which lands with the audit ticket.
- */
-const auditPhiAccess = t.middleware(async ({ ctx, path, type, next }) => {
-  const startedAt = Date.now()
-  const result = await next()
-  console.info('[phi-audit]', {
-    actorId: ctx.actor?.id ?? 'anonymous',
-    path,
-    type,
-    ok: result.ok,
-    durationMs: Date.now() - startedAt,
-  })
-  return result
-})
-
-/**
- * Procedures that read or write PHI. The chain order is deliberate:
- * authenticate, then authorize, then audit — so the audit record is written
- * with a known actor and only for calls that passed authorization.
+ * Procedures that read or write PHI. The chain order is deliberate: audit
+ * outermost, then authenticate, then authorize.
+ *
+ * An earlier version ran the audit innermost, on the reasoning that a record
+ * should only be written for calls that passed authorization. That is the right
+ * instinct for an *access* log and the wrong one for a *security* log: it meant
+ * an actor probing records they had no right to left no trace at all, while
+ * every legitimate read was faithfully recorded. Refused attempts are the
+ * events an investigation actually goes looking for.
  */
 export const protectedProcedure = t.procedure
+  .use(auditPhiAccess)
   .use(requireAuth)
   .use(requireRole)
-  .use(auditPhiAccess)
