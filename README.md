@@ -48,7 +48,7 @@ transpile entry; charging that against a consumer that may never exist is
 speculative structure. Both were folded into `apps/web`:
 
 - the tRPC router, context, and middleware chain → `apps/web/src/server/`
-- the stub component(s) → `apps/web/src/components/`
+- the stub component → `apps/web/src/components/` (since replaced by shadcn's own Badge)
 
 If a second consumer does appear, extracting them back is mechanical — which is
 precisely what the `src/server/` rule below preserves.
@@ -63,7 +63,7 @@ auth / RBAC / PHI-audit middleware chain. Two rules keep it extractable:
    authenticated.
 2. **Nothing under `src/server/**` may import `next/*`.** Request state — the
    session, user, and role — enters only through tRPC's `createContext`, which
-   is constructed in `app/api/trpc/[trpc]/route.ts`. That route handler is the
+   is constructed in `src/app/api/trpc/[trpc]/route.ts`. That route handler is the
    single file allowed to touch Next APIs, and it mounts the router through
    tRPC's **fetch adapter**.
 
@@ -76,16 +76,48 @@ standalone service — can mount the same router by supplying its own
 `createContext`. The moment `next/headers` is read inside the server layer, that
 option is gone and the coupling is invisible until someone tries.
 
-### Path aliases
+### App layout and path aliases
 
-`@/*` is pinned to the app root, where the v0 mockup lives. The folded code has
-its own prefixes — `@server` and `@ui` — rather than a second root on `@/*`.
+Everything the app owns lives under `apps/web/src/` — `src/app`, `src/components`,
+`src/lib`, `src/server`. Only `public/` and the config files sit at the app root,
+because Next.js requires `public/` there.
 
-This is not cosmetic. With `paths: { "@/*": ["./*", "./src/*"] }`, `tsc` falls
-through to the second entry when the first yields no module, but **Turbopack
-matches the bare `components/` directory and resolves it to `undefined`**. The
-result type-checks cleanly and then fails at render with `Element type is
-invalid`. Separate prefixes remove the ambiguity entirely.
+```
+apps/web/
+  public/
+  src/
+    app/          routes (App Router)
+    components/   app-local components; components/ui is shadcn's output
+    lib/          utils, mock data
+    server/       tRPC router, context, middleware chain
+```
+
+That gives `@/*` exactly one root: `./src/*`. An earlier split layout —
+`app/` at the app root alongside a `src/` sibling — needed
+`paths: { "@/*": ["./*", "./src/*"] }`, and **`tsc` and Turbopack disagreed about
+it**: `tsc` falls through to the second entry when the first yields no module,
+while Turbopack matched the bare `components/` directory present in the first
+root and resolved it to `undefined`. The result type-checked cleanly and then
+failed at render with `Element type is invalid`. One root removes the whole
+class of problem.
+
+### shadcn/ui
+
+Components are shadcn `base-nova` on [Base UI](https://base-ui.com) — not Radix.
+`components.json` is the source of truth; `pnpm exec shadcn info` should report
+`srcDirectory: Yes` and `tailwindCss: src/app/globals.css`. Add components with
+the CLI rather than by hand:
+
+```bash
+cd apps/web && pnpm exec shadcn add <component>
+```
+
+They land in `src/components/ui/` and import `cn` from `@/lib/utils`, which is
+why `shadcn` is a **dependency** and not a devDependency: `src/app/globals.css`
+does `@import 'shadcn/tailwind.css'`, resolved through the package's exports map
+at build time. Styling follows the CSS-variables convention
+(`cssVariables: true`), so restyling means editing tokens, not component
+classes.
 
 ## Decisions
 
@@ -262,7 +294,7 @@ Root-level `-w` is reserved for repo-wide tooling (`turbo`, `typescript`).
 ## Current state
 
 `apps/web` still carries the v0 mockup: pages read from
-`apps/web/lib/mock-data.ts` and no database is wired up.
+`apps/web/src/lib/mock-data.ts` and no database is wired up.
 
 `noUncheckedIndexedAccess` is disabled for `apps/web` only, because the
 generated mockup indexes fixture arrays unchecked in ~30 places. It is on for

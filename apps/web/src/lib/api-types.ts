@@ -6,4 +6,4 @@
  * Electron. The import is erased at compile time, so neither the tRPC runtime
  * nor Prisma is pulled into the client bundle.
  */
-export type { AppRouter } from '@server'
+export type { AppRouter } from '@/server'

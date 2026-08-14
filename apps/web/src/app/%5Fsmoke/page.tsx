@@ -1,4 +1,4 @@
-import { Badge } from '@ui'
+import { Badge } from '@/components/ui/badge'
 import { patientSchema } from '@fastehr/contracts'
 
 /**
@@ -23,12 +23,12 @@ export default function SmokePage() {
       <h1 className="text-2xl font-semibold tracking-tight">Workspace smoke test</h1>
       <ul className="flex flex-col gap-2 text-sm">
         <li className="flex items-center justify-between">
-          <span>app-local components</span>
-          <Badge data-testid="smoke-components">component imported</Badge>
+          <span>@/components/ui (shadcn)</span>
+          <Badge variant="secondary">component imported</Badge>
         </li>
         <li className="flex items-center justify-between">
           <span>@fastehr/contracts</span>
-          <Badge data-testid="smoke-contracts">
+          <Badge variant={parsed.success ? 'default' : 'destructive'}>
             {parsed.success ? 'schema valid' : 'schema failed'}
           </Badge>
         </li>

@@ -6,21 +6,15 @@
     "module": "ESNext",
     "incremental": true,
     "plugins": [{ "name": "next" }],
-    // `@/*` stays pinned to the app root, where the v0 mockup lives.
-    // The folded server and component code gets its own aliases rather than a
-    // second root on `@/*`: with `["./*", "./src/*"]`, `tsc` falls through to
-    // the second entry when the first yields no module, but Turbopack matches
-    // the bare `components/` directory and resolves it to undefined. That
-    // combination type-checks and then fails at render — so the two trees are
-    // kept on separate prefixes instead.
+    // Everything the app owns lives under src/, so `@/*` has exactly one root.
+    // An earlier split layout needed a second root here, and `tsc` and
+    // Turbopack disagreed about how to resolve it — a bare directory present in
+    // both roots type-checked and then rendered as undefined. One root, no
+    // ambiguity.
     "paths": {
-      "@/*": ["./*"],
-      "@server": ["./src/server/index.ts"],
-      "@server/*": ["./src/server/*"],
-      "@ui": ["./src/components/index.ts"],
-      "@ui/*": ["./src/components/*"]
+      "@/*": ["./src/*"]
     },
-    // TODO: re-enable once lib/mock-data.ts is replaced by @fastehr/db.
+    // TODO: re-enable once src/lib/mock-data.ts is replaced by @fastehr/db.
     // The generated mockup indexes fixture arrays unchecked in ~30 places;
     // the flag stays on for every package under packages/.
     "noUncheckedIndexedAccess": false

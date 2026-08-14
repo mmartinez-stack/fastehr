@@ -1,5 +1,5 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
-import { appRouter, createContext, type Actor } from '@server'
+import { appRouter, createContext, type Actor } from '@/server'
 
 /**
  * The tRPC mount point, and the only file permitted to bridge Next.js into the
