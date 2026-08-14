@@ -33,6 +33,7 @@ first and produced a bug that type-checked.
 | [21](021-strict-index-access-everywhere.md) | `noUncheckedIndexedAccess` is on everywhere, mockup included | `apps/web` · `packages/config` |
 | [22](022-office-scoping.md) | The office is part of the actor, not of the request | `apps/web` · `packages/contracts` |
 | [23](023-docker-image.md) | A production image for `apps/web` | `Dockerfile` · `apps/web` |
+| [24](024-variables-and-secrets.md) | The variable contract, and how secrets are handled | `.env.example` · `turbo.json` · CI · Docker |
 
 ## Adding one
 

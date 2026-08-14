@@ -5,7 +5,8 @@ tRPC, Zod v4, Tailwind v4.
 
 This file is orientation and operation: what is where, and how to run it. The
 reasoning lives in [`docs/adr/`](docs/adr/README.md) — one decision per file,
-numbered permanently because code comments cite them.
+numbered permanently because code comments cite them. Branch, commit, and pull
+request conventions are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Bootstrap
 
@@ -139,8 +140,20 @@ classes.
 
 ## Environment and migrations
 
-`.env.example` lists every variable and is the file to copy. Today that is one:
-`DATABASE_URL`.
+`.env.example` lists every variable and is the file to copy.
+
+| variable | kind | required | read |
+| --- | --- | --- | --- |
+| `DATABASE_URL` | server runtime | yes, to query | on first query, validated and named |
+| `NEXT_PUBLIC_APP_URL` | **build-inlined** | no | at build; baked into the client bundle |
+| `TEST_DATABASE_URL` | test-only | for `test:integration` | by the integration suite, which refuses to fall back |
+| `SMOKE_PORT` | local | no | by `pnpm smoke` |
+
+The kind matters more than it looks. A `NEXT_PUBLIC_*` value is substituted into
+JavaScript that ships to the browser, so it is public by definition and an image
+built with one cannot be promoted to an environment that uses another. Where a
+new variable must be declared — and how secrets are handled in CI, Docker, and
+logs — is [ADR 24](docs/adr/024-variables-and-secrets.md).
 
 **Nothing needs it to build.** `pnpm install`, `turbo run build`, and CI all run
 with no environment at all — `prisma generate` takes no connection, and no test
@@ -268,9 +281,10 @@ package, and `lint` / `typecheck` depend on `^generate` rather than `^build`.
 `pnpm check:graph` guards the ordering, which fails only on a cold cache when it
 breaks — [ADR 15](docs/adr/015-generate-task-graph.md).
 
-`build` declares `env: ["NEXT_PUBLIC_*", "DATABASE_URL"]` with `envMode: strict`,
-because Next inlines `NEXT_PUBLIC_*` at build time and those values must be part
-of the cache key. `.next/cache/**` is excluded from `outputs`: it is a local
+`build` declares `env: ["NEXT_PUBLIC_*"]` with `envMode: strict`, because Next
+inlines those values at build time and they are therefore part of the build's
+identity. Nothing else belongs there — a variable a task merely has access to is
+not a build input ([ADR 24](docs/adr/024-variables-and-secrets.md)). `.next/cache/**` is excluded from `outputs`: it is a local
 incremental cache, not a build product.
 
 ## Routes

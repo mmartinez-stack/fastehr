@@ -13,7 +13,7 @@
     "build": {
       "dependsOn": ["^build", "^generate", "generate"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"],
-      "env": ["NEXT_PUBLIC_*", "DATABASE_URL"]
+      "env": ["NEXT_PUBLIC_*"]
     },
     "typecheck": { "dependsOn": ["^generate", "generate"] },
     "lint": { "dependsOn": ["^generate", "generate"] },
