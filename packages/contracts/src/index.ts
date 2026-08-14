@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 export { databaseUrlSchema, serverEnvSchema, type ServerEnv } from './env.ts'
+export { describeValidationFailure, type ValidationFailure } from './errors.ts'
 
 /**
  * Seed contract. Real schemas arrive with the domain tickets — this exists so

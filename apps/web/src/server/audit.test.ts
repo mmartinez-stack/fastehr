@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { appRouter } from './router.ts'
-import { createContext, type Actor } from './trpc.ts'
-import type { AuditEvent } from './audit.ts'
+import { appRouter } from './routers/root.ts'
+import { createContext, type Actor } from './context.ts'
+import type { AuditEvent } from './audit-log.ts'
 
 /**
  * The middleware chain, exercised through `createCaller` — no HTTP, no

@@ -329,6 +329,29 @@ sync; they are two halves of one declaration.
 
 ### 10. The server layer needs its shape before it needs its content
 
+> **Done** (2026-08-13). Split into `context.ts`, `trpc.ts` (init only),
+> `procedures.ts` (chain composition), `middleware/{auth,audit}.ts`,
+> `routers/root.ts`, `audit-log.ts`, behind the existing `index.ts`. Init and
+> composition are separate files because middlewares need `t`, so a single
+> module would import the modules importing it. Nothing outside `src/server/**`
+> changed — the route handler and `api-types.ts` still import the barrel.
+>
+> `errorFormatter` added: validation failures leave as field paths and issue
+> codes with the message replaced by `Invalid input`.
+>
+> **Two corrections that came out of testing this.** First, the rationale in the
+> original finding — and in my first version of the code comments — said Zod's
+> messages quote the value that failed. They do not, checked across five issue
+> codes. The real exposure is author-written `.refine` messages, which is a
+> better argument for the same fix, and the comments now say so.
+>
+> Second, and more serious: the first implementation replaced `message`
+> correctly and the entire serialised `ZodError` still came back through
+> `data.stack`, which tRPC includes outside production, with absolute server
+> paths attached. Found only because a test asserted against the whole response
+> body rather than the parsed fields. The formatter now strips `stack` from
+> every error, and a test names that regression.
+
 One `router.ts` and one `trpc.ts` will not survive patients, schedule, SMS, and
 reports. Move to `src/server/{trpc.ts, context.ts, middleware/, routers/,
 root.ts}` now, while it is a thirty-line change and the extraction guarantee the

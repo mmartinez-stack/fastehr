@@ -1,7 +1,9 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import superjson from 'superjson'
 import { describe, expect, it } from 'vitest'
-import { createContext, publicProcedure, router } from './trpc.ts'
+import { createContext } from './context.ts'
+import { publicProcedure } from './procedures.ts'
+import { router } from './trpc.ts'
 
 /**
  * Guards the transformer on the tRPC instance itself, over a real HTTP
