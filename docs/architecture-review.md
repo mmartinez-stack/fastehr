@@ -241,6 +241,36 @@ mockup.
 
 ### 7. Office scoping lives in client state
 
+> **Done** (2026-08-14), and it did not need auth after all — the plumbing is
+> what needed doing, and the session only fills it in. [ADR 22](adr/022-office-scoping.md).
+>
+> `officeSchema` moved to `@fastehr/contracts` (an authorization boundary
+> defined in `mock-data.ts` is one the server cannot enforce), `Actor` gained
+> `offices`, and `officeScopedProcedure` throws `FORBIDDEN` unless the requested
+> site is in the actor's set. Six tests cover it, including that the refusal is
+> audited as a denial and that the audit never records which site was asked for.
+> `OfficeProvider` now takes the permitted list as a prop from the `(app)`
+> layout and no longer invents a `"Downtown"` default; an actor scoped to no
+> site gets an empty state.
+>
+> **Two things to know.** Every `(app)` route is now dynamic, because the layout
+> reads headers — correct for an authenticated EHR, but a real change from
+> mostly `○` to uniformly `ƒ`. And `permittedOffices()` still returns every site
+> to an anonymous caller so the mockup renders; that fallback is the auth
+> ticket's to delete, and it grants no data today because the procedure re-checks
+> against the actor regardless.
+>
+> **A cycle caught in passing.** The first version put `officeScopedProcedure`
+> in `src/server/middleware/office.ts`, which imported `protectedProcedure` from
+> `procedures.ts` while `procedures.ts` re-exported it — exactly the cycle ADR 9
+> describes, failing at import with `Cannot read properties of undefined
+> (reading 'input')`. It composes `.input()` with a check, so it is a procedure,
+> not a middleware, and belongs in `procedures.ts`.
+>
+> Still open, and deliberately: no product procedure is office-scoped, because
+> nothing reads site-owned data yet — `Patient` has no office column, and adding
+> one is the persistence ticket's call.
+
 **What.** `apps/web/src/components/office-provider.tsx` holds the selected office
 in React context.
 

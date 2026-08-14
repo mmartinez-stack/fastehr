@@ -21,7 +21,7 @@ const ADA = {
   dateOfBirth: '1815-12-10',
 }
 
-const CLINICIAN: Actor = { id: 'user-1', roles: ['clinician'] }
+const CLINICIAN: Actor = { id: 'user-1', roles: ['clinician'], offices: ['Downtown'] }
 
 function fakeDb(overrides: Partial<Db['patients']> = {}): Db {
   return {

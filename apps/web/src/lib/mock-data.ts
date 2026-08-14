@@ -1,3 +1,5 @@
+import { officeSchema, type Office } from "@fastehr/contracts"
+
 // Centralized mock data for the iCardio EHR mockup. No backend — everything here
 // is deterministic, plausible clinical data used across the app.
 
@@ -21,12 +23,15 @@ function at<T>(items: readonly T[], index: number): T {
   return value
 }
 
-export type Office = "Downtown" | "Eastside" | "At Home"
+// The office vocabulary is a domain type and lives in @fastehr/contracts, where
+// the server can enforce it (ADR 22). Re-exported so the mockup keeps its
+// single import site.
+export type { Office }
 export type Language = "ENG" | "SPA"
 export type PatientStatus = "active" | "inactive"
 export type ApptType = "Initial" | "Follow-up" | "At-Home"
 
-export const OFFICES: Office[] = ["Downtown", "Eastside", "At Home"]
+export const OFFICES: Office[] = [...officeSchema.options]
 export const PROVIDERS = [
   "Dr. Nguyen",
   "Dr. Alvarez",

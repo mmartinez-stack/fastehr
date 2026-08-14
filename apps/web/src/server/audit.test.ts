@@ -40,7 +40,7 @@ afterEach(() => {
 
 describe('PHI audit', () => {
   it('records an allowed access', async () => {
-    await expect(callWith({ id: 'user-1', roles: ['clinician'] })).resolves.toBe('Lovelace, Ada')
+    await expect(callWith({ id: 'user-1', roles: ['clinician'], offices: ['Downtown'] })).resolves.toBe('Lovelace, Ada')
 
     expect(recordedEvents()).toEqual([
       expect.objectContaining({
@@ -68,7 +68,7 @@ describe('PHI audit', () => {
   })
 
   it('records an unauthorized attempt as denied, with the actor that made it', async () => {
-    await expect(callWith({ id: 'user-2', roles: [] })).rejects.toThrow('FORBIDDEN')
+    await expect(callWith({ id: 'user-2', roles: [], offices: ['Downtown'] })).rejects.toThrow('FORBIDDEN')
 
     expect(recordedEvents()).toEqual([
       expect.objectContaining({
@@ -80,7 +80,7 @@ describe('PHI audit', () => {
   })
 
   it('never records the procedure input', async () => {
-    await callWith({ id: 'user-1', roles: ['clinician'] })
+    await callWith({ id: 'user-1', roles: ['clinician'], offices: ['Downtown'] })
     await callWith(null).catch(() => {})
 
     const serialised = JSON.stringify(recordedEvents())

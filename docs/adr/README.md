@@ -31,6 +31,7 @@ first and produced a bug that type-checked.
 | [19](019-ci-builds-cold.md) | CI builds cold, and the database job is separate | CI |
 | [20](020-component-placement.md) | Where a component lives | `apps/web/src/components` |
 | [21](021-strict-index-access-everywhere.md) | `noUncheckedIndexedAccess` is on everywhere, mockup included | `apps/web` · `packages/config` |
+| [22](022-office-scoping.md) | The office is part of the actor, not of the request | `apps/web` · `packages/contracts` |
 
 ## Adding one
 

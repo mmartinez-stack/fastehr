@@ -26,7 +26,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useOffice } from "@/components/office-provider"
-import { OFFICES } from "@/lib/mock-data"
 
 const NAV = [
   { label: "Queues", href: "/queues", icon: LayoutGrid },
@@ -42,7 +41,7 @@ const NAV = [
 
 export function TopNav() {
   const pathname = usePathname()
-  const { office, setOffice } = useOffice()
+  const { office, offices, setOffice } = useOffice()
 
   return (
     <header className="sticky top-0 z-40 border-b border-primary/60 bg-primary text-primary-foreground shadow-sm">
@@ -88,7 +87,7 @@ export function TopNav() {
               <SelectValue placeholder="Office" />
             </SelectTrigger>
             <SelectContent>
-              {OFFICES.map((o) => (
+              {offices.map((o) => (
                 <SelectItem key={o} value={o}>
                   {o}
                 </SelectItem>

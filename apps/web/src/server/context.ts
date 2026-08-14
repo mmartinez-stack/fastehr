@@ -1,3 +1,4 @@
+import type { Office } from '@fastehr/contracts'
 import { db, type Db } from '@fastehr/db'
 
 /**
@@ -10,10 +11,17 @@ import { db, type Db } from '@fastehr/db'
  * the context type without depending on `t`.
  */
 
-/** Placeholder actor. Real session shape arrives with the auth ticket. */
+/**
+ * Placeholder actor. Real session shape arrives with the auth ticket.
+ *
+ * `offices` is the set of sites this actor may read or write. It is part of the
+ * *identity*, resolved server-side from the session — never taken from a
+ * request, and never from a client-side selection. See ADR 22.
+ */
 export interface Actor {
   id: string
   roles: readonly string[]
+  offices: readonly Office[]
 }
 
 export interface Context {
