@@ -538,11 +538,70 @@ takes it from `prisma.config.ts`, which reads `process.env` directly rather than
 through the config package's eager `env()` helper, so `generate` keeps working
 where no URL exists.
 
+## Tests
+
+Two tiers, separated because they need different things:
+
+```bash
+pnpm turbo run test              # unit — no database, no environment, anywhere
+pnpm turbo run test:integration  # real PostgreSQL, real migrations
+```
+
+**Unit tests must stay runnable on a fresh clone with nothing configured.** That
+is the property the main CI job depends on, so integration tests are excluded
+from the default `test` task by filename (`*.integration.test.ts`) and by
+`packages/db/vitest.config.ts`.
+
+What sits where:
+
+| | covers |
+| --- | --- |
+| `packages/contracts` | schema behaviour, and that no validation message escapes to the wire |
+| `packages/core` | domain functions — pure, no I/O |
+| `packages/db` unit | the row→contract mappers, env validation |
+| `packages/db` integration | repositories against real PostgreSQL, through committed migrations |
+| `apps/web/src/server` | the middleware chain via `createCaller`, the wire format, the error shape |
+| `pnpm smoke` | the built app end to end, including RSC prefetch reaching the browser |
+
+**Both suites run pinned to `TZ=America/Los_Angeles`**, and not for a
+developer's convenience. CI runners are UTC, and reading a `@db.Date` through
+local time produces the correct answer *by accident* in UTC — so the
+date-of-birth-off-by-one bug is invisible there. Pinning a zone west of UTC
+means the test fails where it is cheap to notice. Verified by breaking the
+mapper on purpose: the assertion reports `expected '1815-12-09' to be
+'1815-12-10'`.
+
+### Integration tests
+
+They require `TEST_DATABASE_URL`, refuse to fall back to `DATABASE_URL`, and
+say so with a copyable `docker run` when it is missing. The refusal is the
+point: the suite truncates tables between cases, and a default would eventually
+find someone's working database.
+
+```bash
+docker run -d --rm -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=fastehr_test \
+  -p 55432:5432 postgres:17-alpine
+
+TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:55432/fastehr_test \
+  pnpm turbo run test:integration
+```
+
+Schema is applied by `prisma migrate deploy` in the vitest global setup — the
+same command a deployment runs, so a committed-but-broken migration fails here
+instead of in an environment that matters.
+
 ## CI
 
 `.github/workflows/ci.yml`, on pull requests and pushes to the default branch.
-One job: install with `--frozen-lockfile`, `pnpm check:graph`, then
-`turbo run lint typecheck test build`.
+Two jobs.
+
+**`verify`** — install with `--frozen-lockfile`, `pnpm check:graph`,
+`turbo run lint typecheck test build`, then `pnpm smoke` against the built app.
+
+**`integration`** — a Postgres 17 service container and `turbo run
+test:integration`. Separate on purpose: `verify` proves the workspace builds and
+tests with **no environment at all**, which is what a fresh clone gets, and
+adding a database to it would quietly retire that guarantee.
 
 **It runs `--force`, with no turbo cache, deliberately.** This job's main value
 is being the cold build. The `^generate` race is invisible against a warm

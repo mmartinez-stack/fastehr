@@ -402,6 +402,35 @@ that proves the layer is actually transport-agnostic.
 
 ### 12. Testing is `--passWithNoTests` in three of four packages
 
+> **Mostly done** (2026-08-13). Item 1 (RBAC/audit via `createCaller`) landed
+> with finding 5. Item 2 is done here: `packages/db` integration tests against
+> real PostgreSQL, schema applied by `prisma migrate deploy` in vitest global
+> setup, run by a separate CI job with a Postgres 17 service container. Vitest
+> configs now exist for both tiers, and `test`'s phantom `outputs: coverage/**`
+> is gone with the four warnings it emitted every run.
+>
+> Item 3 (Playwright) is **deliberately not done** — see below.
+>
+> Safety property worth keeping: integration tests require `TEST_DATABASE_URL`
+> and refuse to fall back to `DATABASE_URL`, because they truncate between
+> cases. The error prints a copyable `docker run`.
+>
+> **The find that justified the whole exercise.** Both suites are now pinned to
+> `TZ=America/Los_Angeles`. CI runners are UTC, and reading a `@db.Date` through
+> local time is correct *by accident* in UTC — so the date-of-birth-off-by-one
+> bug this repo already guards against in a unit test was invisible in CI.
+> Confirmed by breaking the mapper on purpose: with the zone pinned it fails
+> `expected '1815-12-09' to be '1815-12-10'` in both tiers; without it, under
+> `TZ=UTC`, the unit suite passed with the bug present.
+>
+> **On Playwright.** The flow it would cover (queue → start-treatment) is
+> `mock-data.ts` with no behaviour behind it, so the suite would assert the
+> mockup and then be rewritten the moment those pages are wired to procedures —
+> churn bought with a browser download in CI. `pnpm smoke` already covers "the
+> built app serves and the data path works" end to end. The time to add it is
+> after auth and one real page, when there is a flow whose breaking would
+> matter. Say the word if you would rather have it now.
+
 `packages/core/src/index.test.ts` is the only test in the repo, and there is no
 vitest config anywhere.
 

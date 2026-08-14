@@ -74,3 +74,43 @@ jobs:
       # at runtime.
       - name: Smoke the built app
         run: pnpm smoke
+
+  # Separate job, and deliberately so: the job above proves the workspace builds
+  # and tests with no environment at all, which is what a fresh clone gets.
+  # Adding a database to it would quietly retire that guarantee.
+  integration:
+    name: db integration (postgres)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fastehr_test
+        ports:
+          - 5432:5432
+        # Without this the steps below race the container's first boot.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Applies the committed migrations with `migrate deploy` before running,
+      # so a migration that is committed but broken fails here rather than at a
+      # deployment.
+      - name: Integration tests
+        run: pnpm turbo run test:integration
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fastehr_test
