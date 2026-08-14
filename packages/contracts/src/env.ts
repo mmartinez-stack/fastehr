@@ -3,8 +3,8 @@ import { z } from 'zod'
 /**
  * Environment contracts.
  *
- * These live here for the same reason the domain schemas do: decision 5 makes
- * `contracts` the only package with a direct Zod dependency, so a package that
+ * These live here for the same reason the domain schemas do: ADR 5 makes
+ * `contracts` the only package with a direct Zod dependency,, so a package that
  * needs to validate its configuration takes the schema from here rather than
  * declaring Zod of its own. An environment variable is a shape agreement
  * between a deployment and the code — the same kind of thing this package

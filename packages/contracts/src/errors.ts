@@ -3,7 +3,7 @@ import { z } from 'zod'
 /**
  * Validation failures, reduced to something safe to send over a network.
  *
- * This lives in `contracts` for the same reason the env schemas do: decision 5
+ * This lives in `contracts` for the same reason the env schemas do: ADR 5
  * makes it the only package with a direct Zod dependency, so `apps/web` cannot
  * inspect a `ZodError` itself. It gets this instead.
  */

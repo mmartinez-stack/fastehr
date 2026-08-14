@@ -13,8 +13,8 @@ import { router } from '../trpc.ts'
  *   repositories are on the context, so a caller decides which ones — the real
  *   ones, a transaction-scoped set, or fakes in a test.
  * - **The input schema comes from `@fastehr/contracts`.** `apps/web` has no Zod
- *   of its own (decision 5), so a procedure cannot invent a shape that the
- *   contract does not already describe.
+ *   of its own (ADR 5), so a procedure cannot invent a shape the contract does
+ *   not already describe.
  */
 export const patientRouter = router({
   byId: protectedProcedure

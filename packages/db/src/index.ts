@@ -6,13 +6,13 @@ import { createPatientRepository, type PatientRepository } from './repositories/
  *
  * It is deliberately small: a `Db` of repositories, and the factory that builds
  * one. No `PrismaClient`, no generated model types, no `Prisma` namespace —
- * README decision 3 says persistence shapes never cross into domain code, and
- * this file is where that stops being a claim. Everything above this package
+ * ADR 3 says persistence shapes never cross into domain code, and this file is
+ * where that stops being a claim. Everything above this package
  * speaks `@fastehr/contracts`.
  *
  * The enforcement is structural, not editorial. `package.json#exports` has one
  * entry pointing here, so `@fastehr/db/src/client.ts` does not resolve for any
- * consumer — the same shape of guarantee as decision 2's manifest omission, and
+ * consumer — the same shape of guarantee as ADR 2's manifest omission, and
  * for the same reason: a rule that can be worked around eventually is.
  */
 export interface Db {

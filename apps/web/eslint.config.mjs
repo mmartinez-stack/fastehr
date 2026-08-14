@@ -1,8 +1,8 @@
 import next from '@fastehr/config/eslint/next'
 
 /**
- * `src/server/**` must stay mountable outside Next.js — see README, "The server
- * layer". Request state enters only through `createContext`, which
+ * `src/server/**` must stay mountable outside Next.js — see ADR 9. Request
+ * state enters only through `createContext`, which
  * `app/api/trpc/[trpc]/route.ts` builds; that route handler is deliberately
  * outside this glob and remains free to use Next APIs.
  */
@@ -40,8 +40,8 @@ const serverLayerBoundary = {
  * ever wanted, the durable half is `@fastehr/db` moving out of the app's
  * dependencies entirely, once `src/server` is its own package.
  *
- * Data reaches components through procedures. See README, "The server layer",
- * and Next's own Data Access Layer guidance, which this mirrors.
+ * Data reaches components through procedures. See ADR 9, and Next's own Data
+ * Access Layer guidance, which this mirrors.
  */
 const dataAccessBoundary = {
   files: ['src/**/*.ts', 'src/**/*.tsx'],

@@ -7,8 +7,8 @@
 // `output` and no longer writes into node_modules.
 //
 // The generator emits ESM TypeScript source, which is exactly what a JIT
-// package consumes (README decision 1) — there is no Rust engine binary and no
-// runtime filesystem probe, so Next.js has nothing to over-trace.
+// package consumes (ADR 1) — there is no Rust engine binary and no runtime
+// filesystem probe, so Next.js has nothing to over-trace.
 
 generator client {
   provider     = "prisma-client"
@@ -31,7 +31,7 @@ model Patient {
   // `@db.Date` is a calendar date with no time and no zone, which is what a
   // date of birth is. Prisma still surfaces it as a JS `Date` at UTC midnight —
   // the mapper converts it to the `YYYY-MM-DD` string the contract declares.
-  // That conversion is the boundary decision 3 describes, made concrete.
+  // That conversion is the boundary ADR 3 describes, made concrete.
   dateOfBirth DateTime @db.Date
   createdAt   DateTime @default(now())
 

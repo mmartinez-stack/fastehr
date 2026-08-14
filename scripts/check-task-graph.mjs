@@ -2,7 +2,7 @@
 /**
  * Guards the transitive `generate` chain.
  *
- * `apps/web` type-checks `@fastehr/db`'s raw source (decision 1, JIT), so the
+ * `apps/web` type-checks `@fastehr/db`'s raw source (ADR 1, JIT), so the
  * Prisma client must exist before `web#typecheck` runs. That ordering is
  * supplied by `generate` declaring `dependsOn: ["^generate"]` in turbo.json,
  * which propagates the edge through intermediate packages as no-op `generate`

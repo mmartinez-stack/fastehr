@@ -20,7 +20,7 @@ export interface Context {
   actor: Actor | null
   /**
    * Repositories, not a Prisma client. `@fastehr/db` exposes no persistence
-   * types (README decision 3), so a procedure can only ask for contract-shaped
+   * types (ADR 3), so a procedure can only ask for contract-shaped
    * data — there is no `ctx.prisma` to reach past it with.
    */
   db: Db

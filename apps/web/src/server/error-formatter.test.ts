@@ -17,7 +17,7 @@ const CLINICIAN: Actor = { id: 'user-1', roles: ['clinician'] }
 
 async function callWithInput(input: unknown, actor: Actor | null = CLINICIAN) {
   // A query, so: GET with the input in the query string, superjson-enveloped.
-  // See README, "The wire format is superjson".
+  // See ADR 11.
   const encoded = encodeURIComponent(JSON.stringify({ json: input }))
   const response = await fetchRequestHandler({
     endpoint: '/api/trpc',

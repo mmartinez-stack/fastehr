@@ -5,10 +5,9 @@ import { TRPCProvider } from '@/trpc/client'
 import './globals.css'
 
 /**
- * No third-party telemetry is mounted here, deliberately — see README,
- * decision 7. Route paths in this app carry patient identifiers
- * (`/patients/[id]`), so page-view reporting is a PHI disclosure, not a
- * metrics choice.
+ * No third-party telemetry is mounted here, deliberately — see ADR 7. Route
+ * paths in this app carry patient identifiers (`/patients/[id]`), so page-view
+ * reporting is a PHI disclosure, not a metrics choice.
  *
  * `next/font` is not an exception: it downloads Inter at build time and serves
  * it from this origin, so no request reaches Google from a patient's browser.

@@ -12,20 +12,19 @@ import type { Context } from './context.ts'
  * keeps the graph acyclic. Putting the chain assembly here instead would make
  * every middleware import the module that imports it.
  *
- * Nothing in `src/server/**` may import `next/*`; see README, "The server
- * layer".
+ * Nothing in `src/server/**` may import `next/*`; see ADR 9.
  */
 
 /**
  * `transformer` is not optional here, and the reason is the same one behind
- * decision 3.
+ * ADR 3.
  *
  * Plain JSON has no `Date`. Without a transformer a procedure typed as
  * returning one hands the client a string while the inferred type still says
  * `Date` — the value type-checks perfectly at every call site and is wrong at
- * runtime. That is precisely the `Decimal` hazard decision 3 describes, moved
- * from the ORM boundary to the transport boundary, and in this domain it lands
- * on dates of birth, appointment times, and dose timestamps.
+ * runtime. That is precisely the `Decimal` hazard ADR 3 describes, moved from
+ * the ORM boundary to the transport boundary, and in this domain it lands on
+ * dates of birth, appointment times, and dose timestamps.
  *
  * Contracts currently keep dates as ISO strings (`z.iso.date()`), so nothing
  * relies on this today — it is the guarantee that the first `z.date()` or bare

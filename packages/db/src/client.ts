@@ -7,8 +7,8 @@ import { PrismaClient } from './generated/client/client.ts'
  *
  * Nothing here is re-exported from `src/index.ts`, and the package's `exports`
  * map has a single entry (`.` → `./src/index.ts`), so no consumer can reach
- * this module or the generated client at all. That is what keeps decision 3
- * true by construction rather than by convention: persistence types cannot
+ * this module or the generated client at all. That is what keeps ADR 3 true by
+ * construction rather than by convention: persistence types cannot
  * cross the package boundary because there is no specifier that resolves to
  * them.
  *

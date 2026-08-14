@@ -7,8 +7,7 @@ import superjson from 'superjson'
  * they must agree.
  *
  * `serializeData` / `deserializeData` are superjson because the wire format is
- * (README, "The wire format is superjson"). React Query dehydration is a
- * *second* serialisation boundary, separate from the tRPC link: data prefetched
+ * (ADR 11). React Query dehydration is a *second* serialisation boundary, separate from the tRPC link: data prefetched
  * on the server is embedded into the HTML payload and revived in the browser
  * without passing through a tRPC link at all. Configure one and not the other
  * and `Date`s survive the fetch path while arriving as strings on the

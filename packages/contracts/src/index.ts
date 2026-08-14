@@ -7,7 +7,7 @@ export { describeValidationFailure, type ValidationFailure } from './errors.ts'
  * Seed contract. Real schemas arrive with the domain tickets — this exists so
  * the package is importable and its inferred types flow across the workspace.
  *
- * `contracts` is the only package with a direct Zod dependency (decision 5).
+ * `contracts` is the only package with a direct Zod dependency (ADR 5).
  */
 export const patientSchema = z.object({
   id: z.uuid(),

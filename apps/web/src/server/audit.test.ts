@@ -6,7 +6,7 @@ import type { AuditEvent } from './audit-log.ts'
 /**
  * The middleware chain, exercised through `createCaller` — no HTTP, no
  * database, no session. This is the payoff for keeping the router a plain
- * function of its context (README, "The server layer"): the security behaviour
+ * function of its context (ADR 9): the security behaviour
  * that most needs testing is also the cheapest thing in the repo to test.
  *
  * The sink is stdout today, so the spy reads it there. When the audit table

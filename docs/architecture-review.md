@@ -39,8 +39,8 @@ relitigate them.
 > `outputFileTracingExcludes`, `turbopack.ignoreIssue`, and the schema's
 > `datasource.url` are gone; `prisma.config.ts` is new. Trace on the tRPC route:
 > 19.2 MB → 7.1 MB, still zero `public/` and zero app-source entries with
-> nothing bounding it. See README, "Prisma 7", for the current setup and the
-> full measurement table. The remaining findings below are unaffected.
+> nothing bounding it. See [ADR 14](adr/014-prisma-7.md) for the current setup
+> and the full measurement table. The remaining findings below are unaffected.
 
 **What.** `packages/db` is on Prisma 6.19.3. Prisma 7 is stable and current
 (7.9.x). v7 is Rust-free — the query engine is TypeScript + WebAssembly, and
@@ -128,7 +128,7 @@ converted at the contract boundary long before that point.
 > illustrative. Finding 13 (injectable client) is untouched — `createDb()` takes
 > the client as a parameter, but `createContext` still resolves the default.
 
-**What.** README decision 3: "*`db` returns contract-shaped objects at its
+**What.** [ADR 3](adr/003-contracts-own-domain-types.md): "*`db` returns contract-shaped objects at its
 boundary; persistence shapes never cross into domain code.*" But
 `packages/db/src/index.ts` is:
 
@@ -155,7 +155,8 @@ line is the leak and should go.
 > `packages/db` — everywhere except `src/server/**`. Verified by probe in both
 > directions: the ban fires on a page and on a component, the server layer is
 > still free to import `db`, and rule 2's `next/*` ban still fires there.
-> README, "The server layer", now documents three rules rather than two.
+> [ADR 9](adr/009-server-layer-boundaries.md) now documents three rules rather
+> than two.
 >
 > **Residual, deliberately left open.** `createContext` is exported from
 > `@/server`, so a Server Component could still construct a context with an
@@ -482,6 +483,23 @@ retirement condition never retires. Isolate the fixtures behind one module so
 the flag can flip the day the last page is wired.
 
 ### 16. The README is doing two jobs
+
+> **Done** (2026-08-13). README 705 → 314 lines: orientation, layout, and how to
+> run. Nineteen ADRs in [`docs/adr/`](adr/README.md), each holding its original
+> reasoning **verbatim** — the prose was moved, not rewritten.
+>
+> **Numbers were preserved, not reassigned.** Around twenty code comments cite
+> "decision N", so decisions 1–7 kept their numbers as ADRs 1–7 and the
+> previously-unnumbered decisions extracted from prose took 8–19. Every one of
+> those citations was rewritten from "decision N" / "README, §" to "ADR N", and
+> the index says numbers are permanent so a superseded decision gets a new file
+> rather than a renumbering.
+>
+> Checked afterwards: zero broken relative links across all markdown, zero
+> remaining "decision N" references in code, and the distinctive phrases from
+> each original section still present. Two sections that had been duplicated
+> into both places were trimmed from the README; the `src/trpc/` file tree is
+> duplicated on purpose, because an ADR should be readable on its own.
 
 At ~330 lines it interleaves orientation with decision rationale, and the
 decision count only grows from here — this document adds sixteen more. Split it:

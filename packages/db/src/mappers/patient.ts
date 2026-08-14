@@ -4,7 +4,7 @@ import type { Patient as PatientRow } from '../generated/client/client.ts'
 /**
  * Row → contract mapping for `Patient`.
  *
- * This is the boundary decision 3 is about: persistence shapes stop here, and
+ * This is the boundary ADR 3 is about: persistence shapes stop here, and
  * everything downstream sees contract types only. Two rules:
  *
  * 1. **Every field is listed explicitly.** No spreading a row into a contract.

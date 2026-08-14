@@ -27,7 +27,7 @@ export const importSettings = {
  * `import/no-extraneous-dependencies` is the edit-time half of the dependency
  * boundary: it flags any import not declared in that package's own
  * package.json. The enforcing half is pnpm's isolated node_modules, which makes
- * the same import fail to resolve at typecheck time. See README, decision 2.
+ * the same import fail to resolve at typecheck time. See ADR 2.
  */
 export const sharedRules = {
   '@typescript-eslint/no-unused-vars': [
