@@ -32,7 +32,7 @@ export default function CallbacksPage() {
   const openCount = callbacks.filter((c) => !c.done).length
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 md:px-8">
+    <div>
       <PageHeader
         title="Callbacks"
         description="Patients who need a return phone call from the front desk."

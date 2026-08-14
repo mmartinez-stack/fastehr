@@ -76,7 +76,7 @@ export default function ReportsPage() {
   ]
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 md:px-8">
+    <div>
       <PageHeader title="Reports" description="Clinic performance across all offices." />
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -98,7 +98,13 @@ export default function ReportsPage() {
         ))}
       </div>
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-3">
+      {/*
+        One grid rather than two rows, so a 1080p monitor collapses the four
+        panels into a single band — three charts across the top and the table
+        beneath — instead of stretching two rows of three to twice their
+        useful width.
+      */}
+      <div className="mt-6 grid gap-4 lg:grid-cols-3 3xl:grid-cols-4">
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-base">Revenue by month</CardTitle>
@@ -117,9 +123,7 @@ export default function ReportsPage() {
             <PaymentPieChart data={payments} config={paymentConfig} />
           </CardContent>
         </Card>
-      </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-1">
           <CardHeader>
             <CardTitle className="text-base">Visit volume</CardTitle>
@@ -130,7 +134,7 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-2 3xl:col-span-4">
           <CardHeader>
             <CardTitle className="text-base">Provider productivity</CardTitle>
             <CardDescription>Visits and revenue by provider</CardDescription>

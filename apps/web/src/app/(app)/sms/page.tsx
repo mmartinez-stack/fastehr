@@ -24,7 +24,7 @@ export default function SmsPage() {
   const active = smsThreads.find((t) => t.id === activeId) ?? smsThreads[0]
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-8rem)] max-w-6xl flex-col px-4 py-6 md:px-8">
+    <div className="flex h-[calc(100vh-11rem)] flex-col">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex flex-col">
           <h1 className="text-2xl font-semibold tracking-tight">Messages</h1>

@@ -93,7 +93,12 @@ export default function QueuesPage() {
       />
       <QueueSubnav />
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      {/*
+        Two narrow queues beside a wide worklist. At 1080p all three fit in one
+        band, so a provider clearing charts does not scroll between the counts
+        and the work.
+      */}
+      <div className="grid gap-4 lg:grid-cols-2 3xl:grid-cols-4">
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">

@@ -85,7 +85,7 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 md:px-8">
+    <div>
       <PageHeader
         title="Users"
         description="Manage staff accounts, roles, and office access."

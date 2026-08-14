@@ -68,6 +68,20 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
+/*
+ * Viewport tiers.
+ *
+ * Tailwind stops at `2xl` (1536px), which on the 1920×1080 monitors the
+ * clinic actually runs leaves the top tier of layout decisions unexpressible —
+ * every screen renders at its 1536px shape with the remaining 384px as
+ * gutter. `3xl` is where a layout is allowed to spend that width: more
+ * columns, not more whitespace. DIA-22 owns the breakpoint set as a whole and
+ * may add tiers below this one; this is the one the 1080p baseline needs.
+ */
+@theme {
+  --breakpoint-3xl: 1800px;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
