@@ -37,3 +37,99 @@ model Patient {
 
   @@map("patients")
 }
+
+// --- Authentication (Better Auth core tables) ---
+//
+// Shapes derived from the *installed* better-auth@1.7.1 via `getAuthTables()`
+// rather than from its docs — 1.7 added `account.issuer` (a synthetic
+// "local:credential" for password accounts), which docs-era schemas lack.
+// Reviewed by hand; the extra columns on User are ours:
+//
+//   role                the whole authorization vocabulary for now: a single
+//                       coarse role, constrained by a native PG enum so the
+//                       database refuses an invalid value no matter who writes
+//   legacyId            the Mongo `_id` bridge. Every later collection
+//                       migration (visits, appointments, prefrences) resolves
+//                       legacy user references through this column
+//   legacyRoleRaw       the original `group` value, kept for auditing the
+//                       role mapping after cutover
+//   isActive            legacy `isActive`; a deactivated account is refused at
+//                       session verification, not deleted
+//   mustChangePassword  set by the temp-credential issuance path; sign-in
+//                       succeeds but every guard refuses until the password
+//                       is changed
+
+enum StaffRole {
+  admin
+  provider
+  frontdesk
+
+  @@map("staff_role")
+}
+
+model User {
+  id                 String    @id @default(uuid())
+  name               String
+  email              String    @unique
+  emailVerified      Boolean   @default(false)
+  image              String?
+  role               StaffRole @default(frontdesk)
+  legacyId           String?   @unique
+  legacyRoleRaw      String?
+  isActive           Boolean   @default(true)
+  mustChangePassword Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  sessions           Session[]
+  accounts           Account[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id @default(uuid())
+  issuer                String
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Verification {
+  id         String   @id @default(uuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verifications")
+}
