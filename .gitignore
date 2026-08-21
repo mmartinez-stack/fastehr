@@ -99,3 +99,6 @@ Thumbs.db
 #   components.json      shadcn/ui config
 #   public/              v0 puts real assets here, not just generated files
 # ---------------------------------------------------------------
+# Legacy NDJSON exports and their migration reports never enter history.
+*.ndjson
+*.ndjson.report.json
