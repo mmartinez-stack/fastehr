@@ -37,19 +37,22 @@ Two tiers. `test` is unit-only and **must stay runnable on a fresh clone with no
 environment at all** — that property is what CI's `verify` job depends on.
 
 ```bash
-pnpm turbo run test                # unit; no database, no env
-pnpm turbo run test:integration    # real PostgreSQL, real migrations; needs TEST_DATABASE_URL
+pnpm turbo run test                              # unit; no database, no env
+pnpm turbo run test:integration --concurrency=1  # real PostgreSQL, real migrations; needs TEST_DATABASE_URL
 ```
 
 Integration tests are excluded from `test` by filename (`*.integration.test.ts`)
 and by `packages/db/vitest.config.ts`. They refuse to fall back to
-`DATABASE_URL` because they truncate tables between cases:
+`DATABASE_URL` because they truncate tables between cases — which is also why
+`--concurrency=1` is not optional: the packages share one database, and run in
+parallel the db suite's `TRUNCATE … CASCADE` deletes rows the web auth suite is
+using mid-test.
 
 ```bash
 docker run -d --rm -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=fastehr_test \
   -p 55432:5432 postgres:17-alpine
 TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:55432/fastehr_test \
-  pnpm turbo run test:integration
+  pnpm turbo run test:integration --concurrency=1
 ```
 
 Both vitest configs pin `TZ=America/Los_Angeles` deliberately — a `@db.Date`
