@@ -36,16 +36,19 @@ function requireAuthEnv(name: 'BETTER_AUTH_SECRET' | 'BETTER_AUTH_URL'): string 
 
 let instance: ReturnType<typeof betterAuth> | undefined
 
-export function getAuth(): ReturnType<typeof betterAuth> {
-  if (instance !== undefined) return instance
-
-  // Typed as the option interface rather than inferred: the instance type
-  // stays `Auth<BetterAuthOptions>`, and session users are validated below
-  // through contracts schemas instead of trusted through type inference.
-  const options: BetterAuthOptions = {
+/**
+ * The full auth configuration, pure of environment reads so tests can
+ * construct real instances against variant environments (an https base URL
+ * for the Secure-cookie assertions). Typed as the option interface rather
+ * than inferred: the instance type stays `Auth<BetterAuthOptions>`, and
+ * session users are validated in `actorFromHeaders` through contracts
+ * schemas instead of trusted through type inference.
+ */
+export function createAuthOptions(env: { secret: string; baseURL: string }): BetterAuthOptions {
+  return {
     database: createAuthAdapter(),
-    secret: requireAuthEnv('BETTER_AUTH_SECRET'),
-    baseURL: requireAuthEnv('BETTER_AUTH_URL'),
+    secret: env.secret,
+    baseURL: env.baseURL,
 
     // ADR 7 is a stated position, not an accident of a vendor default — off,
     // explicitly, even though off is already the default.
@@ -104,8 +107,17 @@ export function getAuth(): ReturnType<typeof betterAuth> {
       },
     },
   }
+}
 
-  instance = betterAuth(options)
+export function getAuth(): ReturnType<typeof betterAuth> {
+  if (instance !== undefined) return instance
+
+  instance = betterAuth(
+    createAuthOptions({
+      secret: requireAuthEnv('BETTER_AUTH_SECRET'),
+      baseURL: requireAuthEnv('BETTER_AUTH_URL'),
+    }),
+  )
 
   return instance
 }
