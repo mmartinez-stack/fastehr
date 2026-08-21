@@ -47,6 +47,9 @@ export const sharedRules = {
         // Prisma 7 CLI config. Runs only under the CLI, never at runtime, so
         // its imports (`prisma/config`, `dotenv`) are devDependencies.
         '**/prisma.config.ts',
+        // Operator-run scripts (migration, credential issuance). Same
+        // standing as the CLI config: never imported by runtime code.
+        '**/scripts/**',
       ],
       optionalDependencies: false,
       peerDependencies: true,

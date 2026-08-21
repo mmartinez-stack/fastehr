@@ -6,6 +6,7 @@ import {
 } from '@fastehr/contracts'
 import { createAuthAdapter } from '@fastehr/db'
 import { betterAuth, type BetterAuthOptions } from 'better-auth'
+import { APIError, createAuthMiddleware } from 'better-auth/api'
 import type { Actor } from './context.ts'
 
 /**
@@ -67,6 +68,25 @@ export function getAuth(): ReturnType<typeof betterAuth> {
       // Cookie caching stays off — every check is a server-side lookup.
       expiresIn: 60 * 60 * 12,
       updateAge: 60 * 60,
+    },
+
+    hooks: {
+      /**
+       * The exit of the temp-credential state. Issuance
+       * (packages/db/scripts/issue-temp-password.ts) sets
+       * `mustChangePassword`; proving a new password here clears it. Guards
+       * refuse the account for everything else in between, so the flag's
+       * whole lifecycle is server-side.
+       */
+      after: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== '/change-password' && ctx.path !== '/reset-password') return
+        if (ctx.context.returned instanceof APIError) return
+
+        const sessionUserId = ctx.context.session?.user.id
+        if (sessionUserId === undefined) return
+
+        await ctx.context.internalAdapter.updateUser(sessionUserId, { mustChangePassword: false })
+      }),
     },
 
     user: {
