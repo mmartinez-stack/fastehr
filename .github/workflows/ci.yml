@@ -1,12 +1,15 @@
 name: CI
 
-# Runs on pull requests and on pushes to the default branch. Nothing here needs
-# a database: `prisma generate` deliberately does not require DATABASE_URL (see
-# packages/db/prisma.config.ts), and no test touches a live connection yet. The
-# day one does, it gets a Postgres service container — not a shared instance.
+# Runs on pull requests and on pushes to the long-lived branches. Nothing here
+# needs a database: `prisma generate` deliberately does not require DATABASE_URL
+# (see packages/db/prisma.config.ts), and no test touches a live connection yet.
+# The day one does, it gets a Postgres service container — not a shared instance.
+#
+# `pull_request` is deliberately unfiltered: every PR is verified regardless of
+# the branch it targets.
 on:
   push:
-    branches: [feat/fastehr-ui-mockup]
+    branches: [main, development]
   pull_request:
 
 # A superseded run on the same ref tells you nothing.

@@ -9,9 +9,18 @@ secrets have their own contract — [ADR 24](docs/adr/024-variables-and-secrets.
 <type>/<kebab-case-summary>
 ```
 
-`infra/config-monorepo`, `feat/fastehr-ui-mockup`. The type vocabulary is the
-same as for commits. Branch from the default branch
-(`feat/fastehr-ui-mockup`) and open the pull request against it.
+`feat/patient-timeline`, `fix/office-scope-leak`. The type vocabulary is the
+same as for commits.
+
+Two branches are long-lived:
+
+| Branch | Role |
+| ------ | ---- |
+| `main` | The principal branch. Release state. Nothing is committed to it directly. |
+| `development` | The working branch. Every other branch is cut from it and merged back into it. |
+
+Branch from `development` and open the pull request against it. `development`
+reaches `main` as a deliberate promotion, not as routine traffic.
 
 One branch per unit of work. If a branch grows a second unrelated change,
 that is a second branch — the review that catches something is the one where
