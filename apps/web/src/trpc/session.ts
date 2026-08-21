@@ -1,8 +1,8 @@
 import 'server-only'
 
-import { officeSchema, type Office } from '@fastehr/contracts'
+import { type Office } from '@fastehr/contracts'
 import { headers } from 'next/headers'
-import { actorFromCookieHeader } from './actor.ts'
+import { actorFromHeaders } from '@/server'
 
 /**
  * Session facts a Server Component may render from directly, without going
@@ -17,17 +17,13 @@ import { actorFromCookieHeader } from './actor.ts'
 /**
  * The clinic sites the current user may view.
  *
- * **The fallback is the auth ticket's job to delete.** With no session there is
- * no actor, and the mockup still has to render, so an anonymous caller
- * currently gets every site. That is deliberate and survivable only because
- * nothing is scoped by it yet: `officeScopedProcedure` re-checks every
- * office-scoped request against `ctx.actor.offices`, so a wide list here grants
- * no data. When sessions exist this becomes `actor.offices` outright, and an
- * anonymous caller gets nothing.
+ * The anonymous every-site fallback the mockup carried is gone, as ADR 22
+ * promised: the set comes from the actor, and an anonymous caller gets
+ * nothing.
  */
 export async function permittedOffices(): Promise<readonly Office[]> {
   const requestHeaders = await headers()
-  const actor = actorFromCookieHeader(requestHeaders.get('cookie'))
+  const actor = await actorFromHeaders(requestHeaders)
 
-  return actor?.offices ?? officeSchema.options
+  return actor?.offices ?? []
 }

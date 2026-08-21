@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   LayoutGrid,
   ClipboardList,
@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select"
 import { useOffice } from "@/components/office-provider"
 import { useRole, surfacesFor, type RoleSurfaces } from "@/components/role-provider"
+import { authClient } from "@/lib/auth-client"
 import type { Role } from "@/lib/mock-data"
 
 /**
@@ -58,6 +59,14 @@ export function TopNav() {
   const pathname = usePathname()
   const { office, offices, setOffice } = useOffice()
   const { role, roles, setRole } = useRole()
+  const router = useRouter()
+
+  async function signOut() {
+    // Server-side invalidation first; the redirect is just the exit.
+    await authClient.signOut()
+    router.push("/login")
+    router.refresh()
+  }
 
   const surfaces = surfacesFor(role)
   const nav = NAV.filter((item) => !item.surface || surfaces[item.surface])
@@ -143,9 +152,8 @@ export function TopNav() {
             variant="ghost"
             size="icon-sm"
             aria-label="Log out"
-            nativeButton={false}
             className="text-primary-foreground/80 hover:bg-primary-foreground/15 hover:text-primary-foreground"
-            render={<Link href="/login" />}
+            onClick={signOut}
           >
             <LogOut />
           </Button>

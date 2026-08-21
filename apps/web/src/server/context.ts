@@ -12,7 +12,7 @@ import { db, type Db } from '@fastehr/db'
  */
 
 /**
- * Placeholder actor. Real session shape arrives with the auth ticket.
+ * The authenticated caller, resolved by `actorFromHeaders` in ./auth.ts.
  *
  * `offices` is the set of sites this actor may read or write. It is part of the
  * *identity*, resolved server-side from the session — never taken from a
@@ -22,6 +22,13 @@ export interface Actor {
   id: string
   roles: readonly string[]
   offices: readonly Office[]
+  /**
+   * Set when the account holds an admin-issued temporary credential. The
+   * session is real, but `requireSession` refuses to hand it out until the
+   * password is changed. Optional so test fixtures stay terse; absent means
+   * false.
+   */
+  mustChangePassword?: boolean
 }
 
 export interface Context {

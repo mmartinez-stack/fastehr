@@ -1,6 +1,13 @@
 import { z } from 'zod'
 
-export { databaseUrlSchema, serverEnvSchema, type ServerEnv } from './env.ts'
+export {
+  databaseUrlSchema,
+  betterAuthSecretSchema,
+  betterAuthUrlSchema,
+  serverEnvSchema,
+  type ServerEnv,
+} from './env.ts'
+export { staffRoleSchema, STAFF_ROLES, type StaffRole } from './staff-role.ts'
 export { describeValidationFailure, type ValidationFailure } from './errors.ts'
 export { officeSchema, officeScopedInput, type Office } from './office.ts'
 

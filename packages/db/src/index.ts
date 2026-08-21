@@ -40,4 +40,5 @@ export function createDb(getClient: () => PrismaClient = getPrismaClient): Db {
 /** Default `Db`. Constructing it opens no connection and reads no config. */
 export const db: Db = createDb()
 
+export { createAuthAdapter } from './auth-adapter.ts'
 export type { PatientRepository }
