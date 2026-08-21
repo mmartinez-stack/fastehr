@@ -97,4 +97,46 @@ describe('patient router', () => {
 
     expect(await caller.patient.list()).toEqual([ADA])
   })
+
+  it('creates through the repository with the normalized input', async () => {
+    const create = vi.fn(async () => ADA)
+    const caller = callerWith(fakeDb({ create }))
+
+    await caller.patient.create({
+      firstName: '  Ada ',
+      lastName: 'Lovelace',
+      dateOfBirth: '1985-12-10',
+      email: ' Ada@Example.COM ',
+      phone: '(951) 555-0000',
+    })
+
+    // The repository sees what the contract emits, not what the wire carried.
+    expect(create).toHaveBeenCalledWith({
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      dateOfBirth: '1985-12-10',
+      email: 'ada@example.com',
+      phone: '9515550000',
+    })
+  })
+
+  it('rejects invalid input before reaching the repository', async () => {
+    const create = vi.fn(async () => ADA)
+    const caller = callerWith(fakeDb({ create }))
+
+    await expect(
+      caller.patient.create({ firstName: '', lastName: 'Lovelace', dateOfBirth: '2999-01-01' }),
+    ).rejects.toThrow()
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('refuses an unauthenticated create without touching the repository', async () => {
+    const create = vi.fn(async () => ADA)
+    const caller = callerWith(fakeDb({ create }), null)
+
+    await expect(
+      caller.patient.create({ firstName: 'Ada', lastName: 'Lovelace', dateOfBirth: '1985-12-10' }),
+    ).rejects.toThrow('UNAUTHORIZED')
+    expect(create).not.toHaveBeenCalled()
+  })
 })

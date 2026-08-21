@@ -1,4 +1,4 @@
-import { patientSchema } from '@fastehr/contracts'
+import { createPatientInput, patientSchema } from '@fastehr/contracts'
 import { protectedProcedure } from '../procedures.ts'
 import { router } from '../trpc.ts'
 
@@ -22,4 +22,14 @@ export const patientRouter = router({
     .query(({ ctx, input }) => ctx.db.patients.findById(input.id)),
 
   list: protectedProcedure.query(({ ctx }) => ctx.db.patients.listByLastName()),
+
+  /**
+   * The first write, and the reference for the rest (docs/forms.md). The same
+   * `createPatientInput` the browser form validates with runs again here — the
+   * client parse is courtesy, this one is the contract. A failure leaves as
+   * issue codes through the errorFormatter, never as messages (ADR 12).
+   */
+  create: protectedProcedure
+    .input(createPatientInput)
+    .mutation(({ ctx, input }) => ctx.db.patients.create(input)),
 })
