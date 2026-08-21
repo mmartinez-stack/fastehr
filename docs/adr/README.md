@@ -34,6 +34,7 @@ first and produced a bug that type-checked.
 | [22](022-office-scoping.md) | The office is part of the actor, not of the request | `apps/web` · `packages/contracts` |
 | [23](023-docker-image.md) | A production image for `apps/web` | `Dockerfile` · `apps/web` |
 | [24](024-variables-and-secrets.md) | The variable contract, and how secrets are handled | `.env.example` · `turbo.json` · CI · Docker |
+| [25](025-forms-validate-through-the-contract.md) | Forms validate through the contract; the mutation is the submit validator | `apps/web` · `packages/contracts` |
 
 ## Adding one
 
