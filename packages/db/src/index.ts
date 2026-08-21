@@ -1,5 +1,10 @@
 import { getPrismaClient, type PrismaClient } from './client.ts'
 import { createPatientRepository, type PatientRepository } from './repositories/patient.ts'
+import {
+  createStaffUserRepository,
+  StaffUserEmailTakenError,
+  type StaffUserRepository,
+} from './repositories/staff-user.ts'
 
 /**
  * The public surface of `@fastehr/db`.
@@ -17,6 +22,7 @@ import { createPatientRepository, type PatientRepository } from './repositories/
  */
 export interface Db {
   patients: PatientRepository
+  staffUsers: StaffUserRepository
 }
 
 /**
@@ -34,6 +40,7 @@ export interface Db {
 export function createDb(getClient: () => PrismaClient = getPrismaClient): Db {
   return {
     patients: createPatientRepository(getClient),
+    staffUsers: createStaffUserRepository(getClient),
   }
 }
 
@@ -41,4 +48,5 @@ export function createDb(getClient: () => PrismaClient = getPrismaClient): Db {
 export const db: Db = createDb()
 
 export { createAuthAdapter } from './auth-adapter.ts'
-export type { PatientRepository }
+export { StaffUserEmailTakenError }
+export type { PatientRepository, StaffUserRepository }

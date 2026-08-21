@@ -19,3 +19,16 @@ export const requireRole = t.middleware(({ ctx, next }) => {
   if (ctx.actor.roles.length === 0) throw new TRPCError({ code: 'FORBIDDEN' })
   return next()
 })
+
+/**
+ * Admin gate for the account-administration procedures. The single-role
+ * vocabulary from the auth foundation, applied inside the chain so the audit
+ * middleware records every refusal (ADR 10). The full per-role visibility
+ * matrix is the RBAC ticket; this exists now because user administration
+ * cannot ship without it.
+ */
+export const requireAdminRole = t.middleware(({ ctx, next }) => {
+  if (ctx.actor === null) throw new TRPCError({ code: 'UNAUTHORIZED' })
+  if (!ctx.actor.roles.includes('admin')) throw new TRPCError({ code: 'FORBIDDEN' })
+  return next({ ctx: { ...ctx, actor: ctx.actor } })
+})

@@ -30,6 +30,14 @@ function fakeDb(overrides: Partial<Db['patients']> = {}): Db {
       listByLastName: async () => [],
       ...overrides,
     },
+    staffUsers: {
+      list: async () => [],
+      create: async () => {
+        throw new Error('not under test')
+      },
+      update: async () => null,
+      setActive: async () => null,
+    },
   }
 }
 
