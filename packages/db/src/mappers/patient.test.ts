@@ -6,6 +6,8 @@ const row = {
   firstName: 'Ada',
   lastName: 'Lovelace',
   dateOfBirth: new Date('1815-12-10T00:00:00.000Z'),
+  email: null,
+  phone: null,
   createdAt: new Date('2026-01-02T09:30:00.000Z'),
 }
 
@@ -16,7 +18,16 @@ describe('toPatient', () => {
       firstName: 'Ada',
       lastName: 'Lovelace',
       dateOfBirth: '1815-12-10',
+      email: null,
+      phone: null,
     })
+  })
+
+  it('passes stored contact details through', () => {
+    const mapped = toPatient({ ...row, email: 'ada@example.com', phone: '9515550000' })
+
+    expect(mapped.email).toBe('ada@example.com')
+    expect(mapped.phone).toBe('9515550000')
   })
 
   it('drops columns the contract does not declare', () => {

@@ -33,7 +33,12 @@ model Patient {
   // the mapper converts it to the `YYYY-MM-DD` string the contract declares.
   // That conversion is the boundary ADR 3 describes, made concrete.
   dateOfBirth DateTime @db.Date
-  createdAt   DateTime @default(now())
+  // Optional contact details. Stored normalized (lowercase email, ten bare
+  // digits) — `createPatientInput` in @fastehr/contracts is the single place
+  // that normalization is defined.
+  email     String?
+  phone     String?
+  createdAt DateTime @default(now())
 
   @@map("patients")
 }

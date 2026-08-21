@@ -25,6 +25,8 @@ export function toPatient(row: PatientRow): Patient {
     firstName: row.firstName,
     lastName: row.lastName,
     dateOfBirth: toCalendarDate(row.dateOfBirth),
+    email: row.email,
+    phone: row.phone,
   })
 }
 

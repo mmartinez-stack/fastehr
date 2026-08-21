@@ -1,4 +1,4 @@
-import type { Patient } from '@fastehr/contracts'
+import type { CreatePatientInput, Patient } from '@fastehr/contracts'
 import type { PrismaClient } from '../client.ts'
 import { toPatient } from '../mappers/patient.ts'
 
@@ -15,6 +15,7 @@ import { toPatient } from '../mappers/patient.ts'
 export interface PatientRepository {
   findById(id: string): Promise<Patient | null>
   listByLastName(): Promise<Patient[]>
+  create(input: CreatePatientInput): Promise<Patient>
 }
 
 /**
@@ -34,6 +35,22 @@ export function createPatientRepository(getClient: () => PrismaClient): PatientR
         orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
       })
       return rows.map(toPatient)
+    },
+
+    async create(input) {
+      const row = await getClient().patient.create({
+        data: {
+          firstName: input.firstName,
+          lastName: input.lastName,
+          // A date-only ISO string parses as UTC midnight, which is exactly
+          // what a `@db.Date` column stores — the inverse of the mapper's
+          // `toCalendarDate`, and like it, deliberately not local time.
+          dateOfBirth: new Date(input.dateOfBirth),
+          email: input.email ?? null,
+          phone: input.phone ?? null,
+        },
+      })
+      return toPatient(row)
     },
   }
 }

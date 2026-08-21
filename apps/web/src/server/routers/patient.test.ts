@@ -19,6 +19,8 @@ const ADA = {
   firstName: 'Ada',
   lastName: 'Lovelace',
   dateOfBirth: '1815-12-10',
+  email: null,
+  phone: null,
 }
 
 const CLINICIAN: Actor = { id: 'user-1', roles: ['clinician'], offices: ['Downtown'] }
@@ -28,6 +30,9 @@ function fakeDb(overrides: Partial<Db['patients']> = {}): Db {
     patients: {
       findById: async () => null,
       listByLastName: async () => [],
+      create: async () => {
+        throw new Error('not under test')
+      },
       ...overrides,
     },
     staffUsers: {

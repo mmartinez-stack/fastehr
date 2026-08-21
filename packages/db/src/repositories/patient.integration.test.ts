@@ -45,6 +45,8 @@ describe('patient repository', () => {
       firstName: 'Ada',
       lastName: 'Lovelace',
       dateOfBirth: '1815-12-10',
+      email: null,
+      phone: null,
     })
     // `createdAt` exists in the table and must not reach a caller.
     expect(patient).not.toHaveProperty('createdAt')
@@ -71,6 +73,34 @@ describe('patient repository', () => {
     const patients = await db.patients.listByLastName()
 
     expect(patients.map((patient) => patient.lastName)).toEqual(['Hopper', 'Lovelace'])
+  })
+
+  it('creates a patient and returns the contract shape', async () => {
+    const created = await db.patients.create({
+      firstName: 'Grace',
+      lastName: 'Hopper',
+      dateOfBirth: '1906-12-09',
+      email: 'grace@example.com',
+      phone: '9515550000',
+    })
+
+    expect(created.email).toBe('grace@example.com')
+    expect(created.phone).toBe('9515550000')
+    // The round trip that matters west of UTC: the calendar day written is the
+    // calendar day read back, through a real DATE column.
+    expect(created.dateOfBirth).toBe('1906-12-09')
+    expect(await db.patients.findById(created.id)).toEqual(created)
+  })
+
+  it('stores absent contact details as null', async () => {
+    const created = await db.patients.create({
+      firstName: 'Grace',
+      lastName: 'Hopper',
+      dateOfBirth: '1906-12-09',
+    })
+
+    expect(created.email).toBeNull()
+    expect(created.phone).toBeNull()
   })
 
   it('rejects a stored row that violates the contract', async () => {
