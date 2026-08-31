@@ -4,7 +4,6 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
   LayoutGrid,
-  ClipboardList,
   CalendarDays,
   Users,
   PhoneCall,
@@ -44,7 +43,6 @@ const NAV: {
   surface?: keyof RoleSurfaces
 }[] = [
   { label: "Queues", href: "/queues", icon: LayoutGrid, surface: "clinical" },
-  { label: "Admin Desk", href: "/admin", icon: ClipboardList, surface: "clerical" },
   { label: "Schedule", href: "/schedule", icon: CalendarDays },
   { label: "Patients", href: "/patients", icon: Users },
   { label: "Callbacks", href: "/callbacks", icon: PhoneCall, surface: "clerical" },
