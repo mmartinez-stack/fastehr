@@ -3,10 +3,10 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Card, CardContent } from "@/components/ui/card"
 import { KeyRoundIcon } from "lucide-react"
+import { PasswordInput } from "@/components/password-input"
 import { authClient } from "@/lib/auth-client"
 
 export function ChangePasswordForm() {
@@ -64,20 +64,18 @@ export function ChangePasswordForm() {
               <FieldGroup>
                 <Field>
                   <FieldLabel htmlFor="currentPassword">Current password</FieldLabel>
-                  <Input
+                  <PasswordInput
                     id="currentPassword"
                     name="currentPassword"
-                    type="password"
                     autoComplete="current-password"
                     required
                   />
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="newPassword">New password</FieldLabel>
-                  <Input
+                  <PasswordInput
                     id="newPassword"
                     name="newPassword"
-                    type="password"
                     autoComplete="new-password"
                     minLength={12}
                     required
@@ -85,10 +83,9 @@ export function ChangePasswordForm() {
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="confirmPassword">Confirm new password</FieldLabel>
-                  <Input
+                  <PasswordInput
                     id="confirmPassword"
                     name="confirmPassword"
-                    type="password"
                     autoComplete="new-password"
                     minLength={12}
                     required
