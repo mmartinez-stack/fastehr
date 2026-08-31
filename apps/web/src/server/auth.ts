@@ -1,13 +1,16 @@
 import {
   betterAuthSecretSchema,
   betterAuthUrlSchema,
+  isLegacyCredential,
   officeSchema,
   staffRoleSchema,
 } from '@fastehr/contracts'
 import { createAuthAdapter } from '@fastehr/db'
 import { betterAuth, type BetterAuthOptions } from 'better-auth'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
+import { hashPassword, verifyPassword } from 'better-auth/crypto'
 import type { Actor } from './context.ts'
+import { verifyLegacyPassword } from './legacy-password.ts'
 
 /**
  * The Better Auth instance and the session → `Actor` resolution.
@@ -62,6 +65,21 @@ export function createAuthOptions(env: { secret: string; baseURL: string }): Bet
       // No mail transport exists in this environment; credential issuance is
       // the admin temp-password path, not a reset email (decision §11.1/§11.3).
       requireEmailVerification: false,
+      /**
+       * Two stored-hash formats coexist during migration (ADR 26): Better
+       * Auth's own scrypt, and `legacy-pbkdf2-sha1$…` written by
+       * migrate-users.ts so staff keep the passwords they already have. The
+       * format prefix decides the verifier; hashing is always scrypt, so
+       * every password *written* here — sign-up is off, so that means
+       * change-password and temp-credential issuance — is a modern one.
+       */
+      password: {
+        hash: (password) => hashPassword(password),
+        verify: async ({ hash, password }) =>
+          isLegacyCredential(hash)
+            ? verifyLegacyPassword(hash, password)
+            : verifyPassword({ hash, password }),
+      },
     },
 
     session: {
@@ -75,15 +93,41 @@ export function createAuthOptions(env: { secret: string; baseURL: string }): Bet
 
     hooks: {
       /**
-       * The exit of the temp-credential state. Issuance
-       * (packages/db/scripts/issue-temp-password.ts) sets
-       * `mustChangePassword`; proving a new password here clears it. Guards
-       * refuse the account for everything else in between, so the flag's
-       * whole lifecycle is server-side.
+       * Two credential-lifecycle transitions, both server-side only:
+       *
+       * - Sign-in retires a migrated legacy hash by re-hashing to scrypt
+       *   (ADR 26).
+       * - Change/reset-password exits the temp-credential state. Issuance
+       *   (packages/db/scripts/issue-temp-password.ts) sets
+       *   `mustChangePassword`; proving a new password here clears it, and
+       *   guards refuse the account for everything else in between.
        */
       after: createAuthMiddleware(async (ctx) => {
-        if (ctx.path !== '/change-password' && ctx.path !== '/reset-password') return
         if (ctx.context.returned instanceof APIError) return
+
+        /**
+         * Legacy-hash retirement (ADR 26). A successful sign-in is the one
+         * moment the plaintext is legitimately in hand next to its stored
+         * hash — if that hash is still the migrated PBKDF2 one, re-hash with
+         * scrypt now. Every legacy credential therefore survives exactly
+         * until its owner's first login, and a failure here only postpones
+         * the upgrade to the next one.
+         */
+        if (ctx.path === '/sign-in/email') {
+          const body = ctx.body as { email?: unknown; password?: unknown }
+          if (typeof body.email !== 'string' || typeof body.password !== 'string') return
+
+          const found = await ctx.context.internalAdapter.findUserByEmail(body.email)
+          if (found === null) return
+
+          const account = await ctx.context.internalAdapter.findCredentialAccount(found.user.id)
+          if (account?.password == null || !isLegacyCredential(account.password)) return
+
+          await ctx.context.internalAdapter.updatePassword(found.user.id, await hashPassword(body.password))
+          return
+        }
+
+        if (ctx.path !== '/change-password' && ctx.path !== '/reset-password') return
 
         const sessionUserId = ctx.context.session?.user.id
         if (sessionUserId === undefined) return

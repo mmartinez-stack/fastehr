@@ -35,6 +35,7 @@ first and produced a bug that type-checked.
 | [23](023-docker-image.md) | A production image for `apps/web` | `Dockerfile` · `apps/web` |
 | [24](024-variables-and-secrets.md) | The variable contract, and how secrets are handled | `.env.example` · `turbo.json` · CI · Docker |
 | [25](025-forms-validate-through-the-contract.md) | Forms validate through the contract; the mutation is the submit validator | `apps/web` · `packages/contracts` |
+| [26](026-legacy-credentials-verify-in-place.md) | Legacy credentials verify in place, and retire on first sign-in | `apps/web/src/server` · `packages/contracts` · `packages/db/scripts` |
 
 ## Adding one
 

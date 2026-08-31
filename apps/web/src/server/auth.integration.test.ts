@@ -1,4 +1,5 @@
-import { randomUUID } from 'node:crypto'
+import { pbkdf2Sync, randomBytes, randomUUID } from 'node:crypto'
+import { isLegacyCredential, serializeLegacyCredential } from '@fastehr/contracts'
 import { betterAuth } from 'better-auth'
 import { APIError } from 'better-auth/api'
 import { beforeAll, describe, expect, it } from 'vitest'
@@ -222,6 +223,69 @@ describe('guards', () => {
     await expect(requireSession(headersWithCookie(cookie))).rejects.toMatchObject({
       code: 'UNAUTHENTICATED',
     })
+  })
+})
+
+describe('migrated legacy credentials (ADR 26)', () => {
+  /** The credential exactly as migrate-users.ts stores it, built the way the
+   * legacy system built it. */
+  async function seedLegacyUser(password: string): Promise<SeededUser> {
+    const ctx = await getAuth().$context
+    const email = `legacy-${randomUUID().slice(0, 8)}@example.com`
+    const user = await ctx.internalAdapter.createUser({
+      email,
+      name: 'Fixture Legacy',
+      emailVerified: false,
+      role: 'frontdesk',
+      isActive: true,
+      mustChangePassword: false,
+    }, { method: 'test-fixture' })
+    const salt = randomBytes(16).toString('hex')
+    const hash = pbkdf2Sync(password, salt, 1000, 64, 'sha1').toString('hex')
+    await ctx.internalAdapter.createAccount({
+      userId: user.id,
+      providerId: 'credential',
+      issuer: 'local:credential',
+      accountId: user.id,
+      password: serializeLegacyCredential({ iterations: 1000, salt, hash }),
+    })
+    return { id: user.id, email }
+  }
+
+  it('the legacy password signs in, and the hash upgrades to scrypt as it does', async () => {
+    const legacyPassword = 'the-password-from-the-old-system'
+    const user = await seedLegacyUser(legacyPassword)
+
+    const cookie = await signInCookie(user.email, legacyPassword)
+    const session = await getAuth().api.getSession({ headers: headersWithCookie(cookie) })
+    expect(session?.user.id).toBe(user.id)
+
+    // The sign-in hook retired the PBKDF2 hash: what is stored now is scrypt.
+    const ctx = await getAuth().$context
+    const account = await ctx.internalAdapter.findCredentialAccount(user.id)
+    expect(account?.password).toBeTruthy()
+    expect(isLegacyCredential(account?.password ?? '')).toBe(false)
+
+    // And the same password still works against the upgraded hash.
+    const secondCookie = await signInCookie(user.email, legacyPassword)
+    expect(
+      (await getAuth().api.getSession({ headers: headersWithCookie(secondCookie) }))?.user.id,
+    ).toBe(user.id)
+  })
+
+  it('a wrong password against a legacy credential is refused, hash untouched', async () => {
+    const user = await seedLegacyUser('the-real-legacy-password')
+
+    const error = await getAuth()
+      .api.signInEmail({ body: { email: user.email, password: 'not-the-legacy-password' } })
+      .then(() => null)
+      .catch((thrown: unknown) => thrown)
+    expect(error).toBeInstanceOf(APIError)
+
+    // A refusal must not trigger the upgrade path.
+    const ctx = await getAuth().$context
+    const account = await ctx.internalAdapter.findCredentialAccount(user.id)
+    expect(isLegacyCredential(account?.password ?? '')).toBe(true)
   })
 })
 

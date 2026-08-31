@@ -1,17 +1,30 @@
 /**
- * One-time migration: legacy Mongo `users` → Postgres `users`.
+ * One-time migration: legacy Mongo `users` → Postgres `users`, credentials
+ * included.
  *
  * **Input is an NDJSON export, never a Mongo connection.**
  * `docs/legacy-data-mapping.md` rules that no MongoDB driver or extraction
  * code enters this repository; the export command below runs against the
- * container, outside the repo, and deliberately names only the fields this
- * migration consumes — the legacy `hash`/`salt` never leave Mongo, because
- * the credential decision (Option B, auth-foundation §11.1) migrates no
- * passwords: accounts receive credentials via issue-temp-password.ts.
+ * container, outside the repo:
  *
  *   docker exec mongo mongoexport --quiet -u admin -p secret \
  *     --authenticationDatabase admin -d fastehr -c users \
- *     --fields _id,email,firstName,lastName,group,isActive > users.ndjson
+ *     --fields _id,email,firstName,lastName,name,group,isActive,hash,salt > users.ndjson
+ *
+ * **Credentials migrate with the user** (ADR 26, superseding the earlier
+ * Option B-only position): a record's PBKDF2 `hash`/`salt` are stored — never
+ * re-derived, never logged — as a `legacy-pbkdf2-sha1$…` string in the
+ * credential account row, which the auth server recognises, verifies against,
+ * and upgrades to scrypt on the user's first successful sign-in. Staff keep
+ * the password they already have. A record exported without usable
+ * hash/salt migrates credential-less, and issue-temp-password.ts remains the
+ * path for those. An account whose stored password is *not* in the legacy
+ * format is never touched — that user changed their password here, and a
+ * re-run must not undo it.
+ *
+ * Old records predate the firstName/lastName split and carry a single `name`
+ * field — the export includes all three, and firstName/lastName win when
+ * present.
  *
  * Dry-run by default; nothing is written without --apply. Writes are a single
  * transaction — a half-migrated user table cannot happen.
@@ -43,10 +56,14 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { config as loadDotenv } from 'dotenv'
+import { isLegacyCredential, serializeLegacyCredential } from '@fastehr/contracts'
 
 loadDotenv({ path: fileURLToPath(new URL('../../../.env', import.meta.url)), quiet: true })
 
 const { getPrismaClient } = await import('../src/client.ts')
+
+const CREDENTIAL_PROVIDER = 'credential'
+const CREDENTIAL_ISSUER = 'local:credential' // what better-auth@1.7.1 writes for password accounts
 
 /**
  * Legacy `group` → staff role. Hand-written from the Phase 0 discovery
@@ -64,11 +81,12 @@ const ROLE_MAP: Readonly<Record<string, 'admin' | 'provider' | 'frontdesk'>> = {
 interface LegacyUser {
   legacyId: string
   email: string
-  firstName: string
-  lastName: string
+  name: string
   group: string
   isActive: boolean
   createdAt: Date
+  /** `legacy-pbkdf2-sha1$…` (ADR 26), or null when the export held no usable hash/salt. */
+  credential: string | null
 }
 
 interface Skip {
@@ -119,6 +137,8 @@ const lines = readFileSync(input, 'utf8').split('\n').filter((line) => line.trim
 
 const parsed: LegacyUser[] = []
 const skips: Skip[] = []
+/** Credential-only findings — the user row still migrates. Never hash material. */
+const credentialNotes: Array<{ legacyId: string; email: string; note: string }> = []
 
 for (const [index, line] of lines.entries()) {
   let raw: Record<string, unknown>
@@ -148,14 +168,39 @@ for (const [index, line] of lines.entries()) {
     continue
   }
 
+  // Old records predate the firstName/lastName split and carry `name` alone;
+  // where both shapes exist, the split fields win.
+  const splitName = [asString(raw.firstName)?.trim() ?? '', asString(raw.lastName)?.trim() ?? '']
+    .filter((part) => part !== '')
+    .join(' ')
+  const name = splitName !== '' ? splitName : (asString(raw.name)?.trim() ?? '')
+
+  // The legacy hash/salt, carried verbatim into the ADR 26 storage format.
+  // Anything malformed (missing, truncated, non-hex) migrates credential-less
+  // and is noted — the account still exists, and issue-temp-password.ts covers it.
+  let credential: string | null = null
+  const salt = asString(raw.salt)
+  const hash = asString(raw.hash)
+  if (salt !== null && hash !== null) {
+    try {
+      credential = serializeLegacyCredential({ iterations: 1000, salt, hash })
+    } catch {
+      credentialNotes.push({ legacyId, email, note: 'hash/salt present but not valid hex — migrated without credential' })
+    }
+  } else if (salt !== null || hash !== null) {
+    credentialNotes.push({ legacyId, email, note: 'only one of hash/salt present — migrated without credential' })
+  }
+
   parsed.push({
     legacyId,
     email,
-    firstName: asString(raw.firstName)?.trim() ?? '',
-    lastName: asString(raw.lastName)?.trim() ?? '',
+    name,
     group,
-    isActive: raw.isActive === true,
+    // Records that predate the `isActive` field hydrate to the schema default
+    // (true) in the legacy app, so only an explicit false deactivates here.
+    isActive: raw.isActive !== false,
     createdAt: objectIdTimestamp(legacyId),
+    credential,
   })
 }
 
@@ -194,17 +239,19 @@ for (const user of migratable) {
 skips.push(...existingConflicts)
 
 let written = 0
+let credentialsWritten = 0
+let credentialsPreserved = 0
 if (apply) {
   await prisma.$transaction(async (tx) => {
     for (const user of toWrite) {
-      await tx.user.upsert({
+      const row = await tx.user.upsert({
         where: { legacyId: user.legacyId },
         create: {
           id: randomUUID(),
           legacyId: user.legacyId,
           legacyRoleRaw: user.group,
           email: user.email,
-          name: `${user.firstName} ${user.lastName}`.trim(),
+          name: user.name,
           role: ROLE_MAP[user.group],
           isActive: user.isActive,
           emailVerified: false,
@@ -212,16 +259,50 @@ if (apply) {
           updatedAt: new Date(),
         },
         // Re-running refreshes the fields this migration owns and touches
-        // nothing else — never credentials, never mustChangePassword.
+        // nothing else — never a changed password, never mustChangePassword.
         update: {
           legacyRoleRaw: user.group,
           email: user.email,
-          name: `${user.firstName} ${user.lastName}`.trim(),
+          name: user.name,
           role: ROLE_MAP[user.group],
           isActive: user.isActive,
         },
       })
       written += 1
+
+      if (user.credential === null) continue
+
+      const existing = await tx.account.findFirst({
+        where: { userId: row.id, providerId: CREDENTIAL_PROVIDER },
+      })
+
+      if (existing === null) {
+        await tx.account.create({
+          data: {
+            id: randomUUID(),
+            userId: row.id,
+            // Better Auth's credential accounts carry accountId = userId.
+            accountId: row.id,
+            providerId: CREDENTIAL_PROVIDER,
+            issuer: CREDENTIAL_ISSUER,
+            password: user.credential,
+            createdAt: user.createdAt,
+            updatedAt: new Date(),
+          },
+        })
+        credentialsWritten += 1
+      } else if (existing.password !== null && !isLegacyCredential(existing.password)) {
+        // A scrypt hash means the user set a password *here* — a temp
+        // credential or a completed password change. A re-run never reverts
+        // that to the legacy one.
+        credentialsPreserved += 1
+      } else {
+        await tx.account.update({
+          where: { id: existing.id },
+          data: { password: user.credential, updatedAt: new Date() },
+        })
+        credentialsWritten += 1
+      }
     }
   })
 }
@@ -236,6 +317,11 @@ const report = {
   parsed: parsed.length,
   eligible: toWrite.length,
   written,
+  // Counts and reasons only — the report never carries hash or salt material.
+  credentialsInInput: parsed.filter((user) => user.credential !== null).length,
+  credentialsWritten,
+  credentialsPreserved,
+  credentialNotes,
   skipped: skips,
   emailCollisions: collisions.map(([email]) => email),
   migratedRoleCountsInDatabase: Object.fromEntries(
@@ -245,7 +331,7 @@ const report = {
 
 writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n')
 
-console.log(`${apply ? 'APPLY' : 'DRY RUN'}: read ${lines.length}, eligible ${toWrite.length}, written ${written}, skipped ${skips.length}`)
+console.log(`${apply ? 'APPLY' : 'DRY RUN'}: read ${lines.length}, eligible ${toWrite.length}, written ${written}, credentials written ${credentialsWritten} (preserved ${credentialsPreserved}), skipped ${skips.length}`)
 console.log(`report: ${reportPath}`)
 if (skips.length > 0) console.log('skips are listed in the report with reasons.')
 

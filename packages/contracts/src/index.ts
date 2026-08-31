@@ -24,3 +24,11 @@ export {
   type Patient,
   type CreatePatientInput,
 } from './patient.ts'
+export {
+  LEGACY_CREDENTIAL_PREFIX,
+  legacyCredentialSchema,
+  serializeLegacyCredential,
+  parseLegacyCredential,
+  isLegacyCredential,
+  type LegacyCredential,
+} from './legacy-credential.ts'
