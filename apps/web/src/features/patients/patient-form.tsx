@@ -6,6 +6,7 @@ import { useForm, useStore } from "@tanstack/react-form"
 import {
   createPatientInput,
   describeValidationFailure,
+  CREDIT_CARD_EXP_MONTHS,
   PATIENT_GENDERS,
   PATIENT_LANGUAGES,
   PATIENT_OFFICES,
@@ -20,6 +21,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import {
   Select,
   SelectContent,
@@ -35,6 +37,7 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field"
+import { RequiredMark } from "@/components/required-mark"
 import { toFormErrors, validationFrom, type FormCopy, type FormErrors } from "@/lib/form-errors"
 import { trpc } from "@/trpc/client"
 import { US_STATES } from "./us-states.ts"
@@ -48,10 +51,15 @@ import { US_STATES } from "./us-states.ts"
  *
  * Same fields, same requiredness, same conditionals as the legacy form:
  * the program picker appears for the At Home office, the referred-by-patient
- * picker appears when the referral source names a patient. Two legacy blocks
- * are deliberately absent — the credit-card fields (stored in plaintext there;
- * payment data is not entering this system ungoverned) and the SMS intake
+ * picker appears when the referral source names a patient. The credit-card
+ * block (number, expiration, billing zip — never a CVV) is here under the
+ * provisional billing-continuity decision recorded in the contracts § patient
+ * header. One legacy block stays deliberately absent: the SMS intake
  * side-panel (returns with the messaging domain).
+ *
+ * Layout: one responsive grid, two columns from `sm`, four from `lg`, eight
+ * at `3xl` (extra width buys columns, never wider fields). Short fields span
+ * one column; the free-text ones (names, email, street) span two.
  */
 
 /**
@@ -81,6 +89,10 @@ export interface PatientFormValues {
   referredByPatientId: string
   historyNotes: string
   programType: string
+  creditCardNumber: string
+  creditCardExpMonth: string
+  creditCardExpYear: string
+  creditCardZip: string
 }
 
 export const EMPTY_PATIENT_FORM: PatientFormValues = {
@@ -103,6 +115,10 @@ export const EMPTY_PATIENT_FORM: PatientFormValues = {
   referredByPatientId: "",
   historyNotes: "",
   programType: "",
+  creditCardNumber: "",
+  creditCardExpMonth: "",
+  creditCardExpYear: "",
+  creditCardZip: "",
 }
 
 /** A stored patient → the form's editable strings (edit page prefill). */
@@ -127,8 +143,15 @@ export function toPatientFormValues(patient: Patient): PatientFormValues {
     referredByPatientId: patient.referredByPatientId ?? "",
     historyNotes: patient.historyNotes ?? "",
     programType: patient.programType ?? "",
+    creditCardNumber: patient.creditCardNumber ?? "",
+    creditCardExpMonth: patient.creditCardExpMonth ?? "",
+    creditCardExpYear: patient.creditCardExpYear ?? "",
+    creditCardZip: patient.creditCardZip ?? "",
   }
 }
+
+/** The legacy expiration-year range: this year and the ten after it. */
+const EXP_YEARS = Array.from({ length: 11 }, (_, i) => String(new Date().getFullYear() + i))
 
 /** The legacy system's office → at-home test, verbatim. */
 const AT_HOME_OFFICE = /(.*\s)home$/i
@@ -144,12 +167,12 @@ const COPY: FormCopy = {
   firstName: { too_small: "Enter the patient's first name.", too_big: "First name can be at most 50 characters." },
   lastName: { too_small: "Enter the patient's last name.", too_big: "Last name can be at most 100 characters." },
   gender: { invalid_value: "Select the patient's gender." },
-  heightInches: { invalid_format: "Enter height in inches — two digits, decimals allowed." },
+  heightInches: { invalid_format: "Enter height in inches: two digits, decimals allowed." },
   dateOfBirth: {
     invalid_format: "Enter the patient's date of birth.",
     custom: "Date of birth must be a past date.",
   },
-  healthyWeight: { invalid_format: "Enter a weight in pounds — up to three digits, decimals allowed." },
+  healthyWeight: { invalid_format: "Enter a weight in pounds: up to three digits, decimals allowed." },
   language: { invalid_value: "Select a language from the list." },
   office: { invalid_value: "Select an office from the list." },
   email: { invalid_format: "Enter a valid email address, like name@example.com." },
@@ -162,6 +185,10 @@ const COPY: FormCopy = {
   referredByPatientId: { invalid_format: "Pick the referring patient from the search results." },
   historyNotes: { too_big: "History is limited to 10,000 characters." },
   programType: { invalid_value: "Select a program from the list." },
+  creditCardNumber: { invalid_format: "Enter the card number: 14 to 18 digits." },
+  creditCardExpMonth: { invalid_value: "Select the expiration month." },
+  creditCardExpYear: { invalid_format: "Enter a four-digit expiration year." },
+  creditCardZip: { invalid_format: "Enter the billing zip: four to six digits." },
 }
 
 const SAVE_FAILED = "The patient could not be saved. Check your connection and try again."
@@ -201,7 +228,7 @@ function ReferredByPatientPicker({
 
   if (value !== "") {
     const label = selected.data
-      ? `${selected.data.lastName}, ${selected.data.firstName} — ${formatDob(selected.data.dateOfBirth)}`
+      ? `${selected.data.lastName}, ${selected.data.firstName} (${formatDob(selected.data.dateOfBirth)})`
       : "Selected patient"
     return (
       <div className="flex items-center gap-2">
@@ -235,7 +262,7 @@ function ReferredByPatientPicker({
                   setQuery("")
                 }}
               >
-                {patient.lastName}, {patient.firstName} — {formatDob(patient.dateOfBirth)}
+                {patient.lastName}, {patient.firstName} ({formatDob(patient.dateOfBirth)})
               </button>
             </li>
           ))}
@@ -250,6 +277,7 @@ function ReferredByPatientPicker({
 }
 
 export function PatientForm({
+  title = "Patient details",
   defaultValues,
   submit,
   submitLabel,
@@ -258,6 +286,8 @@ export function PatientForm({
   footerStart,
   onDirtyChange,
 }: {
+  /** The card heading — "intake" is a different thing (the SMS mini-form). */
+  title?: string
   defaultValues: PatientFormValues
   /** Runs the mutation; a thrown tRPC error is mapped back onto the fields. */
   submit: (value: PatientFormSubmission) => Promise<void>
@@ -316,12 +346,16 @@ export function PatientForm({
       placeholder?: string
       description?: string
       className?: string
+      required?: boolean
     } = {},
   ) => (
     <form.Field name={name}>
       {(field) => (
         <Field className={options.className} data-invalid={!field.state.meta.isValid}>
-          <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
+          <FieldLabel htmlFor={field.name}>
+            {label}
+            {options.required === true ? <RequiredMark /> : null}
+          </FieldLabel>
           <Input
             id={field.name}
             name={field.name}
@@ -345,12 +379,15 @@ export function PatientForm({
     name: TextFieldName,
     label: string,
     items: ReadonlyArray<{ value: string; label: string }>,
-    options: { placeholder?: string; description?: string; className?: string } = {},
+    options: { placeholder?: string; description?: string; className?: string; required?: boolean } = {},
   ) => (
     <form.Field name={name}>
       {(field) => (
         <Field className={options.className} data-invalid={!field.state.meta.isValid}>
-          <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
+          <FieldLabel htmlFor={field.name}>
+            {label}
+            {options.required === true ? <RequiredMark /> : null}
+          </FieldLabel>
           <Select
             value={field.state.value}
             onValueChange={(value) => field.handleChange(typeof value === "string" ? value : "")}
@@ -387,7 +424,7 @@ export function PatientForm({
     >
       <Card>
         <CardHeader>
-          <CardTitle>Patient intake</CardTitle>
+          <CardTitle>{title}</CardTitle>
         </CardHeader>
         <CardContent>
           <FieldGroup>
@@ -402,20 +439,36 @@ export function PatientForm({
               }
             </form.Subscribe>
 
-            <div className="grid gap-4 sm:grid-cols-2 3xl:grid-cols-4">
-              {textField("firstName", "First name", { placeholder: "First name" })}
-              {textField("lastName", "Last name", { placeholder: "Last name" })}
-              {selectField(
-                "gender",
-                "Gender",
-                PATIENT_GENDERS.map((value) => ({ value, label: value === "male" ? "Male" : "Female" })),
-              )}
-              {textField("heightInches", "Height (inches)", { placeholder: "64" })}
-              {textField("dateOfBirth", "Date of birth", { type: "date" })}
-              {textField("healthyWeight", "Healthy weight (lbs)", {
-                placeholder: "135",
-                description: "Optional.",
-              })}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 3xl:grid-cols-8">
+              {textField("firstName", "First name", { placeholder: "First name", className: "sm:col-span-2", required: true })}
+              {textField("lastName", "Last name", { placeholder: "Last name", className: "sm:col-span-2", required: true })}
+              <form.Field name="gender">
+                {(field) => (
+                  <Field data-invalid={!field.state.meta.isValid}>
+                    <FieldLabel>
+                      Gender
+                      <RequiredMark />
+                    </FieldLabel>
+                    <RadioGroup
+                      value={field.state.value}
+                      onValueChange={(value) => field.handleChange(typeof value === "string" ? value : "")}
+                      className="flex h-9 flex-row items-center gap-5"
+                      aria-invalid={!field.state.meta.isValid}
+                    >
+                      {PATIENT_GENDERS.map((value) => (
+                        <label key={value} className="flex items-center gap-2 text-sm">
+                          <RadioGroupItem value={value} />
+                          {value === "male" ? "Male" : "Female"}
+                        </label>
+                      ))}
+                    </RadioGroup>
+                    <FieldError errors={field.state.meta.errors} />
+                  </Field>
+                )}
+              </form.Field>
+              {textField("heightInches", "Height (inches)", { placeholder: "64", required: true })}
+              {textField("dateOfBirth", "Date of birth", { type: "date", required: true })}
+              {textField("healthyWeight", "Healthy weight (lbs)", { placeholder: "135" })}
               {selectField(
                 "language",
                 "Language",
@@ -423,27 +476,28 @@ export function PatientForm({
                   value,
                   label: value === "english" ? "English" : "Spanish",
                 })),
-                { description: "Optional." },
               )}
-              {selectField("office", "Office", asItems(PATIENT_OFFICES), { description: "Optional." })}
+              {selectField("office", "Office", asItems(PATIENT_OFFICES))}
 
               {textField("email", "Email", {
                 type: "email",
                 placeholder: "patient@email.com",
-                description: "Optional.",
+                className: "sm:col-span-2",
               })}
-              {textField("addressStreet", "Street", { placeholder: "Street address" })}
-              {textField("addressCity", "City", { placeholder: "City" })}
+              {textField("addressStreet", "Street", { placeholder: "Street address", className: "sm:col-span-2", required: true })}
+              {textField("addressCity", "City", { placeholder: "City", required: true })}
               {selectField(
                 "addressState",
                 "State",
                 US_STATES.map((state) => ({ value: state.code, label: state.name })),
+                { required: true },
               )}
-              {textField("addressZip", "Zip code", { placeholder: "90210" })}
+              {textField("addressZip", "Zip code", { placeholder: "90210", required: true })}
               {textField("phone", "Phone", {
                 type: "tel",
                 placeholder: "(951) 555-0000",
-                description: "Any format — ten digits.",
+                description: "Any format, ten digits.",
+                required: true,
               })}
               <form.Field name="phoneFollowUpAllowed">
                 {(field) => (
@@ -465,9 +519,7 @@ export function PatientForm({
                   </Field>
                 )}
               </form.Field>
-              {selectField("referralSource", "Referral source", asItems(PATIENT_REFERRAL_SOURCES), {
-                description: "Optional.",
-              })}
+              {selectField("referralSource", "Referral source", asItems(PATIENT_REFERRAL_SOURCES))}
             </div>
 
             <form.Subscribe selector={(state) => state.values.referralSource}>
@@ -507,7 +559,7 @@ export function PatientForm({
             <form.Subscribe selector={(state) => state.values.office}>
               {(office) =>
                 AT_HOME_OFFICE.test(office) ? (
-                  <div className="grid gap-4 sm:grid-cols-2 3xl:grid-cols-4">
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 3xl:grid-cols-8">
                     {selectField("programType", "Program name", asItems(PATIENT_PROGRAM_TYPES), {
                       description: "The At Home program the patient is enrolled in.",
                     })}
@@ -515,6 +567,23 @@ export function PatientForm({
                 ) : null
               }
             </form.Subscribe>
+
+            {/* The provisional card block — the fields the legacy form
+                rendered, and only those (no CVV, ever). */}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 3xl:grid-cols-8">
+              {textField("creditCardNumber", "Credit card number", { placeholder: "Card number" })}
+              {selectField(
+                "creditCardExpMonth",
+                "Exp month",
+                CREDIT_CARD_EXP_MONTHS.map((value) => ({ value, label: value })),
+              )}
+              {selectField(
+                "creditCardExpYear",
+                "Exp year",
+                EXP_YEARS.map((value) => ({ value, label: value })),
+              )}
+              {textField("creditCardZip", "Billing zip", { placeholder: "90210" })}
+            </div>
           </FieldGroup>
         </CardContent>
         <CardFooter className={footerStart === undefined ? "justify-end" : "justify-between"}>

@@ -24,6 +24,10 @@ const row: PatientRow = {
   historyNotes: null,
   programType: null,
   status: 'active',
+  creditCardNumber: null,
+  creditCardExpMonth: null,
+  creditCardExpYear: null,
+  creditCardZip: null,
   legacyId: null,
   createdAt: new Date('2026-01-02T09:30:00.000Z'),
   updatedAt: new Date('2026-01-02T09:30:00.000Z'),
@@ -53,6 +57,10 @@ describe('toPatient', () => {
       historyNotes: null,
       programType: null,
       status: 'active',
+      creditCardNumber: null,
+      creditCardExpMonth: null,
+      creditCardExpYear: null,
+      creditCardZip: null,
     })
   })
 

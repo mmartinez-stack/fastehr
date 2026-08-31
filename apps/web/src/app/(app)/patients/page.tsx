@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { Search, UserPlus } from "lucide-react"
+import { interpretPatientSearch, type PatientSearchProblem } from "@fastehr/contracts"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -22,37 +23,23 @@ import { useSurfaces } from "@/components/role-provider"
 import { trpc } from "@/trpc/client"
 
 /**
- * The patient roster — the legacy patient queue on the real seam. Same shape:
- * a filter bar (first name, last name, DOB, phone), a Search action, and the
- * recent list as the unfiltered default (legacy `GET /patients`, 30 most
- * recent). Search semantics live server-side in `patient.search` with the
- * legacy behavior: names match exactly but case-insensitively, phone by its
- * ten digits. The legacy "Visit Date" column returns with the visits domain.
+ * The patient roster — the legacy patient queue on the real seam. One search
+ * input for names and phone (ADR 27) — the format of what was typed decides
+ * the field — plus a separate date-of-birth field; the two combine as AND.
+ * The recent list stays the unfiltered default (legacy `GET /patients`, 30
+ * most recent), and match semantics live server-side in `patient.search`.
+ * The legacy "Visit Date" column returns with the visits domain.
+ *
+ * The same `interpretPatientSearch` the server parses with runs here first,
+ * so an uninterpretable query becomes an inline hint instead of a request —
+ * the docs/forms.md rule, applied to a search.
  */
 
-interface SearchFields {
-  firstName: string
-  lastName: string
-  dateOfBirth: string
-  phone: string
-}
-
-const EMPTY_SEARCH: SearchFields = { firstName: "", lastName: "", dateOfBirth: "", phone: "" }
-
-/**
- * The legacy gating, client-side as it was there: names count with two or
- * more characters, phone with a full ten digits. Anything less is not part
- * of the query.
- */
-function toFilters(fields: SearchFields) {
-  const digits = fields.phone.replace(/\D/g, "")
-  const filters = {
-    ...(fields.firstName.trim().length >= 2 ? { firstName: fields.firstName.trim() } : {}),
-    ...(fields.lastName.trim().length >= 2 ? { lastName: fields.lastName.trim() } : {}),
-    ...(fields.dateOfBirth === "" ? {} : { dateOfBirth: fields.dateOfBirth }),
-    ...(digits.length === 10 ? { phone: digits } : {}),
-  }
-  return Object.keys(filters).length === 0 ? null : filters
+/** The copy table for interpreter problems — codes travel, the client owns the words (ADR 12). */
+const PROBLEM_COPY: Record<PatientSearchProblem, string> = {
+  phone_incomplete: "Phone search needs all ten digits.",
+  date_in_search: "Use the Date of birth field to search by date.",
+  name_too_short: "Name searches need at least two letters per name.",
 }
 
 /** "1985-12-10" → "Dec 10, 1985" without touching Date (and its timezones). */
@@ -65,31 +52,31 @@ function formatDob(iso: string): string {
 
 /** Display formatting only — storage stays ten bare digits. */
 function formatPhone(phone: string | null): string {
-  if (phone === null) return "—"
+  if (phone === null) return "-"
   return phone.length === 10 ? `(${phone.slice(0, 3)}) ${phone.slice(3, 6)}-${phone.slice(6)}` : phone
 }
 
 export default function PatientsPage() {
-  const [fields, setFields] = React.useState<SearchFields>(EMPTY_SEARCH)
+  const [query, setQuery] = React.useState("")
+  const [dob, setDob] = React.useState("")
   // What the Search button last submitted — typing alone never queries,
   // exactly like the legacy queue's explicit Search action.
-  const [submitted, setSubmitted] = React.useState<ReturnType<typeof toFilters>>(null)
+  const [submitted, setSubmitted] = React.useState<{ query: string; dateOfBirth: string } | null>(
+    null,
+  )
+  // A problem is only shown after a submit attempt, never while typing.
+  const [problem, setProblem] = React.useState<PatientSearchProblem | null>(null)
   // Contact details are clerical, on the roster as much as on the record.
   const { clerical } = useSurfaces()
 
   const recent = trpc.patient.recent.useQuery(undefined, { enabled: submitted === null })
-  const search = trpc.patient.search.useQuery(submitted ?? {}, { enabled: submitted !== null })
+  const search = trpc.patient.search.useQuery(
+    submitted ?? { query: "", dateOfBirth: "" },
+    { enabled: submitted !== null },
+  )
 
   const active = submitted === null ? recent : search
   const patients = active.data ?? []
-
-  const phoneDigits = fields.phone.replace(/\D/g, "")
-
-  const bind = (name: keyof SearchFields) => ({
-    value: fields[name],
-    onChange: (event: React.ChangeEvent<HTMLInputElement>) =>
-      setFields((current) => ({ ...current, [name]: event.target.value })),
-  })
 
   return (
     <div>
@@ -106,48 +93,76 @@ export default function PatientsPage() {
       <Card>
         <CardContent className="flex flex-col gap-4">
           <form
-            className="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-5"
+            className="flex items-start gap-4"
             onSubmit={(event) => {
               event.preventDefault()
-              setSubmitted(toFilters(fields))
+              const trimmed = query.trim()
+              if (trimmed === "" && dob === "") {
+                setProblem(null)
+                setSubmitted(null)
+                return
+              }
+              if (trimmed !== "") {
+                const interpreted = interpretPatientSearch(trimmed)
+                if (!interpreted.ok) {
+                  setProblem(interpreted.problem)
+                  return
+                }
+              }
+              setProblem(null)
+              setSubmitted({ query: trimmed, dateOfBirth: dob })
             }}
           >
-            <Field>
-              <FieldLabel htmlFor="search-first-name">First name</FieldLabel>
-              <Input id="search-first-name" {...bind("firstName")} />
+            <Field className="flex-1">
+              <FieldLabel htmlFor="search-query">Search</FieldLabel>
+              <Input
+                id="search-query"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Name, “Last, First”, or phone"
+              />
+              <FieldDescription>
+                {problem !== null
+                  ? PROBLEM_COPY[problem]
+                  : "Name or phone. What you type decides the field."}
+              </FieldDescription>
             </Field>
-            <Field>
-              <FieldLabel htmlFor="search-last-name">Last name</FieldLabel>
-              <Input id="search-last-name" {...bind("lastName")} />
-            </Field>
-            <Field>
+            <Field className="w-64 shrink-0">
               <FieldLabel htmlFor="search-dob">Date of birth</FieldLabel>
-              <Input id="search-dob" type="date" {...bind("dateOfBirth")} />
+              <Input
+                id="search-dob"
+                type="date"
+                value={dob}
+                onChange={(event) => setDob(event.target.value)}
+              />
+              <FieldDescription>Combines with the search.</FieldDescription>
             </Field>
-            <Field>
-              <FieldLabel htmlFor="search-phone">Phone</FieldLabel>
-              <Input id="search-phone" type="tel" maxLength={15} {...bind("phone")} />
-              {phoneDigits.length > 0 && phoneDigits.length !== 10 ? (
-                <FieldDescription>Phone search needs all ten digits.</FieldDescription>
-              ) : null}
-            </Field>
-            <div className="flex gap-2">
-              <Button type="submit">
-                <Search data-icon="inline-start" />
+            {/* Mirrors a Field's label-then-control rhythm (gap-2, leading-snug
+                label) so the h-8 buttons sit exactly on the inputs' row. */}
+            <div className="flex shrink-0 flex-col gap-2">
+              <span aria-hidden="true" className="invisible text-sm leading-snug font-medium">
                 Search
-              </Button>
-              {submitted !== null ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
-                    setFields(EMPTY_SEARCH)
-                    setSubmitted(null)
-                  }}
-                >
-                  Clear
+              </span>
+              <div className="flex gap-2">
+                <Button type="submit">
+                  <Search data-icon="inline-start" />
+                  Search
                 </Button>
-              ) : null}
+                {submitted !== null ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setQuery("")
+                      setDob("")
+                      setProblem(null)
+                      setSubmitted(null)
+                    }}
+                  >
+                    Clear
+                  </Button>
+                ) : null}
+              </div>
             </div>
           </form>
 
@@ -182,7 +197,7 @@ export default function PatientsPage() {
                       {formatPhone(patient.phone)}
                     </TableCell>
                   )}
-                  <TableCell>{patient.office ?? "—"}</TableCell>
+                  <TableCell>{patient.office ?? "-"}</TableCell>
                   <TableCell>
                     <Badge variant={patient.status === "active" ? "secondary" : "outline"}>
                       {patient.status}

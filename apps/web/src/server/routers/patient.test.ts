@@ -36,6 +36,10 @@ const ADA = {
   historyNotes: null,
   programType: null,
   status: 'active' as const,
+  creditCardNumber: null,
+  creditCardExpMonth: null,
+  creditCardExpYear: null,
+  creditCardZip: null,
 }
 
 /** A full legacy-form submission, as the wire carries it (pre-normalization). */
@@ -84,7 +88,7 @@ const NORMALIZED = {
   programType: undefined,
 }
 
-const CLINICIAN: Actor = { id: 'user-1', roles: ['clinician'], offices: ['Downtown'] }
+const CLINICIAN: Actor = { id: 'user-1', roles: ['clinician'], offices: ['Sylmar'] }
 
 function fakeDb(overrides: Partial<Db['patients']> = {}): Db {
   return {
@@ -107,6 +111,7 @@ function fakeDb(overrides: Partial<Db['patients']> = {}): Db {
     },
     staffUsers: {
       list: async () => [],
+      search: async () => [],
       create: async () => {
         throw new Error('not under test')
       },
@@ -174,25 +179,21 @@ describe('patient router', () => {
     expect(await caller.patient.recent()).toEqual([ADA])
   })
 
-  it('searches with normalized filters', async () => {
+  it('searches with the query interpreted by format', async () => {
     const search = vi.fn(async () => [ADA])
     const caller = callerWith(fakeDb({ search }))
 
-    await caller.patient.search({ lastName: ' Lovelace ', phone: '(951) 555-0000', firstName: '', dateOfBirth: '' })
+    await caller.patient.search({ query: '(951) 555-0000' })
 
-    expect(search).toHaveBeenCalledWith({
-      firstName: undefined,
-      lastName: 'Lovelace',
-      dateOfBirth: undefined,
-      phone: '9515550000',
-    })
+    expect(search).toHaveBeenCalledWith({ query: { kind: 'phone', phone: '9515550000' } })
   })
 
-  it('rejects a one-character name filter before reaching the repository', async () => {
+  it('rejects an uninterpretable query before reaching the repository', async () => {
     const search = vi.fn(async () => [])
     const caller = callerWith(fakeDb({ search }))
 
-    await expect(caller.patient.search({ lastName: 'L' })).rejects.toThrow()
+    // A partial phone number: digits-only, but not ten of them.
+    await expect(caller.patient.search({ query: '951555' })).rejects.toThrow()
     expect(search).not.toHaveBeenCalled()
   })
 

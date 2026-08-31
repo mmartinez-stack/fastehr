@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { officeSchema } from './office.ts'
 
 /**
  * Patient — the entity and its write inputs.
@@ -17,6 +18,13 @@ import { z } from 'zod'
  * Deriving one from the other couples the two jobs and the normalization is
  * the part that matters — it runs identically in the browser form and in the
  * tRPC mutation, because both import this object (docs/forms.md).
+ *
+ * The credit-card block (number, expiration, billing zip — the fields the
+ * legacy form rendered; its CVV control existed in the form group but was
+ * never shown, and CVV storage is forbidden outright by PCI DSS) is ported
+ * **provisionally** (decision 2026-08-31): the clinic needs billing
+ * continuity now, and the tokenized-processor design is still pending. When
+ * that lands, these fields migrate to processor tokens and the raw values go.
  *
  * Vocabulary fields differ on purpose between the two schemas: `office`,
  * `referralSource`, and `programType` are **enums on the inputs** (the form
@@ -39,17 +47,14 @@ export const PATIENT_STATUSES = ['active', 'inactive'] as const
 export const patientStatusSchema = z.enum(PATIENT_STATUSES)
 export type PatientStatus = z.infer<typeof patientStatusSchema>
 
-/** The legacy system's office list, verbatim. */
-export const PATIENT_OFFICES = [
-  'Sylmar',
-  'Montebello',
-  'PennProgram',
-  'Telemedicine',
-  'At Home',
-  'Israel',
-  'Colonial Heights',
-] as const
-export const patientOfficeSchema = z.enum(PATIENT_OFFICES)
+/**
+ * The form's office pick-list is the site vocabulary itself (office.ts) — one
+ * list for records and authorization scopes. The dead legacy sites the
+ * vocabulary excludes (Israel, Colonial Heights) still read back through the
+ * entity's plain-string `office`, but are not offered for new records.
+ */
+export const PATIENT_OFFICES = officeSchema.options
+export const patientOfficeSchema = officeSchema
 export type PatientOffice = z.infer<typeof patientOfficeSchema>
 
 /**
@@ -91,6 +96,11 @@ export const PATIENT_PROGRAM_TYPES = [
 export const patientProgramTypeSchema = z.enum(PATIENT_PROGRAM_TYPES)
 export type PatientProgramType = z.infer<typeof patientProgramTypeSchema>
 
+/** The legacy expiration-month values, verbatim — unpadded month numbers. */
+export const CREDIT_CARD_EXP_MONTHS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'] as const
+export const creditCardExpMonthSchema = z.enum(CREDIT_CARD_EXP_MONTHS)
+export type CreditCardExpMonth = z.infer<typeof creditCardExpMonthSchema>
+
 export const patientSchema = z.object({
   id: z.uuid(),
   firstName: z.string().min(1),
@@ -117,6 +127,13 @@ export const patientSchema = z.object({
   historyNotes: z.string().nullable(),
   programType: z.string().nullable(),
   status: patientStatusSchema,
+  // The provisional credit-card block (see the header comment). Plain strings
+  // like the other vocabulary fields — historical values import as they are;
+  // the inputs carry the legacy form's validators.
+  creditCardNumber: z.string().nullable(),
+  creditCardExpMonth: z.string().nullable(),
+  creditCardExpYear: z.string().nullable(),
+  creditCardZip: z.string().nullable(),
 })
 
 export type Patient = z.infer<typeof patientSchema>
@@ -182,6 +199,21 @@ const stateCode = z.string().trim().toUpperCase().pipe(z.string().regex(/^[A-Z]{
 const zipCode = z.string().trim().regex(/^\d{3,8}$/)
 
 /**
+ * The legacy card-number validator (14–18 digits), applied after stripping
+ * the spaces and dashes people type — same normalization stance as phone.
+ */
+const creditCardNumber = z
+  .string()
+  .transform((value) => value.replace(/[\s-]/g, ''))
+  .pipe(z.string().regex(/^\d{14,18}$/))
+
+/** Legacy billing-zip validator, verbatim: four to six digits. */
+const creditCardZip = z.string().trim().regex(/^\d{4,6}$/)
+
+/** A four-digit year; the form's dropdown constrains to the offered range. */
+const creditCardExpYear = z.string().trim().regex(/^\d{4}$/)
+
+/**
  * Requiredness and lengths follow the legacy form's reactive validators:
  * names, gender, height, the full address, and phone are required; email,
  * healthy weight, language, office, referral provenance, history, and program
@@ -209,6 +241,10 @@ export const createPatientInput = z.object({
   referredByPatientId: blankAsAbsent(z.uuid()),
   historyNotes: blankAsAbsent(z.string().trim().max(10000)),
   programType: blankAsAbsent(patientProgramTypeSchema),
+  creditCardNumber: blankAsAbsent(creditCardNumber),
+  creditCardExpMonth: blankAsAbsent(creditCardExpMonthSchema),
+  creditCardExpYear: blankAsAbsent(creditCardExpYear),
+  creditCardZip: blankAsAbsent(creditCardZip),
 })
 
 export type CreatePatientInput = z.infer<typeof createPatientInput>
@@ -223,21 +259,137 @@ export const setPatientStatusInput = z.object({
 export type SetPatientStatusInput = z.infer<typeof setPatientStatusInput>
 
 /**
- * The roster search, with the legacy queue's semantics: names match exactly
- * but case-insensitively (the legacy UI anchored its regex on both ends), the
- * date of birth matches the calendar day, and the phone is reduced to digits
- * before an exact match. Every filter is optional; the caller decides what an
- * empty search means (the legacy UI fell back to the recent list).
+ * The intake text — the legacy "Send Intake Form" side panel. No patient
+ * record exists yet: the clinic texts a person a link to the self-service
+ * intake page, and the person enters their own details from their phone. The
+ * language picks which translation the text arrives in.
  *
- * Name filters require two characters, as the legacy search did — a one-letter
- * exact match is always a typo.
+ * Requiredness and lengths are the legacy panel's validators. The *send*
+ * itself belongs to the messaging domain (not yet wired); this input is the
+ * contract the form validates through today and the procedure will accept
+ * when that domain lands.
  */
-export const searchPatientsInput = z.object({
-  firstName: blankAsAbsent(z.string().trim().min(2).max(50)),
-  lastName: blankAsAbsent(z.string().trim().min(2).max(100)),
-  dateOfBirth: blankAsAbsent(z.iso.date()),
-  phone: blankAsAbsent(normalizedPhone),
+export const sendPatientIntakeInput = z.object({
+  firstName: z.string().trim().min(1).max(50),
+  lastName: z.string().trim().min(1).max(100),
+  phone: normalizedPhone,
+  language: blankAsAbsent(patientLanguageSchema),
 })
+export type SendPatientIntakeInput = z.infer<typeof sendPatientIntakeInput>
+
+/**
+ * The roster search (ADR 27): one text input for names and phone — the
+ * *format* of what was typed decides which field it searches — plus a
+ * separate date field for date of birth. Digits (with any phone punctuation)
+ * are a phone number; anything else is a name — one word matches first *or*
+ * last name, two words are a full name ("First Last", or the picker's
+ * "Last, First" convention). A date typed into the text box is refused with a
+ * pointer at the date field, never guessed at.
+ *
+ * Match semantics per field are unchanged from the legacy queue: names exact
+ * but case-insensitive, DOB by calendar day, phone by its ten digits. The
+ * two-character name minimum stays — a one-letter exact match is always a
+ * typo. Query and date combine as AND, so a common name narrows by birth day.
+ *
+ * The interpreter is exported on its own so the roster form can classify as
+ * the user types (to hint "needs all ten digits" before submit) with the same
+ * logic the server parses by — the docs/forms.md rule, applied to a search.
+ */
+export type PatientSearchInterpretation =
+  | { kind: 'phone'; phone: string }
+  /** One word — matches either name field. */
+  | { kind: 'name'; name: string }
+  /**
+   * Two words. Orientation is as typed ("First Last") or explicit ("Last,
+   * First"), but exact matching makes checking both orientations harmless, and
+   * the repository does.
+   */
+  | { kind: 'fullName'; firstName: string; lastName: string }
+
+export type PatientSearchProblem =
+  /** Digits-only input that is not a complete ten-digit phone number. */
+  | 'phone_incomplete'
+  /** A date typed into the text box — dates go in the date-of-birth field. */
+  | 'date_in_search'
+  /** A name part under the two-character minimum. */
+  | 'name_too_short'
+
+const ISO_DATE_QUERY = /^\d{4}-\d{2}-\d{2}$/
+const US_DATE_QUERY = /^\d{1,2}\/\d{1,2}\/\d{4}$/
+/** Only digits and phone punctuation — what a pasted phone number looks like. */
+const PHONE_SHAPED = /^[\s()+.-]*\d[\d\s()+.-]*$/
+
+export function interpretPatientSearch(
+  raw: string,
+): { ok: true; value: PatientSearchInterpretation } | { ok: false; problem: PatientSearchProblem } {
+  const query = raw.trim()
+
+  // Date-shaped input is refused, not interpreted — the date field exists so
+  // the text box never has to guess. Checked before the phone shape because
+  // an ISO date is digits and hyphens too.
+  if (ISO_DATE_QUERY.test(query) || US_DATE_QUERY.test(query)) {
+    return { ok: false, problem: 'date_in_search' }
+  }
+
+  if (PHONE_SHAPED.test(query)) {
+    const digits = query.replace(/\D/g, '')
+    // A pasted "+1 (951) 555-0000" is the same ten-digit number.
+    const local = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits
+    return local.length === 10
+      ? { ok: true, value: { kind: 'phone', phone: local } }
+      : { ok: false, problem: 'phone_incomplete' }
+  }
+
+  const [beforeComma = '', afterComma = ''] = query.split(',').map((part) => part.trim())
+  const parts =
+    afterComma !== ''
+      ? { firstName: afterComma, lastName: beforeComma } // "Last, First"
+      : (() => {
+          const spaceAt = beforeComma.indexOf(' ')
+          if (spaceAt === -1) return null
+          return {
+            firstName: beforeComma.slice(0, spaceAt).trim(),
+            lastName: beforeComma.slice(spaceAt + 1).trim(),
+          } // "First Last"
+        })()
+
+  if (parts === null) {
+    return beforeComma.length >= 2
+      ? { ok: true, value: { kind: 'name', name: beforeComma } }
+      : { ok: false, problem: 'name_too_short' }
+  }
+  return parts.firstName.length >= 2 && parts.lastName.length >= 2
+    ? { ok: true, value: { kind: 'fullName', ...parts } }
+    : { ok: false, problem: 'name_too_short' }
+}
+
+/**
+ * The transform re-runs the interpreter server-side, so an uninterpretable
+ * query fails validation (issue code `custom`, per ADR 12 — the client owns
+ * the copy, keyed by the problem it already computed locally). Both filters
+ * are optional individually, but an entirely empty search is refused — the
+ * caller falls back to the recent list instead of asking for everyone.
+ */
+export const searchPatientsInput = z
+  .object({
+    query: blankAsAbsent(
+      z
+        .string()
+        .trim()
+        .min(2)
+        .max(150)
+        .transform((value, ctx) => {
+          const interpreted = interpretPatientSearch(value)
+          if (!interpreted.ok) {
+            ctx.addIssue({ code: 'custom', params: { problem: interpreted.problem } })
+            return z.NEVER
+          }
+          return interpreted.value
+        }),
+    ),
+    dateOfBirth: blankAsAbsent(z.iso.date()),
+  })
+  .refine((value) => value.query !== undefined || value.dateOfBirth !== undefined)
 export type SearchPatientsInput = z.infer<typeof searchPatientsInput>
 
 /**

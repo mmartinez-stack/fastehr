@@ -25,7 +25,7 @@ export interface PatientRepository {
   listByLastName(): Promise<Patient[]>
   /** The default roster view — legacy `GET /patients` was the 30 most recent. */
   listRecent(): Promise<Patient[]>
-  /** Legacy `/patients/find` semantics: exact, case-insensitive, capped. */
+  /** The single-input roster search (ADR 27): exact, case-insensitive, capped. */
   search(input: SearchPatientsInput): Promise<Patient[]>
   /** The referred-by picker — legacy `/patients/search`, substring on names. */
   searchByName(input: SearchPatientsByNameInput): Promise<Patient[]>
@@ -67,6 +67,10 @@ function toWriteData(input: CreatePatientInput) {
     referredByPatientId: input.referredByPatientId ?? null,
     historyNotes: input.historyNotes ?? null,
     programType: input.programType ?? null,
+    creditCardNumber: input.creditCardNumber ?? null,
+    creditCardExpMonth: input.creditCardExpMonth ?? null,
+    creditCardExpYear: input.creditCardExpYear ?? null,
+    creditCardZip: input.creditCardZip ?? null,
   }
 }
 
@@ -98,19 +102,34 @@ export function createPatientRepository(getClient: () => PrismaClient): PatientR
     },
 
     async search(input) {
+      // The contract already decided which field the query means (ADR 27);
+      // this only translates each interpretation into a where clause, ANDed
+      // with the separate date-of-birth filter when present.
       // Exact-but-case-insensitive name matching is the legacy behavior
       // (its UI anchored `^value$` with the `i` flag) — a roster search
       // finds "smith" for "Smith", not every name containing it.
+      const query = input.query
+      const insensitive = (value: string) => ({ equals: value, mode: 'insensitive' as const })
+      const byQuery =
+        query === undefined
+          ? {}
+          : query.kind === 'phone'
+            ? { phone: query.phone }
+            : query.kind === 'name'
+              ? // One word — the searcher didn't say which name it is.
+                { OR: [{ firstName: insensitive(query.name) }, { lastName: insensitive(query.name) }] }
+              : // Both orientations: exact matching makes the extra arm free,
+                // and "Lovelace Ada" typed without the comma still lands.
+                {
+                  OR: [
+                    { firstName: insensitive(query.firstName), lastName: insensitive(query.lastName) },
+                    { firstName: insensitive(query.lastName), lastName: insensitive(query.firstName) },
+                  ],
+                }
       const rows = await getClient().patient.findMany({
         where: {
-          ...(input.firstName === undefined
-            ? {}
-            : { firstName: { equals: input.firstName, mode: 'insensitive' } }),
-          ...(input.lastName === undefined
-            ? {}
-            : { lastName: { equals: input.lastName, mode: 'insensitive' } }),
+          ...byQuery,
           ...(input.dateOfBirth === undefined ? {} : { dateOfBirth: new Date(input.dateOfBirth) }),
-          ...(input.phone === undefined ? {} : { phone: input.phone }),
         },
         orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
         take: SEARCH_LIMIT,

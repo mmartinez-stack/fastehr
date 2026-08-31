@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { describeValidationFailure } from './errors.ts'
-import { createPatientInput, searchPatientsInput, updatePatientInput } from './patient.ts'
+import {
+  createPatientInput,
+  interpretPatientSearch,
+  searchPatientsInput,
+  sendPatientIntakeInput,
+  updatePatientInput,
+} from './patient.ts'
 
 /**
  * These tests pin *issue codes*, not messages, because the codes are the wire
@@ -31,6 +37,10 @@ const SUBMITTED = {
   referredByPatientId: '',
   historyNotes: ' None pertinent. ',
   programType: '',
+  creditCardNumber: '4111 1111 1111 1111',
+  creditCardExpMonth: '12',
+  creditCardExpYear: '2030',
+  creditCardZip: '90210',
 }
 
 const VALID = {
@@ -53,6 +63,10 @@ const VALID = {
   referredByPatientId: undefined,
   historyNotes: 'None pertinent.',
   programType: undefined,
+  creditCardNumber: '4111111111111111',
+  creditCardExpMonth: '12',
+  creditCardExpYear: '2030',
+  creditCardZip: '90210',
 }
 
 function codesFor(input: unknown): Record<string, string[]> {
@@ -180,23 +194,98 @@ describe('updatePatientInput', () => {
   })
 })
 
-describe('searchPatientsInput', () => {
-  it('normalizes the phone filter to digits and blanks to absent', () => {
-    const parsed = searchPatientsInput.parse({
-      firstName: '',
-      lastName: ' Lovelace ',
-      dateOfBirth: '',
-      phone: '(951) 555-0000',
+describe('interpretPatientSearch', () => {
+  it('reads digits with phone punctuation as a phone number', () => {
+    expect(interpretPatientSearch('(951) 555-0000')).toEqual({
+      ok: true,
+      value: { kind: 'phone', phone: '9515550000' },
     })
-    expect(parsed).toEqual({
-      firstName: undefined,
-      lastName: 'Lovelace',
-      dateOfBirth: undefined,
-      phone: '9515550000',
+    expect(interpretPatientSearch('+1 951.555.0000')).toEqual({
+      ok: true,
+      value: { kind: 'phone', phone: '9515550000' },
     })
   })
 
-  it('applies the legacy two-character minimum to name filters', () => {
-    expect(searchPatientsInput.safeParse({ lastName: 'L' }).success).toBe(false)
+  it('rejects a partial phone number rather than guessing', () => {
+    expect(interpretPatientSearch('951555')).toEqual({ ok: false, problem: 'phone_incomplete' })
+  })
+
+  it('refuses date-shaped input — dates belong to the separate field', () => {
+    expect(interpretPatientSearch('1985-12-10')).toEqual({ ok: false, problem: 'date_in_search' })
+    expect(interpretPatientSearch('12/10/1985')).toEqual({ ok: false, problem: 'date_in_search' })
+  })
+
+  it('reads one word as a name for either field', () => {
+    expect(interpretPatientSearch(' Lovelace ')).toEqual({
+      ok: true,
+      value: { kind: 'name', name: 'Lovelace' },
+    })
+  })
+
+  it('reads "First Last" and "Last, First" as a full name', () => {
+    expect(interpretPatientSearch('Ada Lovelace')).toEqual({
+      ok: true,
+      value: { kind: 'fullName', firstName: 'Ada', lastName: 'Lovelace' },
+    })
+    expect(interpretPatientSearch('Lovelace, Ada')).toEqual({
+      ok: true,
+      value: { kind: 'fullName', firstName: 'Ada', lastName: 'Lovelace' },
+    })
+  })
+
+  it('applies the legacy two-character minimum to every name part', () => {
+    expect(interpretPatientSearch('L')).toEqual({ ok: false, problem: 'name_too_short' })
+    expect(interpretPatientSearch('Lovelace, A')).toEqual({ ok: false, problem: 'name_too_short' })
+  })
+})
+
+describe('sendPatientIntakeInput', () => {
+  it('normalizes the phone and treats a blank language as absent', () => {
+    expect(
+      sendPatientIntakeInput.parse({
+        firstName: ' Ada ',
+        lastName: 'Lovelace',
+        phone: '(951) 555-0000',
+        language: '',
+      }),
+    ).toEqual({ firstName: 'Ada', lastName: 'Lovelace', phone: '9515550000', language: undefined })
+  })
+
+  it('requires names and a complete phone number', () => {
+    expect(
+      sendPatientIntakeInput.safeParse({ firstName: '', lastName: 'L', phone: '951555' }).success,
+    ).toBe(false)
+  })
+})
+
+describe('searchPatientsInput', () => {
+  it('parses the query into its interpretation', () => {
+    expect(searchPatientsInput.parse({ query: '(951) 555-0000', dateOfBirth: '' })).toEqual({
+      query: { kind: 'phone', phone: '9515550000' },
+      dateOfBirth: undefined,
+    })
+  })
+
+  it('accepts a date-of-birth filter alone, or combined with a query', () => {
+    expect(searchPatientsInput.parse({ query: '', dateOfBirth: '1985-12-10' })).toEqual({
+      query: undefined,
+      dateOfBirth: '1985-12-10',
+    })
+    expect(searchPatientsInput.parse({ query: 'Lovelace', dateOfBirth: '1985-12-10' })).toEqual({
+      query: { kind: 'name', name: 'Lovelace' },
+      dateOfBirth: '1985-12-10',
+    })
+  })
+
+  it('refuses an entirely empty search', () => {
+    expect(searchPatientsInput.safeParse({ query: '', dateOfBirth: '' }).success).toBe(false)
+  })
+
+  it('fails an uninterpretable query with issue code custom, no message of ours', () => {
+    const result = searchPatientsInput.safeParse({ query: '951555' })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.issues[0]?.code).toBe('custom')
+    }
   })
 })

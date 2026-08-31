@@ -97,6 +97,14 @@ model Patient {
 
   status PatientStatus @default(active)
 
+  // The provisional credit-card block (contracts § patient header comment):
+  // the fields the legacy form rendered, carried for billing continuity until
+  // the tokenized-processor decision replaces them. Never a CVV column.
+  creditCardNumber   String?
+  creditCardExpMonth String?
+  creditCardExpYear  String?
+  creditCardZip      String?
+
   // The Mongo `_id` bridge for the patient collection import
   // (docs/legacy-data-mapping.md ground rules) — same role as User.legacyId.
   legacyId  String?  @unique

@@ -52,6 +52,10 @@ const GRACE_INPUT: CreatePatientInput = {
   referredByPatientId: undefined,
   historyNotes: 'None pertinent.',
   programType: undefined,
+  creditCardNumber: '4111111111111111',
+  creditCardExpMonth: '12',
+  creditCardExpYear: '2030',
+  creditCardZip: '90210',
 }
 
 beforeEach(async () => {
@@ -86,6 +90,10 @@ describe('patient repository', () => {
       historyNotes: null,
       programType: null,
       status: 'active',
+      creditCardNumber: null,
+      creditCardExpMonth: null,
+      creditCardExpYear: null,
+      creditCardZip: null,
     })
     // Bookkeeping columns exist in the table and must not reach a caller.
     expect(patient).not.toHaveProperty('createdAt')
@@ -143,6 +151,10 @@ describe('patient repository', () => {
       historyNotes: 'None pertinent.',
       programType: null,
       status: 'active',
+      creditCardNumber: '4111111111111111',
+      creditCardExpMonth: '12',
+      creditCardExpYear: '2030',
+      creditCardZip: '90210',
     })
     // The round trip that matters west of UTC: the calendar day written is the
     // calendar day read back, through a real DATE column.
@@ -211,19 +223,65 @@ describe('patient repository', () => {
     expect(referred.referredByPatientId).toBe(referrer.id)
   })
 
-  it('searches with legacy semantics: exact names, case-insensitive', async () => {
+  it('searches one word against either name, exact and case-insensitive', async () => {
     await prisma.patient.createMany({ data: [ADA, GRACE] })
 
-    expect((await db.patients.search({ lastName: 'hopper' })).map((p) => p.id)).toEqual([GRACE.id])
+    expect(
+      (await db.patients.search({ query: { kind: 'name', name: 'hopper' } })).map((p) => p.id),
+    ).toEqual([GRACE.id])
     // Exact match, not substring — "hop" finds nobody.
-    expect(await db.patients.search({ lastName: 'hop' })).toEqual([])
-    expect((await db.patients.search({ dateOfBirth: '1815-12-10' })).map((p) => p.id)).toEqual([ADA.id])
+    expect(await db.patients.search({ query: { kind: 'name', name: 'hop' } })).toEqual([])
+    // A first name finds the patient too — one input, either field.
+    expect(
+      (await db.patients.search({ query: { kind: 'name', name: 'ada' } })).map((p) => p.id),
+    ).toEqual([ADA.id])
+  })
+
+  it('searches a full name in both orientations', async () => {
+    await prisma.patient.createMany({ data: [ADA, GRACE] })
+
+    const asTyped = { kind: 'fullName', firstName: 'grace', lastName: 'hopper' } as const
+    const reversed = { kind: 'fullName', firstName: 'hopper', lastName: 'grace' } as const
+    expect((await db.patients.search({ query: asTyped })).map((p) => p.id)).toEqual([GRACE.id])
+    expect((await db.patients.search({ query: reversed })).map((p) => p.id)).toEqual([GRACE.id])
+    expect(
+      await db.patients.search({
+        query: { kind: 'fullName', firstName: 'grace', lastName: 'lovelace' },
+      }),
+    ).toEqual([])
+  })
+
+  it('searches by calendar day of birth through the separate filter', async () => {
+    await prisma.patient.createMany({ data: [ADA, GRACE] })
+
+    expect(
+      (await db.patients.search({ dateOfBirth: '1815-12-10' })).map((p) => p.id),
+    ).toEqual([ADA.id])
+  })
+
+  it('combines the query and the date of birth as AND', async () => {
+    await prisma.patient.createMany({ data: [ADA, GRACE] })
+
+    expect(
+      (
+        await db.patients.search({
+          query: { kind: 'name', name: 'lovelace' },
+          dateOfBirth: '1815-12-10',
+        })
+      ).map((p) => p.id),
+    ).toEqual([ADA.id])
+    expect(
+      await db.patients.search({
+        query: { kind: 'name', name: 'hopper' },
+        dateOfBirth: '1815-12-10',
+      }),
+    ).toEqual([])
   })
 
   it('searches by phone against the normalized digits', async () => {
     await db.patients.create(GRACE_INPUT)
 
-    const found = await db.patients.search({ phone: '9515550000' })
+    const found = await db.patients.search({ query: { kind: 'phone', phone: '9515550000' } })
     expect(found.map((p) => p.firstName)).toEqual(['Grace'])
   })
 
