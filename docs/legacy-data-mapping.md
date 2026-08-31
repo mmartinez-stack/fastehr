@@ -102,10 +102,11 @@ to write; JSON report per run).
 
 ## `patients`
 
-Schema and application surface are in place (`Patient` model, `patient.*`
-procedures, the shared form in `apps/web/src/features/patients/`); the
-collection importer itself is a future ticket and will follow the users
-pattern (`legacyId` upsert, NDJSON in, report out).
+Importer: `packages/db/scripts/migrate-patients.ts` (dry-run by default;
+`--apply` to write; JSON report per run — legacy ids, field names, and reasons
+only, never a patient value). Schema and application surface were already in
+place (`Patient` model, `patient.*` procedures, the shared form in
+`apps/web/src/features/patients/`).
 
 ### Source collection → target table
 
@@ -134,20 +135,40 @@ pattern (`legacyId` upsert, NDJSON in, report out).
 | `hx` | `historyNotes` | `String?` | "Current medications and pertinent history". |
 | `programType` | `programType` | `String?` | Pick-list on the input; `None` → NULL. |
 | `status` | `status` | `PatientStatus` | Legacy free string; `inactive` maps to `inactive`, anything else to `active` (matching the legacy UI's own check). |
+| `creditCardNumber`, `creditCardExpMonth/Year`, `creditCardZip` | same | `String?` | **Provisional** (2026-08-31): ported for billing continuity while the tokenized-processor design is pending; these columns are scheduled to be replaced by processor tokens, not to grow. The four fields are exactly what the legacy form rendered. |
 
 ### Transform decisions
 
 - There is no patient delete, here or in legacy (its route was disabled);
   deactivation is `patient.setStatus`.
-- Search reproduces legacy semantics: names exact-but-case-insensitive, DOB by
-  calendar day, phone by its ten digits; the default roster view is the most
-  recent 30.
+- Per-field match semantics reproduce legacy search: names
+  exact-but-case-insensitive, DOB by calendar day, phone by its ten digits; the
+  default roster view is the most recent 30. The *input* differs deliberately:
+  one search box whose format decides between name and phone, plus a separate
+  date-of-birth field (ADR 27), replacing the legacy four-field bar.
+- **A row the importer writes must survive the mapper's read-back parse**, so
+  every candidate is validated through the contracts entity schema before any
+  write. A field the contract would reject imports as NULL with a note in the
+  report: a malformed email, a phone whose digits are not ten (an eleventh
+  leading `1` is stripped as country-code noise first), an unknown gender or
+  language value. Only missing names or a missing/invalid `dobStr` skip the
+  whole record — those columns are non-nullable. Two malformed `dobStr`
+  minorities are recovered rather than skipped, noted in the report: a full
+  ISO timestamp (programmatically patched records) keeps its date part, and a
+  `M/D/YYYY` string converts; a two-digit year cannot be guessed at and still
+  skips.
+- `referredByPt` resolves in a second pass after every row exists (a referrer
+  can appear later in the export than the referred). A target that never
+  migrated resolves to NULL, noted; a re-run after it arrives converges.
+- A duplicate `_id` in the export keeps the first occurrence and skips the
+  rest, reported.
 
 ### Discarded fields
 
 | Source field | Why discarded |
 | ------------ | ------------- |
-| `creditCardNumber`, `creditCardCVV`, `creditCardExpMonth/Year`, `creditCardZip`, `walletId`, `preferredPaymentId`, `last4Digits` | Stored in **plaintext** in legacy (its encryption call sites were commented out). Card data does not enter this system until there is a payments decision — likely tokenized via a processor, never raw PAN/CVV. |
+| `creditCardCVV` | Never stored, period — PCI DSS 3.2 forbids retaining a CVV after authorization, and the legacy form never rendered the control anyway (a dead field in its form group). |
+| `walletId`, `preferredPaymentId`, `last4Digits` | Payment-processor bookkeeping for an integration this system does not have; `last4Digits` is derivable. |
 | `visits`, `recentVisit`, `recentText`, `callLog`, `callAfter` | Visit/outreach domain — migrates with its own collections. |
 | `referrals[]` (credit bookkeeping), `lastVideoSent`, `videoOneSent` | Campaign features, not patient identity. |
 | consent blobs (`treatmentConsent*`, `liposhotConsent*`, `ozempicWaiver*`, `testimonialConsent`) | Consent management is its own module with signature handling; a free-string signature column is not it. |
