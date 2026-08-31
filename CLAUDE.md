@@ -209,7 +209,13 @@ Full detail in `CONTRIBUTING.md`.
   `(app)/layout.tsx` is the only cap, and extra width is spent by gaining grid
   columns at `3xl`, never by stretching fields or tables. Every table view is
   zebra-striped — implemented once in `globals.css` against the table slot
-  attributes, never per-table.
+  attributes, never per-table. Row actions are inline buttons on the row,
+  never folded into a three-dot overflow menu. Required form fields are
+  marked with `*` after the label (the shared `RequiredMark` component);
+  optional fields carry no "Optional" text. No em dash (—) anywhere in
+  user-facing text — titles, labels, descriptions, messages, placeholders,
+  fixtures; use a period, comma, colon, or parentheses instead (a bare `-` is
+  the empty-cell placeholder in tables).
 - Add an ADR when a decision's reasoning would not survive someone asking "why
   is this like this?" — next free number, and a row in `docs/adr/README.md`.
   Superseding means a new file and a note on the old one, never a renumbering.

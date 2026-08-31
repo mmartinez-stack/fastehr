@@ -12,7 +12,7 @@ export default async function ProviderGuardDemoPage() {
   if (gate.status === 'forbidden') {
     return (
       <main className="p-8">
-        <h1 className="text-lg font-semibold">403 — forbidden</h1>
+        <h1 className="text-lg font-semibold">403: forbidden</h1>
         <p className="text-sm text-muted-foreground">This route requires the provider role.</p>
       </main>
     )

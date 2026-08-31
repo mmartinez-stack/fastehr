@@ -197,7 +197,7 @@ export function PatientDetail({
                 <Separator />
                 <div className="flex justify-between gap-2">
                   <span className="text-muted-foreground">Program</span>
-                  <span className="font-medium">{patient.program ?? "—"}</span>
+                  <span className="font-medium">{patient.program ?? "-"}</span>
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-muted-foreground">Last visit</span>
@@ -206,7 +206,7 @@ export function PatientDetail({
                 <div className="flex justify-between gap-2">
                   <span className="text-muted-foreground">Current medication</span>
                   <span className="font-medium">
-                    {latest?.meds.map((m) => m.name).join(", ") || "—"}
+                    {latest?.meds.map((m) => m.name).join(", ") || "-"}
                   </span>
                 </div>
               </CardContent>
@@ -241,7 +241,7 @@ export function PatientDetail({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Program</span>
-                  <span className="font-medium">{patient.program ?? "—"}</span>
+                  <span className="font-medium">{patient.program ?? "-"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Last visit</span>
@@ -288,7 +288,7 @@ export function PatientDetail({
                             <TableCell>{v.type}</TableCell>
                             <TableCell className="tabular-nums">{v.weight} lbs</TableCell>
                             <TableCell>
-                              {v.meds.map((m) => `${m.name} ${m.dosage}`).join(", ") || "—"}
+                              {v.meds.map((m) => `${m.name} ${m.dosage}`).join(", ") || "-"}
                             </TableCell>
                             <TableCell className="whitespace-nowrap">{v.provider}</TableCell>
                             <TableCell className="text-right">
@@ -511,7 +511,7 @@ export function PatientDetail({
                               <TableCell>{v.type}</TableCell>
                               <TableCell>{v.paymentMethod}</TableCell>
                               <TableCell className="font-mono text-xs text-muted-foreground">
-                                {v.tracking ?? "—"}
+                                {v.tracking ?? "-"}
                               </TableCell>
                               <TableCell className="text-right tabular-nums">
                                 {usd(v.amount)}

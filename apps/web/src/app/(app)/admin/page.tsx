@@ -64,7 +64,7 @@ export default function AdminDeskPage() {
             <p className="text-sm font-medium">This is an administrative screen.</p>
             <p className="max-w-md text-sm text-muted-foreground">
               Clerical work sits outside the provider view. Switch the role in the
-              header to see it — in the built system this screen would not be
+              header to see it. In the built system this screen would not be
               reachable at all.
             </p>
           </CardContent>

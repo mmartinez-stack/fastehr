@@ -66,11 +66,11 @@ export default async function SmokePage() {
             </Badge>
           </li>
           <li className="flex items-center justify-between">
-            <span>tRPC — server caller</span>
+            <span>tRPC: server caller</span>
             <Badge>{`in-process: ${health.status}`}</Badge>
           </li>
           <li className="flex items-center justify-between">
-            <span>tRPC — client, from prefetch</span>
+            <span>tRPC: client, from prefetch</span>
             <HealthStatus />
           </li>
         </ul>
