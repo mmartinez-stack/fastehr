@@ -277,8 +277,21 @@ describe('searchPatientsInput', () => {
     })
   })
 
+  it('accepts the status filter alone, and combined with a query', () => {
+    expect(searchPatientsInput.parse({ query: '', dateOfBirth: '', status: 'inactive' })).toEqual({
+      query: undefined,
+      dateOfBirth: undefined,
+      status: 'inactive',
+    })
+    expect(searchPatientsInput.parse({ query: 'Lovelace', status: 'active' })).toEqual({
+      query: { kind: 'name', name: 'Lovelace' },
+      dateOfBirth: undefined,
+      status: 'active',
+    })
+  })
+
   it('refuses an entirely empty search', () => {
-    expect(searchPatientsInput.safeParse({ query: '', dateOfBirth: '' }).success).toBe(false)
+    expect(searchPatientsInput.safeParse({ query: '', dateOfBirth: '', status: '' }).success).toBe(false)
   })
 
   it('fails an uninterpretable query with issue code custom, no message of ours', () => {

@@ -75,6 +75,18 @@ describe('staff-user repository', () => {
     expect(await db.staffUsers.search({ query: { kind: 'name', name: 'nobody' } })).toEqual([])
   })
 
+  it('filters by account state, alone or combined with a query', async () => {
+    await seed('active@example.com', { name: 'Active Person' })
+    await seed('disabled@example.com', { name: 'Disabled Person', isActive: false })
+
+    expect(
+      (await db.staffUsers.search({ status: 'disabled' })).map((u) => u.email),
+    ).toEqual(['disabled@example.com'])
+    expect(
+      await db.staffUsers.search({ query: { kind: 'name', name: 'active person' }, status: 'disabled' }),
+    ).toEqual([])
+  })
+
   it('creates without any credential and surfaces a duplicate email by name', async () => {
     const created = await db.staffUsers.create({
       name: 'New Person',

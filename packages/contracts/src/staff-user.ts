@@ -61,19 +61,31 @@ export type SetStaffUserActiveInput = z.infer<typeof setStaffUserActiveInput>
  * email, anything else is a name. Both match by substring, case-insensitive
  * (unlike the patient roster's exact legacy semantics — staff search has no
  * legacy behavior to preserve, and an admin scanning a 30-row list wants
- * "gar" to find Garcia).
+ * "gar" to find Garcia). The account-state filter combines as AND; either
+ * filter alone is a valid search, an entirely empty one is not.
  */
-export const searchStaffUsersInput = z.object({
-  query: z
-    .string()
-    .trim()
-    .min(2)
-    .max(150)
-    .transform((value) =>
-      value.includes('@')
-        ? { kind: 'email' as const, email: value.toLowerCase() }
-        : { kind: 'name' as const, name: value },
+const blankAsAbsent = <Schema extends z.ZodType>(schema: Schema) =>
+  z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    schema.optional(),
+  )
+
+export const searchStaffUsersInput = z
+  .object({
+    query: blankAsAbsent(
+      z
+        .string()
+        .trim()
+        .min(2)
+        .max(150)
+        .transform((value) =>
+          value.includes('@')
+            ? { kind: 'email' as const, email: value.toLowerCase() }
+            : { kind: 'name' as const, name: value },
+        ),
     ),
-})
+    status: blankAsAbsent(z.enum(['active', 'disabled'])),
+  })
+  .refine((value) => value.query !== undefined || value.status !== undefined)
 
 export type SearchStaffUsersInput = z.infer<typeof searchStaffUsersInput>

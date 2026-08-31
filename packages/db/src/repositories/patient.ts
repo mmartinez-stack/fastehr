@@ -130,6 +130,7 @@ export function createPatientRepository(getClient: () => PrismaClient): PatientR
         where: {
           ...byQuery,
           ...(input.dateOfBirth === undefined ? {} : { dateOfBirth: new Date(input.dateOfBirth) }),
+          ...(input.status === undefined ? {} : { status: input.status }),
         },
         orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
         take: SEARCH_LIMIT,

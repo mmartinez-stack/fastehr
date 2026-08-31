@@ -9,6 +9,13 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import {
   Table,
@@ -59,11 +66,14 @@ function formatPhone(phone: string | null): string {
 export default function PatientsPage() {
   const [query, setQuery] = React.useState("")
   const [dob, setDob] = React.useState("")
+  const [status, setStatus] = React.useState("any")
   // What the Search button last submitted — typing alone never queries,
   // exactly like the legacy queue's explicit Search action.
-  const [submitted, setSubmitted] = React.useState<{ query: string; dateOfBirth: string } | null>(
-    null,
-  )
+  const [submitted, setSubmitted] = React.useState<{
+    query: string
+    dateOfBirth: string
+    status: string
+  } | null>(null)
   // A problem is only shown after a submit attempt, never while typing.
   const [problem, setProblem] = React.useState<PatientSearchProblem | null>(null)
   // Contact details are clerical, on the roster as much as on the record.
@@ -71,7 +81,7 @@ export default function PatientsPage() {
 
   const recent = trpc.patient.recent.useQuery(undefined, { enabled: submitted === null })
   const search = trpc.patient.search.useQuery(
-    submitted ?? { query: "", dateOfBirth: "" },
+    submitted ?? { query: "", dateOfBirth: "", status: "" },
     { enabled: submitted !== null },
   )
 
@@ -97,7 +107,8 @@ export default function PatientsPage() {
             onSubmit={(event) => {
               event.preventDefault()
               const trimmed = query.trim()
-              if (trimmed === "" && dob === "") {
+              const statusFilter = status === "any" ? "" : status
+              if (trimmed === "" && dob === "" && statusFilter === "") {
                 setProblem(null)
                 setSubmitted(null)
                 return
@@ -110,7 +121,7 @@ export default function PatientsPage() {
                 }
               }
               setProblem(null)
-              setSubmitted({ query: trimmed, dateOfBirth: dob })
+              setSubmitted({ query: trimmed, dateOfBirth: dob, status: statusFilter })
             }}
           >
             <Field className="flex-1">
@@ -137,6 +148,23 @@ export default function PatientsPage() {
               />
               <FieldDescription>Combines with the search.</FieldDescription>
             </Field>
+            <Field className="w-36 shrink-0">
+              <FieldLabel htmlFor="search-status">Status</FieldLabel>
+              <Select
+                value={status}
+                onValueChange={(value) => setStatus(typeof value === "string" ? value : "any")}
+              >
+                <SelectTrigger id="search-status" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+              <FieldDescription>Combines with the search.</FieldDescription>
+            </Field>
             {/* Mirrors a Field's label-then-control rhythm (gap-2, leading-snug
                 label) so the h-8 buttons sit exactly on the inputs' row. */}
             <div className="flex shrink-0 flex-col gap-2">
@@ -155,6 +183,7 @@ export default function PatientsPage() {
                     onClick={() => {
                       setQuery("")
                       setDob("")
+                      setStatus("any")
                       setProblem(null)
                       setSubmitted(null)
                     }}

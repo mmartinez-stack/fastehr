@@ -388,8 +388,12 @@ export const searchPatientsInput = z
         }),
     ),
     dateOfBirth: blankAsAbsent(z.iso.date()),
+    status: blankAsAbsent(patientStatusSchema),
   })
-  .refine((value) => value.query !== undefined || value.dateOfBirth !== undefined)
+  .refine(
+    (value) =>
+      value.query !== undefined || value.dateOfBirth !== undefined || value.status !== undefined,
+  )
 export type SearchPatientsInput = z.infer<typeof searchPatientsInput>
 
 /**

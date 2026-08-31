@@ -308,13 +308,14 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
   const utils = trpc.useUtils()
 
   const [query, setQuery] = React.useState("")
+  const [status, setStatus] = React.useState("any")
   // What the Search button last submitted — same explicit-search behavior as
   // the patient roster; typing alone never queries.
-  const [submitted, setSubmitted] = React.useState<string | null>(null)
+  const [submitted, setSubmitted] = React.useState<{ query: string; status: string } | null>(null)
 
   const list = trpc.staffUsers.list.useQuery(undefined, { enabled: submitted === null })
   const search = trpc.staffUsers.search.useQuery(
-    { query: submitted ?? "" },
+    submitted ?? { query: "", status: "" },
     { enabled: submitted !== null },
   )
   const active = submitted === null ? list : search
@@ -356,7 +357,13 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
             onSubmit={(event) => {
               event.preventDefault()
               const trimmed = query.trim()
-              setSubmitted(trimmed.length >= 2 ? trimmed : null)
+              const statusFilter = status === "any" ? "" : status
+              const hasQuery = trimmed.length >= 2
+              setSubmitted(
+                hasQuery || statusFilter !== ""
+                  ? { query: hasQuery ? trimmed : "", status: statusFilter }
+                  : null,
+              )
             }}
           >
             <Field className="flex-1">
@@ -370,6 +377,23 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
               <FieldDescription>
                 One box for both. An @ means email, anything else is a name.
               </FieldDescription>
+            </Field>
+            <Field className="w-36 shrink-0">
+              <FieldLabel htmlFor="user-status">Status</FieldLabel>
+              <Select
+                value={status}
+                onValueChange={(value) => setStatus(typeof value === "string" ? value : "any")}
+              >
+                <SelectTrigger id="user-status" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="disabled">Disabled</SelectItem>
+                </SelectContent>
+              </Select>
+              <FieldDescription>Combines with the search.</FieldDescription>
             </Field>
             {/* Mirrors a Field's label-then-control rhythm (gap-2, leading-snug
                 label) so the h-8 buttons sit exactly on the inputs' row. */}
@@ -388,6 +412,7 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
                     variant="ghost"
                     onClick={() => {
                       setQuery("")
+                      setStatus("any")
                       setSubmitted(null)
                     }}
                   >

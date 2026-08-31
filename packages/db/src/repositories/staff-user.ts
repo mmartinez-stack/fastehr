@@ -57,10 +57,14 @@ export function createStaffUserRepository(getClient: () => PrismaClient): StaffU
     async search(input) {
       const query = input.query
       const rows = await getClient().user.findMany({
-        where:
-          query.kind === 'email'
-            ? { email: { contains: query.email, mode: 'insensitive' } }
-            : { name: { contains: query.name, mode: 'insensitive' } },
+        where: {
+          ...(query === undefined
+            ? {}
+            : query.kind === 'email'
+              ? { email: { contains: query.email, mode: 'insensitive' } }
+              : { name: { contains: query.name, mode: 'insensitive' } }),
+          ...(input.status === undefined ? {} : { isActive: input.status === 'active' }),
+        },
         orderBy: [{ name: 'asc' }],
         include: { accounts: CREDENTIAL_FILTER },
       })

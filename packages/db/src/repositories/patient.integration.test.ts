@@ -259,6 +259,19 @@ describe('patient repository', () => {
     ).toEqual([ADA.id])
   })
 
+  it('filters by status, alone or combined with a query', async () => {
+    await prisma.patient.createMany({
+      data: [ADA, { ...GRACE, status: 'inactive' as const }],
+    })
+
+    expect(
+      (await db.patients.search({ status: 'inactive' })).map((p) => p.id),
+    ).toEqual([GRACE.id])
+    expect(
+      await db.patients.search({ query: { kind: 'name', name: 'hopper' }, status: 'active' }),
+    ).toEqual([])
+  })
+
   it('combines the query and the date of birth as AND', async () => {
     await prisma.patient.createMany({ data: [ADA, GRACE] })
 
