@@ -1,10 +1,18 @@
-import type { CreatePatientInput, Patient } from '@fastehr/contracts'
+import type {
+  CreatePatientInput,
+  Patient,
+  SearchPatientsByNameInput,
+  SearchPatientsInput,
+  SetPatientStatusInput,
+  UpdatePatientInput,
+} from '@fastehr/contracts'
 import type { PrismaClient } from '../client.ts'
 import { toPatient } from '../mappers/patient.ts'
 
 /**
- * Patient reads and writes. Seed surface — the real query set arrives with the
- * persistence ticket.
+ * Patient reads and writes — the query set ported from the legacy patient
+ * endpoints (docs/legacy-data-mapping.md § patients): list/search/save, no
+ * delete (the legacy system disabled patient deletion, and so does this one).
  *
  * The interface is declared in terms of `@fastehr/contracts` types only: no
  * `Prisma.PatientWhereInput`, no `Decimal`, no `select` objects. A consumer
@@ -15,7 +23,51 @@ import { toPatient } from '../mappers/patient.ts'
 export interface PatientRepository {
   findById(id: string): Promise<Patient | null>
   listByLastName(): Promise<Patient[]>
+  /** The default roster view — legacy `GET /patients` was the 30 most recent. */
+  listRecent(): Promise<Patient[]>
+  /** Legacy `/patients/find` semantics: exact, case-insensitive, capped. */
+  search(input: SearchPatientsInput): Promise<Patient[]>
+  /** The referred-by picker — legacy `/patients/search`, substring on names. */
+  searchByName(input: SearchPatientsByNameInput): Promise<Patient[]>
   create(input: CreatePatientInput): Promise<Patient>
+  update(input: UpdatePatientInput): Promise<Patient>
+  setStatus(input: SetPatientStatusInput): Promise<Patient>
+}
+
+/** The legacy list/search caps, kept: 30 rows for lists, 100 for a search. */
+const LIST_LIMIT = 30
+const SEARCH_LIMIT = 100
+
+/**
+ * One definition of "what the form said" → "what the row stores", shared by
+ * create and update so the two writes cannot drift. Absent optional fields
+ * store NULL — an update that clears a field really clears it.
+ */
+function toWriteData(input: CreatePatientInput) {
+  return {
+    firstName: input.firstName,
+    lastName: input.lastName,
+    // A date-only ISO string parses as UTC midnight, which is exactly
+    // what a `@db.Date` column stores — the inverse of the mapper's
+    // `toCalendarDate`, and like it, deliberately not local time.
+    dateOfBirth: new Date(input.dateOfBirth),
+    gender: input.gender,
+    heightInches: input.heightInches,
+    healthyWeight: input.healthyWeight ?? null,
+    language: input.language ?? null,
+    office: input.office ?? null,
+    email: input.email ?? null,
+    addressStreet: input.addressStreet,
+    addressCity: input.addressCity,
+    addressState: input.addressState,
+    addressZip: input.addressZip,
+    phone: input.phone,
+    phoneFollowUpAllowed: input.phoneFollowUpAllowed,
+    referralSource: input.referralSource ?? null,
+    referredByPatientId: input.referredByPatientId ?? null,
+    historyNotes: input.historyNotes ?? null,
+    programType: input.programType ?? null,
+  }
 }
 
 /**
@@ -37,18 +89,66 @@ export function createPatientRepository(getClient: () => PrismaClient): PatientR
       return rows.map(toPatient)
     },
 
-    async create(input) {
-      const row = await getClient().patient.create({
-        data: {
-          firstName: input.firstName,
-          lastName: input.lastName,
-          // A date-only ISO string parses as UTC midnight, which is exactly
-          // what a `@db.Date` column stores — the inverse of the mapper's
-          // `toCalendarDate`, and like it, deliberately not local time.
-          dateOfBirth: new Date(input.dateOfBirth),
-          email: input.email ?? null,
-          phone: input.phone ?? null,
+    async listRecent() {
+      const rows = await getClient().patient.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: LIST_LIMIT,
+      })
+      return rows.map(toPatient)
+    },
+
+    async search(input) {
+      // Exact-but-case-insensitive name matching is the legacy behavior
+      // (its UI anchored `^value$` with the `i` flag) — a roster search
+      // finds "smith" for "Smith", not every name containing it.
+      const rows = await getClient().patient.findMany({
+        where: {
+          ...(input.firstName === undefined
+            ? {}
+            : { firstName: { equals: input.firstName, mode: 'insensitive' } }),
+          ...(input.lastName === undefined
+            ? {}
+            : { lastName: { equals: input.lastName, mode: 'insensitive' } }),
+          ...(input.dateOfBirth === undefined ? {} : { dateOfBirth: new Date(input.dateOfBirth) }),
+          ...(input.phone === undefined ? {} : { phone: input.phone }),
         },
+        orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+        take: SEARCH_LIMIT,
+      })
+      return rows.map(toPatient)
+    },
+
+    async searchByName(input) {
+      // "Lastname" or "Lastname, Firstname" — the legacy picker's convention.
+      const [lastName = '', firstName = ''] = input.name.split(',').map((part) => part.trim())
+      const rows = await getClient().patient.findMany({
+        where: {
+          lastName: { contains: lastName, mode: 'insensitive' },
+          ...(firstName === '' ? {} : { firstName: { contains: firstName, mode: 'insensitive' } }),
+        },
+        orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+        take: LIST_LIMIT,
+      })
+      return rows.map(toPatient)
+    },
+
+    async create(input) {
+      const row = await getClient().patient.create({ data: toWriteData(input) })
+      return toPatient(row)
+    },
+
+    async update(input) {
+      const { id, ...rest } = input
+      const row = await getClient().patient.update({ where: { id }, data: toWriteData(rest) })
+      return toPatient(row)
+    },
+
+    async setStatus(input) {
+      // Deliberately its own write, not a variant of `update`: the legacy UI's
+      // activate/deactivate action changed status and nothing else.
+      const row = await getClient().patient.update({
+        where: { id: input.id },
+        data: { status: input.status },
       })
       return toPatient(row)
     },

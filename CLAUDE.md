@@ -184,11 +184,14 @@ same reason (ADR 19).
 
 ## Current state
 
-`apps/web` still carries the v0 mockup: routes under `src/app/(app)/` read
-`src/lib/mock-data.ts`, and no database is wired to the UI yet. `/_smoke` is the
-one route exercising the real seam end to end. `noUncheckedIndexedAccess` is on
-everywhere with no exceptions — the mockup's fixture lookups go through the
-checked `at()` helper rather than `!` (ADR 21).
+`apps/web` still carries most of the v0 mockup: routes under `src/app/(app)/`
+read `src/lib/mock-data.ts`, except the patient roster, `/patients/new`, and
+`/patients/[id]/edit`, which are wired end to end (legacy-parity form and
+search — docs/legacy-data-mapping.md § patients; the `/patients/[id]` detail
+view is still mockup). Auth is real (Better Auth; migrated legacy credentials
+verify per ADR 26). `noUncheckedIndexedAccess` is on everywhere with no
+exceptions — the mockup's fixture lookups go through the checked `at()` helper
+rather than `!` (ADR 21).
 
 ## Conventions
 
@@ -201,6 +204,12 @@ Full detail in `CONTRIBUTING.md`.
   `Co-Authored-By`), no scope parens, present tense, no trailing period.
   Types: `feat` `fix` `refactor` `docs` `chore` `test`.
 - Commit the work, not the session: one commit per coherent change.
+- **UI defaults**: content and components take the full width available — no
+  per-page `max-w-*` caps; the app shell's `max-w-[1800px]` in
+  `(app)/layout.tsx` is the only cap, and extra width is spent by gaining grid
+  columns at `3xl`, never by stretching fields or tables. Every table view is
+  zebra-striped — implemented once in `globals.css` against the table slot
+  attributes, never per-table.
 - Add an ADR when a decision's reasoning would not survive someone asking "why
   is this like this?" — next free number, and a row in `docs/adr/README.md`.
   Superseding means a new file and a note on the old one, never a renumbering.

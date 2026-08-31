@@ -27,7 +27,16 @@ function fakeDb(overrides: Partial<Db['staffUsers']> = {}): Db {
     patients: {
       findById: async () => null,
       listByLastName: async () => [],
+      listRecent: async () => [],
+      search: async () => [],
+      searchByName: async () => [],
       create: async () => {
+        throw new Error('not under test')
+      },
+      update: async () => {
+        throw new Error('not under test')
+      },
+      setStatus: async () => {
         throw new Error('not under test')
       },
     },

@@ -1,14 +1,32 @@
 import { describe, expect, it } from 'vitest'
+import type { Patient as PatientRow } from '../generated/client/client.ts'
 import { toPatient } from './patient.ts'
 
-const row = {
+const row: PatientRow = {
   id: '3f1a7a1e-8c9b-4d2a-9f10-6b2c5d4e7a81',
   firstName: 'Ada',
   lastName: 'Lovelace',
   dateOfBirth: new Date('1815-12-10T00:00:00.000Z'),
+  gender: null,
+  heightInches: null,
+  healthyWeight: null,
+  language: null,
+  office: null,
   email: null,
   phone: null,
+  phoneFollowUpAllowed: true,
+  addressStreet: null,
+  addressCity: null,
+  addressState: null,
+  addressZip: null,
+  referralSource: null,
+  referredByPatientId: null,
+  historyNotes: null,
+  programType: null,
+  status: 'active',
+  legacyId: null,
   createdAt: new Date('2026-01-02T09:30:00.000Z'),
+  updatedAt: new Date('2026-01-02T09:30:00.000Z'),
 }
 
 describe('toPatient', () => {
@@ -18,20 +36,57 @@ describe('toPatient', () => {
       firstName: 'Ada',
       lastName: 'Lovelace',
       dateOfBirth: '1815-12-10',
+      gender: null,
+      heightInches: null,
+      healthyWeight: null,
+      language: null,
+      office: null,
       email: null,
       phone: null,
+      phoneFollowUpAllowed: true,
+      addressStreet: null,
+      addressCity: null,
+      addressState: null,
+      addressZip: null,
+      referralSource: null,
+      referredByPatientId: null,
+      historyNotes: null,
+      programType: null,
+      status: 'active',
     })
   })
 
-  it('passes stored contact details through', () => {
-    const mapped = toPatient({ ...row, email: 'ada@example.com', phone: '9515550000' })
+  it('passes stored demographics through', () => {
+    const mapped = toPatient({
+      ...row,
+      email: 'ada@example.com',
+      phone: '9515550000',
+      gender: 'female',
+      heightInches: 64.5,
+      language: 'english',
+      office: 'Sylmar',
+      status: 'inactive',
+    })
 
     expect(mapped.email).toBe('ada@example.com')
     expect(mapped.phone).toBe('9515550000')
+    expect(mapped.gender).toBe('female')
+    expect(mapped.heightInches).toBe(64.5)
+    expect(mapped.language).toBe('english')
+    expect(mapped.office).toBe('Sylmar')
+    expect(mapped.status).toBe('inactive')
   })
 
-  it('drops columns the contract does not declare', () => {
+  it('keeps an imported vocabulary value the pick-lists no longer offer', () => {
+    // Entity-side `office` is a plain string on purpose — a historical office
+    // must read back rather than fail the parse (see contracts/patient.ts).
+    expect(toPatient({ ...row, office: 'Van Nuys (closed)' }).office).toBe('Van Nuys (closed)')
+  })
+
+  it('drops bookkeeping columns the contract does not declare', () => {
     expect(toPatient(row)).not.toHaveProperty('createdAt')
+    expect(toPatient(row)).not.toHaveProperty('updatedAt')
+    expect(toPatient(row)).not.toHaveProperty('legacyId')
   })
 
   it('reads the date of birth in UTC, not local time', () => {

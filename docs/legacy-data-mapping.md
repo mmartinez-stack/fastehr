@@ -98,3 +98,60 @@ to write; JSON report per run).
 | `dea`, `canPrescribe`, `reviewer`, `hasRemote` | Prescription/review workflow — returns with its own domain, not with identity. |
 | `__v` | Mongoose bookkeeping. |
 
+---
+
+## `patients`
+
+Schema and application surface are in place (`Patient` model, `patient.*`
+procedures, the shared form in `apps/web/src/features/patients/`); the
+collection importer itself is a future ticket and will follow the users
+pattern (`legacyId` upsert, NDJSON in, report out).
+
+### Source collection → target table
+
+| Source | Target |
+| ------ | ------ |
+| `fastehr.patients` | `Patient` (`patients`) |
+
+### Field mapping
+
+| Source field | Target column | Type | Notes |
+| ------------ | ------------- | ---- | ----- |
+| `_id` | `legacyId` | `String @unique` | Always. Import key. |
+| `firstName` / `lastName` | same | `String` | |
+| `dobStr` | `dateOfBirth` | `DateTime @db.Date` | The string was the legacy source of truth; `dob` (a timestamp) is derived and discarded. |
+| `gender` | `gender` | `PatientGender?` | Legacy enum `male/female`, kept as a PG enum. |
+| `height` | `heightInches` | `Float?` | Unit named in the column, as the legacy form labeled it. |
+| `healthyWeight` | `healthyWeight` | `Float?` | |
+| `language` | `language` | `PatientLanguage?` | Legacy enum `english/spanish`. |
+| `office` | `office` | `String?` | Free string on the entity so historical values import; the form input constrains to the current list. |
+| `email` | `email` | `String?` | Normalized by the contract on write. |
+| `phone.number` | `phone` | `String?` | Legacy stored a *Number*; here ten bare digits as a string. |
+| `phone.permission` | `phoneFollowUpAllowed` | `Boolean` | Default `true`, the legacy form default. |
+| `address.street/city/state/zip` | `addressStreet/City/State/Zip` | `String?` | Flattened. |
+| `referralSource` | `referralSource` | `String?` | Free string on the entity, pick-list on the input. |
+| `referredByPt` | `referredByPatientId` | self-relation | Resolved through patient `legacyId` at import time. |
+| `hx` | `historyNotes` | `String?` | "Current medications and pertinent history". |
+| `programType` | `programType` | `String?` | Pick-list on the input; `None` → NULL. |
+| `status` | `status` | `PatientStatus` | Legacy free string; `inactive` maps to `inactive`, anything else to `active` (matching the legacy UI's own check). |
+
+### Transform decisions
+
+- There is no patient delete, here or in legacy (its route was disabled);
+  deactivation is `patient.setStatus`.
+- Search reproduces legacy semantics: names exact-but-case-insensitive, DOB by
+  calendar day, phone by its ten digits; the default roster view is the most
+  recent 30.
+
+### Discarded fields
+
+| Source field | Why discarded |
+| ------------ | ------------- |
+| `creditCardNumber`, `creditCardCVV`, `creditCardExpMonth/Year`, `creditCardZip`, `walletId`, `preferredPaymentId`, `last4Digits` | Stored in **plaintext** in legacy (its encryption call sites were commented out). Card data does not enter this system until there is a payments decision — likely tokenized via a processor, never raw PAN/CVV. |
+| `visits`, `recentVisit`, `recentText`, `callLog`, `callAfter` | Visit/outreach domain — migrates with its own collections. |
+| `referrals[]` (credit bookkeeping), `lastVideoSent`, `videoOneSent` | Campaign features, not patient identity. |
+| consent blobs (`treatmentConsent*`, `liposhotConsent*`, `ozempicWaiver*`, `testimonialConsent`) | Consent management is its own module with signature handling; a free-string signature column is not it. |
+| `isAtHome` | Derived from `office` (`… Home` suffix) — derived data is computed, not stored twice. |
+| `preferredContactTime`, `cutoffDate`, `programPrice`, `weight` | Defined in the legacy form group but never rendered to users (dead fields), or programmatically patched only. |
+| `dob` | Derived from `dobStr` (see above). |
+

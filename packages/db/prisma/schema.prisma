@@ -24,8 +24,35 @@ datasource db {
   provider = "postgresql"
 }
 
+// Enumerations the legacy schema itself enforced — safe as native PG enums.
+// The pick-list fields the legacy schema left as free strings (office,
+// referralSource, programType) stay String here so imported historical values
+// survive; the *inputs* constrain them to the current lists
+// (@fastehr/contracts).
+
+enum PatientGender {
+  male
+  female
+
+  @@map("patient_gender")
+}
+
+enum PatientLanguage {
+  english
+  spanish
+
+  @@map("patient_language")
+}
+
+enum PatientStatus {
+  active
+  inactive
+
+  @@map("patient_status")
+}
+
 model Patient {
-  id        String   @id @default(uuid())
+  id        String @id @default(uuid())
   firstName String
   lastName  String
   // `@db.Date` is a calendar date with no time and no zone, which is what a
@@ -33,13 +60,51 @@ model Patient {
   // the mapper converts it to the `YYYY-MM-DD` string the contract declares.
   // That conversion is the boundary ADR 3 describes, made concrete.
   dateOfBirth DateTime @db.Date
+
+  // Demographics from the legacy patient form. Required on the form but
+  // nullable here: records imported from the legacy collection predate the
+  // form's validators and may lack any of them.
+  gender        PatientGender?
+  heightInches  Float?
+  healthyWeight Float?
+  language      PatientLanguage?
+  office        String?
+
   // Optional contact details. Stored normalized (lowercase email, ten bare
   // digits) — `createPatientInput` in @fastehr/contracts is the single place
   // that normalization is defined.
-  email     String?
-  phone     String?
-  createdAt DateTime @default(now())
+  email String?
+  phone String?
+  // Legacy `phone.permission` — the follow-up consent flag the call lists key on.
+  phoneFollowUpAllowed Boolean @default(true)
 
+  addressStreet String?
+  addressCity   String?
+  addressState  String?
+  addressZip    String?
+
+  // Referral provenance. The self-relation replaces the legacy `referredByPt`
+  // ObjectId; the legacy referral-credit bookkeeping (`referrals[].used`) is a
+  // campaign feature and deliberately not modelled.
+  referralSource      String?
+  referredByPatientId String?
+  referredByPatient   Patient?  @relation("PatientReferrals", fields: [referredByPatientId], references: [id])
+  referrals           Patient[] @relation("PatientReferrals")
+
+  // Legacy `hx` — current medications and pertinent history, free text.
+  historyNotes String?
+  programType  String?
+
+  status PatientStatus @default(active)
+
+  // The Mongo `_id` bridge for the patient collection import
+  // (docs/legacy-data-mapping.md ground rules) — same role as User.legacyId.
+  legacyId  String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  // The legacy compound index, for the roster search's exact name matches.
+  @@index([lastName, firstName, dateOfBirth])
   @@map("patients")
 }
 

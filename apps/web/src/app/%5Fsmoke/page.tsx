@@ -31,8 +31,23 @@ export default async function SmokePage() {
     firstName: 'Ada',
     lastName: 'Lovelace',
     dateOfBirth: '1815-12-10',
+    gender: null,
+    heightInches: null,
+    healthyWeight: null,
+    language: null,
+    office: null,
     email: null,
     phone: null,
+    phoneFollowUpAllowed: true,
+    addressStreet: null,
+    addressCity: null,
+    addressState: null,
+    addressZip: null,
+    referralSource: null,
+    referredByPatientId: null,
+    historyNotes: null,
+    programType: null,
+    status: 'active',
   })
 
   return (
