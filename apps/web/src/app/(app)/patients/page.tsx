@@ -163,7 +163,6 @@ export default function PatientsPage() {
                   <SelectItem value="inactive">Inactive</SelectItem>
                 </SelectContent>
               </Select>
-              <FieldDescription>Combines with the search.</FieldDescription>
             </Field>
             {/* Mirrors a Field's label-then-control rhythm (gap-2, leading-snug
                 label) so the h-8 buttons sit exactly on the inputs' row. */}
