@@ -8,6 +8,7 @@ import {
 import { createAuthAdapter } from '@fastehr/db'
 import { betterAuth, type BetterAuthOptions } from 'better-auth'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
+import { getSessionCookie } from 'better-auth/cookies'
 import { hashPassword, verifyPassword } from 'better-auth/crypto'
 import type { Actor } from './context.ts'
 import { verifyLegacyPassword } from './legacy-password.ts'
@@ -181,6 +182,15 @@ export function getAuth(): ReturnType<typeof betterAuth> {
  * a request — holds unchanged when the real per-site sets arrive.
  */
 export async function actorFromHeaders(headers: Headers): Promise<Actor | null> {
+  // No session cookie means anonymous, and knowing that needs no secret. The
+  // short-circuit keeps the whole architecture's env rule intact — auth
+  // configuration is validated at first *use*, and an anonymous request never
+  // uses it. Concretely: CI's smoke run (no environment at all, ADR 24)
+  // renders /_smoke through the RSC caller, which resolves an actor for every
+  // in-process call; without this, that render demands BETTER_AUTH_SECRET to
+  // conclude "nobody is signed in".
+  if (getSessionCookie(new Request('http://internal', { headers })) === null) return null
+
   const result = await getAuth().api.getSession({ headers })
   if (result === null) return null
 
