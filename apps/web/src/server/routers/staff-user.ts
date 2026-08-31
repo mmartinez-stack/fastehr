@@ -1,5 +1,6 @@
 import {
   createStaffUserInput,
+  searchStaffUsersInput,
   setStaffUserActiveInput,
   updateStaffUserInput,
 } from '@fastehr/contracts'
@@ -20,6 +21,11 @@ import { router } from '../trpc.ts'
  */
 export const staffUserRouter = router({
   list: adminProcedure.query(({ ctx }) => ctx.db.staffUsers.list()),
+
+  /** The single-input search (ADR 27's pattern): `@` means email, else name. */
+  search: adminProcedure
+    .input(searchStaffUsersInput)
+    .query(({ ctx, input }) => ctx.db.staffUsers.search(input)),
 
   create: adminProcedure.input(createStaffUserInput).mutation(async ({ ctx, input }) => {
     try {

@@ -15,7 +15,7 @@ export default async function UsersPage() {
   if (gate.status === 'forbidden') {
     return (
       <div className="py-16 text-center">
-        <h1 className="text-lg font-semibold">403 — forbidden</h1>
+        <h1 className="text-lg font-semibold">403: forbidden</h1>
         <p className="text-sm text-muted-foreground">User administration requires the admin role.</p>
       </div>
     )

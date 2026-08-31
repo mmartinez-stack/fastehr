@@ -54,3 +54,26 @@ export const setStaffUserActiveInput = z.object({
 })
 
 export type SetStaffUserActiveInput = z.infer<typeof setStaffUserActiveInput>
+
+/**
+ * The Users screen search — the roster's single-input pattern (ADR 27)
+ * applied to staff: the format decides the field. An `@` anywhere means
+ * email, anything else is a name. Both match by substring, case-insensitive
+ * (unlike the patient roster's exact legacy semantics — staff search has no
+ * legacy behavior to preserve, and an admin scanning a 30-row list wants
+ * "gar" to find Garcia).
+ */
+export const searchStaffUsersInput = z.object({
+  query: z
+    .string()
+    .trim()
+    .min(2)
+    .max(150)
+    .transform((value) =>
+      value.includes('@')
+        ? { kind: 'email' as const, email: value.toLowerCase() }
+        : { kind: 'name' as const, name: value },
+    ),
+})
+
+export type SearchStaffUsersInput = z.infer<typeof searchStaffUsersInput>

@@ -19,8 +19,8 @@ const JUNE: ReturnType<Db['staffUsers']['list']> extends Promise<Array<infer U>>
   createdAt: '2020-01-15T00:00:00.000Z',
 }
 
-const ADMIN: Actor = { id: 'admin-1', roles: ['admin'], offices: ['Downtown'] }
-const PROVIDER: Actor = { id: 'prov-1', roles: ['provider'], offices: ['Downtown'] }
+const ADMIN: Actor = { id: 'admin-1', roles: ['admin'], offices: ['Sylmar'] }
+const PROVIDER: Actor = { id: 'prov-1', roles: ['provider'], offices: ['Sylmar'] }
 
 function fakeDb(overrides: Partial<Db['staffUsers']> = {}): Db {
   return {
@@ -42,6 +42,7 @@ function fakeDb(overrides: Partial<Db['staffUsers']> = {}): Db {
     },
     staffUsers: {
       list: async () => [JUNE],
+      search: async () => [JUNE],
       create: async () => JUNE,
       update: async () => JUNE,
       setActive: async () => JUNE,
@@ -85,6 +86,35 @@ describe('staff-user router authorization', () => {
   it('admits an admin', async () => {
     const caller = callerWith(fakeDb())
     expect(await caller.staffUsers.list()).toEqual([JUNE])
+  })
+})
+
+describe('search', () => {
+  it('dispatches on format: an @ means email, anything else is a name', async () => {
+    const search = vi.fn(async () => [JUNE])
+    const caller = callerWith(fakeDb({ search }))
+
+    await caller.staffUsers.search({ query: ' June@Example.com ' })
+    expect(search).toHaveBeenCalledWith({ query: { kind: 'email', email: 'june@example.com' } })
+
+    await caller.staffUsers.search({ query: 'June' })
+    expect(search).toHaveBeenCalledWith({ query: { kind: 'name', name: 'June' } })
+  })
+
+  it('rejects a one-character query before the repository', async () => {
+    const search = vi.fn(async () => [])
+    const caller = callerWith(fakeDb({ search }))
+
+    await expect(caller.staffUsers.search({ query: 'J' })).rejects.toThrow()
+    expect(search).not.toHaveBeenCalled()
+  })
+
+  it('is admin-gated like the rest of the router', async () => {
+    const search = vi.fn(async () => [JUNE])
+    const caller = callerWith(fakeDb({ search }), PROVIDER)
+
+    await expect(caller.staffUsers.search({ query: 'June' })).rejects.toThrow('FORBIDDEN')
+    expect(search).not.toHaveBeenCalled()
   })
 })
 

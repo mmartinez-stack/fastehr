@@ -62,6 +62,19 @@ describe('staff-user repository', () => {
     ])
   })
 
+  it('searches by name or email substring, case-insensitively', async () => {
+    await seed('maria.garcia@example.com', { name: 'Maria Garcia' })
+    await seed('june.osei@example.com', { name: 'June Osei' })
+
+    const byName = await db.staffUsers.search({ query: { kind: 'name', name: 'gar' } })
+    expect(byName.map((u) => u.name)).toEqual(['Maria Garcia'])
+
+    const byEmail = await db.staffUsers.search({ query: { kind: 'email', email: 'june.osei@' } })
+    expect(byEmail.map((u) => u.email)).toEqual(['june.osei@example.com'])
+
+    expect(await db.staffUsers.search({ query: { kind: 'name', name: 'nobody' } })).toEqual([])
+  })
+
   it('creates without any credential and surfaces a duplicate email by name', async () => {
     const created = await db.staffUsers.create({
       name: 'New Person',

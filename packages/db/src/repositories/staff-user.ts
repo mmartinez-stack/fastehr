@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type {
   CreateStaffUserInput,
+  SearchStaffUsersInput,
   SetStaffUserActiveInput,
   StaffUser,
   UpdateStaffUserInput,
@@ -17,6 +18,8 @@ import { toStaffUser } from '../mappers/staff-user.ts'
  */
 export interface StaffUserRepository {
   list(): Promise<StaffUser[]>
+  /** The single-input search: substring on name or email, per the contract's dispatch. */
+  search(input: SearchStaffUsersInput): Promise<StaffUser[]>
   create(input: CreateStaffUserInput): Promise<StaffUser>
   update(input: UpdateStaffUserInput): Promise<StaffUser | null>
   setActive(input: SetStaffUserActiveInput): Promise<StaffUser | null>
@@ -45,6 +48,19 @@ export function createStaffUserRepository(getClient: () => PrismaClient): StaffU
   return {
     async list() {
       const rows = await getClient().user.findMany({
+        orderBy: [{ name: 'asc' }],
+        include: { accounts: CREDENTIAL_FILTER },
+      })
+      return rows.map((row) => toStaffUser(row, row.accounts.length > 0))
+    },
+
+    async search(input) {
+      const query = input.query
+      const rows = await getClient().user.findMany({
+        where:
+          query.kind === 'email'
+            ? { email: { contains: query.email, mode: 'insensitive' } }
+            : { name: { contains: query.name, mode: 'insensitive' } },
         orderBy: [{ name: 'asc' }],
         include: { accounts: CREDENTIAL_FILTER },
       })
