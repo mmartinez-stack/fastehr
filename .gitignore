@@ -102,3 +102,5 @@ Thumbs.db
 # Legacy NDJSON exports and their migration reports never enter history.
 *.ndjson
 *.ndjson.report.json
+
+packages/legacy/*
