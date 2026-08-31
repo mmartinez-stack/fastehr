@@ -7,7 +7,22 @@ import { Input } from "@/components/ui/input"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Card, CardContent } from "@/components/ui/card"
 import { HeartPulseIcon } from "lucide-react"
+import { PasswordInput } from "@/components/password-input"
 import { authClient } from "@/lib/auth-client"
+
+/**
+ * Where to land after sign-in. The proxy records the page an anonymous visitor
+ * asked for as `?next=`; anything that is not a same-origin path is discarded —
+ * a query parameter is attacker-writable, and "/\evil" or "//evil" would leave
+ * the origin. Read at submit time from `location` rather than through
+ * `useSearchParams`, which would force a Suspense boundary for one string.
+ */
+function nextPath(): string | null {
+  const value = new URLSearchParams(window.location.search).get("next")
+  if (value === null) return null
+  if (!value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return null
+  return value
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -36,7 +51,7 @@ export default function LoginPage() {
     const mustChangePassword =
       (data?.user as Record<string, unknown> | undefined)?.mustChangePassword === true
 
-    router.push(mustChangePassword ? "/change-password" : "/queues")
+    router.push(mustChangePassword ? "/change-password" : (nextPath() ?? "/queues"))
     router.refresh()
   }
 
@@ -63,10 +78,9 @@ export default function LoginPage() {
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="password">Password</FieldLabel>
-                  <Input
+                  <PasswordInput
                     id="password"
                     name="password"
-                    type="password"
                     autoComplete="current-password"
                     required
                   />
