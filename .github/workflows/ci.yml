@@ -113,7 +113,10 @@ jobs:
       # Applies the committed migrations with `migrate deploy` before running,
       # so a migration that is committed but broken fails here rather than at a
       # deployment.
+      # Serialized: the db and web suites share one database and truncate
+      # tables between cases, so running them in parallel is a race — the db
+      # suite's TRUNCATE ... CASCADE deletes sessions the auth suite is using.
       - name: Integration tests
-        run: pnpm turbo run test:integration
+        run: pnpm turbo run test:integration --concurrency=1
         env:
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fastehr_test

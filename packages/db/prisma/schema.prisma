@@ -24,8 +24,35 @@ datasource db {
   provider = "postgresql"
 }
 
+// Enumerations the legacy schema itself enforced — safe as native PG enums.
+// The pick-list fields the legacy schema left as free strings (office,
+// referralSource, programType) stay String here so imported historical values
+// survive; the *inputs* constrain them to the current lists
+// (@fastehr/contracts).
+
+enum PatientGender {
+  male
+  female
+
+  @@map("patient_gender")
+}
+
+enum PatientLanguage {
+  english
+  spanish
+
+  @@map("patient_language")
+}
+
+enum PatientStatus {
+  active
+  inactive
+
+  @@map("patient_status")
+}
+
 model Patient {
-  id        String   @id @default(uuid())
+  id        String @id @default(uuid())
   firstName String
   lastName  String
   // `@db.Date` is a calendar date with no time and no zone, which is what a
@@ -33,7 +60,154 @@ model Patient {
   // the mapper converts it to the `YYYY-MM-DD` string the contract declares.
   // That conversion is the boundary ADR 3 describes, made concrete.
   dateOfBirth DateTime @db.Date
-  createdAt   DateTime @default(now())
 
+  // Demographics from the legacy patient form. Required on the form but
+  // nullable here: records imported from the legacy collection predate the
+  // form's validators and may lack any of them.
+  gender        PatientGender?
+  heightInches  Float?
+  healthyWeight Float?
+  language      PatientLanguage?
+  office        String?
+
+  // Optional contact details. Stored normalized (lowercase email, ten bare
+  // digits) — `createPatientInput` in @fastehr/contracts is the single place
+  // that normalization is defined.
+  email String?
+  phone String?
+  // Legacy `phone.permission` — the follow-up consent flag the call lists key on.
+  phoneFollowUpAllowed Boolean @default(true)
+
+  addressStreet String?
+  addressCity   String?
+  addressState  String?
+  addressZip    String?
+
+  // Referral provenance. The self-relation replaces the legacy `referredByPt`
+  // ObjectId; the legacy referral-credit bookkeeping (`referrals[].used`) is a
+  // campaign feature and deliberately not modelled.
+  referralSource      String?
+  referredByPatientId String?
+  referredByPatient   Patient?  @relation("PatientReferrals", fields: [referredByPatientId], references: [id])
+  referrals           Patient[] @relation("PatientReferrals")
+
+  // Legacy `hx` — current medications and pertinent history, free text.
+  historyNotes String?
+  programType  String?
+
+  status PatientStatus @default(active)
+
+  // The provisional credit-card block (contracts § patient header comment):
+  // the fields the legacy form rendered, carried for billing continuity until
+  // the tokenized-processor decision replaces them. Never a CVV column.
+  creditCardNumber   String?
+  creditCardExpMonth String?
+  creditCardExpYear  String?
+  creditCardZip      String?
+
+  // The Mongo `_id` bridge for the patient collection import
+  // (docs/legacy-data-mapping.md ground rules) — same role as User.legacyId.
+  legacyId  String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  // The legacy compound index, for the roster search's exact name matches.
+  @@index([lastName, firstName, dateOfBirth])
   @@map("patients")
+}
+
+// --- Authentication (Better Auth core tables) ---
+//
+// Shapes derived from the *installed* better-auth@1.7.1 via `getAuthTables()`
+// rather than from its docs — 1.7 added `account.issuer` (a synthetic
+// "local:credential" for password accounts), which docs-era schemas lack.
+// Reviewed by hand; the extra columns on User are ours:
+//
+//   role                the whole authorization vocabulary for now: a single
+//                       coarse role, constrained by a native PG enum so the
+//                       database refuses an invalid value no matter who writes
+//   legacyId            the Mongo `_id` bridge. Every later collection
+//                       migration (visits, appointments, prefrences) resolves
+//                       legacy user references through this column
+//   legacyRoleRaw       the original `group` value, kept for auditing the
+//                       role mapping after cutover
+//   isActive            legacy `isActive`; a deactivated account is refused at
+//                       session verification, not deleted
+//   mustChangePassword  set by the temp-credential issuance path; sign-in
+//                       succeeds but every guard refuses until the password
+//                       is changed
+
+enum StaffRole {
+  admin
+  provider
+  frontdesk
+
+  @@map("staff_role")
+}
+
+model User {
+  id                 String    @id @default(uuid())
+  name               String
+  email              String    @unique
+  emailVerified      Boolean   @default(false)
+  image              String?
+  role               StaffRole @default(frontdesk)
+  legacyId           String?   @unique
+  legacyRoleRaw      String?
+  isActive           Boolean   @default(true)
+  mustChangePassword Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  sessions           Session[]
+  accounts           Account[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id @default(uuid())
+  issuer                String
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Verification {
+  id         String   @id @default(uuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verifications")
 }

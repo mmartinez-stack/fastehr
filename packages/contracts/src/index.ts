@@ -1,20 +1,71 @@
-import { z } from 'zod'
-
-export { databaseUrlSchema, serverEnvSchema, type ServerEnv } from './env.ts'
+export {
+  databaseUrlSchema,
+  betterAuthSecretSchema,
+  betterAuthUrlSchema,
+  serverEnvSchema,
+  type ServerEnv,
+} from './env.ts'
+export { staffRoleSchema, STAFF_ROLES, type StaffRole } from './staff-role.ts'
+export {
+  staffUserSchema,
+  createStaffUserInput,
+  updateStaffUserInput,
+  setStaffUserActiveInput,
+  searchStaffUsersInput,
+  type StaffUser,
+  type CreateStaffUserInput,
+  type UpdateStaffUserInput,
+  type SetStaffUserActiveInput,
+  type SearchStaffUsersInput,
+} from './staff-user.ts'
 export { describeValidationFailure, type ValidationFailure } from './errors.ts'
 export { officeSchema, officeScopedInput, type Office } from './office.ts'
-
-/**
- * Seed contract. Real schemas arrive with the domain tickets — this exists so
- * the package is importable and its inferred types flow across the workspace.
- *
- * `contracts` is the only package with a direct Zod dependency (ADR 5).
- */
-export const patientSchema = z.object({
-  id: z.uuid(),
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
-  dateOfBirth: z.iso.date(),
-})
-
-export type Patient = z.infer<typeof patientSchema>
+export {
+  patientSchema,
+  createPatientInput,
+  updatePatientInput,
+  setPatientStatusInput,
+  sendPatientIntakeInput,
+  searchPatientsInput,
+  searchPatientsByNameInput,
+  interpretPatientSearch,
+  patientGenderSchema,
+  patientLanguageSchema,
+  patientStatusSchema,
+  patientOfficeSchema,
+  patientReferralSourceSchema,
+  patientProgramTypeSchema,
+  PATIENT_GENDERS,
+  PATIENT_LANGUAGES,
+  PATIENT_STATUSES,
+  PATIENT_OFFICES,
+  PATIENT_REFERRAL_SOURCES,
+  PATIENT_PROGRAM_TYPES,
+  CREDIT_CARD_EXP_MONTHS,
+  creditCardExpMonthSchema,
+  REFERRED_BY_PATIENT_SOURCE,
+  type Patient,
+  type CreatePatientInput,
+  type UpdatePatientInput,
+  type SetPatientStatusInput,
+  type SendPatientIntakeInput,
+  type SearchPatientsInput,
+  type SearchPatientsByNameInput,
+  type PatientSearchInterpretation,
+  type PatientSearchProblem,
+  type PatientGender,
+  type PatientLanguage,
+  type PatientStatus,
+  type PatientOffice,
+  type PatientReferralSource,
+  type PatientProgramType,
+  type CreditCardExpMonth,
+} from './patient.ts'
+export {
+  LEGACY_CREDENTIAL_PREFIX,
+  legacyCredentialSchema,
+  serializeLegacyCredential,
+  parseLegacyCredential,
+  isLegacyCredential,
+  type LegacyCredential,
+} from './legacy-credential.ts'

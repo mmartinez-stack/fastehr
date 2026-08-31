@@ -3,8 +3,7 @@ import 'server-only'
 import { createHydrationHelpers } from '@trpc/react-query/rsc'
 import { headers } from 'next/headers'
 import { cache } from 'react'
-import { appRouter, createContext, type AppRouter } from '@/server'
-import { actorFromCookieHeader } from './actor.ts'
+import { actorFromHeaders, appRouter, createContext, type AppRouter } from '@/server'
 import { makeQueryClient } from './query-client.ts'
 
 /**
@@ -39,7 +38,7 @@ export const getQueryClient = cache(makeQueryClient)
 
 const caller = appRouter.createCaller(async () => {
   const requestHeaders = await headers()
-  return createContext({ actor: actorFromCookieHeader(requestHeaders.get('cookie')) })
+  return createContext({ actor: await actorFromHeaders(requestHeaders) })
 })
 
 /**

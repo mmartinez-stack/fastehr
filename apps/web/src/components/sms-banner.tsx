@@ -21,7 +21,7 @@ export function SmsBanner() {
           href="/sms/s1"
           className="flex-1 truncate font-medium text-accent-foreground hover:underline"
         >
-          New text from Maria Gonzalez — tap to open conversation
+          New text from Maria Gonzalez. Tap to open conversation
         </Link>
         <Button
           variant="ghost"

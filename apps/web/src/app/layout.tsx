@@ -16,7 +16,7 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
 export const metadata: Metadata = {
-  title: 'Fastehr — Clinic EHR',
+  title: 'Fastehr - Clinic EHR',
   description:
     'Fastehr clinical EHR: patient queues, scheduling, charting, refills, SMS, and reporting for weight-management clinics.',
 }

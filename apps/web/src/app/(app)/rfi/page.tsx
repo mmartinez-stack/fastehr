@@ -44,7 +44,7 @@ export default function RfiPage() {
         actions={<Button size="sm">Add Lead</Button>}
       />
 
-      <div className="mt-6 flex max-w-sm items-center gap-2">
+      <div className="mt-6 flex items-center gap-2">
         <div className="relative flex-1">
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input

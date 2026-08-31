@@ -25,6 +25,29 @@ export function toPatient(row: PatientRow): Patient {
     firstName: row.firstName,
     lastName: row.lastName,
     dateOfBirth: toCalendarDate(row.dateOfBirth),
+    gender: row.gender,
+    heightInches: row.heightInches,
+    healthyWeight: row.healthyWeight,
+    language: row.language,
+    office: row.office,
+    email: row.email,
+    phone: row.phone,
+    phoneFollowUpAllowed: row.phoneFollowUpAllowed,
+    addressStreet: row.addressStreet,
+    addressCity: row.addressCity,
+    addressState: row.addressState,
+    addressZip: row.addressZip,
+    referralSource: row.referralSource,
+    referredByPatientId: row.referredByPatientId,
+    historyNotes: row.historyNotes,
+    programType: row.programType,
+    status: row.status,
+    creditCardNumber: row.creditCardNumber,
+    creditCardExpMonth: row.creditCardExpMonth,
+    creditCardExpYear: row.creditCardExpYear,
+    creditCardZip: row.creditCardZip,
+    // `legacyId` stays behind on purpose (rule 1 above) — it is an import
+    // bookkeeping column, not part of the patient the application sees.
   })
 }
 

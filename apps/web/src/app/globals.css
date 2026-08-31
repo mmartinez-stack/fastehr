@@ -24,7 +24,9 @@
   --accent-foreground: oklch(0.42 0.07 195);
   --destructive: oklch(0.58 0.22 27);
   --border: oklch(0.925 0.006 258);
-  --input: oklch(0.925 0.006 258);
+  /* Form-control borders sit darker than --border on purpose: fields must
+     read as fields at a glance, while card and divider lines stay quiet. */
+  --input: oklch(0.71 0.01 258);
   --ring: oklch(0.52 0.088 195);
   --chart-1: oklch(0.52 0.088 195);
   --chart-2: oklch(0.6 0.13 240);
@@ -70,7 +72,8 @@
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
+  /* Same intent as the light theme: field borders clearly above dividers. */
+  --input: oklch(1 0 0 / 35%);
   --ring: oklch(0.556 0 0);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
@@ -106,7 +109,8 @@
     --accent-foreground: oklch(0.985 0 0);
     --destructive: oklch(0.704 0.191 22.216);
     --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
+    /* Same intent as the light theme: field borders clearly above dividers. */
+    --input: oklch(1 0 0 / 35%);
     --ring: oklch(0.556 0 0);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
@@ -121,6 +125,24 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+  }
+}
+
+/*
+ * Zebra striping on every table view — a stated design decision (CLAUDE.md,
+ * UI defaults). It lives here, against the slot attributes, because
+ * src/components/ui/table.tsx is shadcn CLI output that must stay
+ * regenerable (ADR 20): the next `shadcn add table` keeps the stripes.
+ *
+ * In the components layer so the row's own utilities stay on top: hover is
+ * muted/50 and selection is full muted. The stripe mixes from *foreground*
+ * rather than muted so it reads clearly in both themes — a muted-based mix
+ * topped out too close to the page background — while hovering an even row
+ * still shifts it visibly toward muted/50.
+ */
+@layer components {
+  [data-slot='table-body'] > [data-slot='table-row']:nth-child(even) {
+    background-color: color-mix(in oklab, var(--foreground) 6%, transparent);
   }
 }
 

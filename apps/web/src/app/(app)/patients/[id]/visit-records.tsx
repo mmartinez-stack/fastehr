@@ -42,10 +42,10 @@ export function VisitRecords({
               <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
                 <span className="font-semibold">On: {fmtDateLong(v.date)}</span>
                 <span className="text-muted-foreground">
-                  Weight: <span className="font-medium text-foreground">{v.weight ? `${v.weight} lbs` : "—"}</span>
+                  Weight: <span className="font-medium text-foreground">{v.weight ? `${v.weight} lbs` : "-"}</span>
                 </span>
                 <span className="text-muted-foreground">
-                  BMI: <span className="font-medium text-foreground">{b || "—"}</span>
+                  BMI: <span className="font-medium text-foreground">{b || "-"}</span>
                 </span>
               </div>
               <div className="flex items-center gap-2">

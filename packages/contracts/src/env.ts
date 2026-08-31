@@ -31,9 +31,24 @@ export const databaseUrlSchema = z
     'must be a postgresql:// connection string',
   )
 
+/**
+ * The Better Auth signing secret. Sessions and password-reset tokens are only
+ * as strong as this value, so a length floor is the one property worth
+ * enforcing here — emptiness or a short placeholder fails by name instead of
+ * silently signing cookies with `"changeme"`.
+ */
+export const betterAuthSecretSchema = z
+  .string()
+  .min(32, 'must be at least 32 characters — generate with `openssl rand -base64 32`')
+
+/** The absolute origin the auth server trusts for its own endpoints. */
+export const betterAuthUrlSchema = z.url()
+
 /** Everything the server side of the workspace requires to run. */
 export const serverEnvSchema = z.object({
   DATABASE_URL: databaseUrlSchema,
+  BETTER_AUTH_SECRET: betterAuthSecretSchema,
+  BETTER_AUTH_URL: betterAuthUrlSchema,
 })
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>

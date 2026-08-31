@@ -7,15 +7,52 @@ import { Input } from "@/components/ui/input"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Card, CardContent } from "@/components/ui/card"
 import { HeartPulseIcon } from "lucide-react"
+import { PasswordInput } from "@/components/password-input"
+import { authClient } from "@/lib/auth-client"
+
+/**
+ * Where to land after sign-in. The proxy records the page an anonymous visitor
+ * asked for as `?next=`; anything that is not a same-origin path is discarded —
+ * a query parameter is attacker-writable, and "/\evil" or "//evil" would leave
+ * the origin. Read at submit time from `location` rather than through
+ * `useSearchParams`, which would force a Suspense boundary for one string.
+ */
+function nextPath(): string | null {
+  const value = new URLSearchParams(window.location.search).get("next")
+  if (value === null) return null
+  if (!value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return null
+  return value
+}
 
 export default function LoginPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [failed, setFailed] = useState(false)
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setLoading(true)
-    setTimeout(() => router.push("/queues"), 600)
+    setFailed(false)
+
+    const form = new FormData(e.currentTarget)
+    const { data, error } = await authClient.signIn.email({
+      email: String(form.get("email") ?? ""),
+      password: String(form.get("password") ?? ""),
+    })
+
+    if (error) {
+      // One message for every failure. Distinguishing "no such user" from
+      // "wrong password" would confirm which staff emails exist.
+      setFailed(true)
+      setLoading(false)
+      return
+    }
+
+    const mustChangePassword =
+      (data?.user as Record<string, unknown> | undefined)?.mustChangePassword === true
+
+    router.push(mustChangePassword ? "/change-password" : (nextPath() ?? "/queues"))
+    router.refresh()
   }
 
   return (
@@ -37,18 +74,22 @@ export default function LoginPage() {
               <FieldGroup>
                 <Field>
                   <FieldLabel htmlFor="email">Email</FieldLabel>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@icardio.com"
-                    defaultValue="k.nguyen@icardio.com"
-                    required
-                  />
+                  <Input id="email" name="email" type="email" autoComplete="email" required />
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="password">Password</FieldLabel>
-                  <Input id="password" type="password" defaultValue="password" required />
+                  <PasswordInput
+                    id="password"
+                    name="password"
+                    autoComplete="current-password"
+                    required
+                  />
                 </Field>
+                {failed ? (
+                  <p role="alert" className="text-sm text-destructive">
+                    Invalid email or password.
+                  </p>
+                ) : null}
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Signing in..." : "Sign in"}
                 </Button>
@@ -56,10 +97,6 @@ export default function LoginPage() {
             </form>
           </CardContent>
         </Card>
-
-        <p className="text-center text-xs text-muted-foreground">
-          Demo environment. Use any credentials to continue.
-        </p>
       </div>
     </main>
   )

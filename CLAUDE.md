@@ -37,19 +37,22 @@ Two tiers. `test` is unit-only and **must stay runnable on a fresh clone with no
 environment at all** — that property is what CI's `verify` job depends on.
 
 ```bash
-pnpm turbo run test                # unit; no database, no env
-pnpm turbo run test:integration    # real PostgreSQL, real migrations; needs TEST_DATABASE_URL
+pnpm turbo run test                              # unit; no database, no env
+pnpm turbo run test:integration --concurrency=1  # real PostgreSQL, real migrations; needs TEST_DATABASE_URL
 ```
 
 Integration tests are excluded from `test` by filename (`*.integration.test.ts`)
 and by `packages/db/vitest.config.ts`. They refuse to fall back to
-`DATABASE_URL` because they truncate tables between cases:
+`DATABASE_URL` because they truncate tables between cases — which is also why
+`--concurrency=1` is not optional: the packages share one database, and run in
+parallel the db suite's `TRUNCATE … CASCADE` deletes rows the web auth suite is
+using mid-test.
 
 ```bash
 docker run -d --rm -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=fastehr_test \
   -p 55432:5432 postgres:17-alpine
 TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:55432/fastehr_test \
-  pnpm turbo run test:integration
+  pnpm turbo run test:integration --concurrency=1
 ```
 
 Both vitest configs pin `TZ=America/Los_Angeles` deliberately — a `@db.Date`
@@ -181,11 +184,14 @@ same reason (ADR 19).
 
 ## Current state
 
-`apps/web` still carries the v0 mockup: routes under `src/app/(app)/` read
-`src/lib/mock-data.ts`, and no database is wired to the UI yet. `/_smoke` is the
-one route exercising the real seam end to end. `noUncheckedIndexedAccess` is on
-everywhere with no exceptions — the mockup's fixture lookups go through the
-checked `at()` helper rather than `!` (ADR 21).
+`apps/web` still carries most of the v0 mockup: routes under `src/app/(app)/`
+read `src/lib/mock-data.ts`, except the patient roster, `/patients/new`, and
+`/patients/[id]/edit`, which are wired end to end (legacy-parity form and
+search — docs/legacy-data-mapping.md § patients; the `/patients/[id]` detail
+view is still mockup). Auth is real (Better Auth; migrated legacy credentials
+verify per ADR 26). `noUncheckedIndexedAccess` is on everywhere with no
+exceptions — the mockup's fixture lookups go through the checked `at()` helper
+rather than `!` (ADR 21).
 
 ## Conventions
 
@@ -198,6 +204,18 @@ Full detail in `CONTRIBUTING.md`.
   `Co-Authored-By`), no scope parens, present tense, no trailing period.
   Types: `feat` `fix` `refactor` `docs` `chore` `test`.
 - Commit the work, not the session: one commit per coherent change.
+- **UI defaults**: content and components take the full width available — no
+  per-page `max-w-*` caps; the app shell's `max-w-[1800px]` in
+  `(app)/layout.tsx` is the only cap, and extra width is spent by gaining grid
+  columns at `3xl`, never by stretching fields or tables. Every table view is
+  zebra-striped — implemented once in `globals.css` against the table slot
+  attributes, never per-table. Row actions are inline buttons on the row,
+  never folded into a three-dot overflow menu. Required form fields are
+  marked with `*` after the label (the shared `RequiredMark` component);
+  optional fields carry no "Optional" text. No em dash (—) anywhere in
+  user-facing text — titles, labels, descriptions, messages, placeholders,
+  fixtures; use a period, comma, colon, or parentheses instead (a bare `-` is
+  the empty-cell placeholder in tables).
 - Add an ADR when a decision's reasoning would not survive someone asking "why
   is this like this?" — next free number, and a row in `docs/adr/README.md`.
   Superseding means a new file and a note on the old one, never a renumbering.

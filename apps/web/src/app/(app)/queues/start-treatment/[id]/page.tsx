@@ -36,7 +36,7 @@ export default async function StartTreatmentDetailPage({
   if (!submission) notFound()
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div>
       <Button
         variant="ghost"
         size="sm"

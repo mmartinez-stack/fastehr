@@ -2,166 +2,124 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { ArrowLeft, UserPlus } from "lucide-react"
+import { toast } from "sonner"
 
 import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Switch } from "@/components/ui/switch"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
-import { Separator } from "@/components/ui/separator"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { PageHeader } from "@/components/page-header"
-import { OFFICES } from "@/lib/mock-data"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  EMPTY_PATIENT_FORM,
+  PatientForm,
+} from "@/features/patients/patient-form"
+import { trpc } from "@/trpc/client"
+import { IntakeForm } from "./intake-form"
 
-const STATES = ["CA", "AZ", "NV", "TX", "FL"]
-const REFERRALS = ["Google", "Instagram", "Friend Referral", "Facebook", "Walk-in", "Yelp"]
-
-function SelectField({
-  label,
-  options,
-  placeholder,
-}: {
-  label: string
-  options: string[]
-  placeholder: string
-}) {
-  return (
-    <Field>
-      <FieldLabel>{label}</FieldLabel>
-      <Select>
-        <SelectTrigger className="w-full">
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((o) => (
-            <SelectItem key={o} value={o}>
-              {o}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </Field>
-  )
-}
-
+/**
+ * Create — two tabs, the legacy page's two jobs made explicit. "New patient"
+ * is the shared legacy-parity form (features/patients/patient-form.tsx, the
+ * reference implementation per docs/forms.md) wired to `patient.create`;
+ * "Send intake form" is the legacy SMS side panel (see intake-form.tsx). The
+ * page owns navigation: the back-guard dialog and the success redirect.
+ */
 export default function NewPatientPage() {
-  const [atHome, setAtHome] = React.useState(false)
+  const router = useRouter()
+  const utils = trpc.useUtils()
+  const [confirmingLeave, setConfirmingLeave] = React.useState(false)
+  const dirtyRef = React.useRef(false)
+
+  const createPatient = trpc.patient.create.useMutation({
+    onSuccess: (created) => {
+      void utils.patient.list.invalidate()
+      void utils.patient.recent.invalidate()
+      toast.success(`${created.firstName} ${created.lastName} added`)
+      router.push("/patients")
+    },
+  })
+
+  const guardLeave = (event: { preventDefault: () => void }) => {
+    if (dirtyRef.current && !createPatient.isSuccess) {
+      event.preventDefault()
+      setConfirmingLeave(true)
+    }
+  }
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div>
       <Button
         variant="ghost"
         size="sm"
         className="mb-4"
         nativeButton={false}
-        render={<Link href="/patients" />}
+        render={<Link href="/patients" onNavigate={guardLeave} />}
       >
         <ArrowLeft data-icon="inline-start" />
         Back to patients
       </Button>
 
-      <PageHeader title="New Patient" description="Create a new patient record." />
+      <PageHeader
+        title="New Patient"
+        description="Create a record directly, or text the person the self-service intake form."
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Patient intake</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <FieldGroup>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field>
-                <FieldLabel htmlFor="first">First name</FieldLabel>
-                <Input id="first" placeholder="First name" />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="last">Last name</FieldLabel>
-                <Input id="last" placeholder="Last name" />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="dob">Date of birth</FieldLabel>
-                <Input id="dob" type="date" />
-              </Field>
-              <SelectField label="Gender" options={["Female", "Male"]} placeholder="Select" />
-              <Field>
-                <FieldLabel htmlFor="height">Height</FieldLabel>
-                <Input id="height" placeholder={`5' 6"`} />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="phone">Phone</FieldLabel>
-                <Input id="phone" type="tel" placeholder="(951) 555-0000" />
-              </Field>
-              <Field className="sm:col-span-2">
-                <FieldLabel htmlFor="email">Email</FieldLabel>
-                <Input id="email" type="email" placeholder="patient@email.com" />
-              </Field>
-            </div>
+      <Tabs defaultValue="new" className="mt-6">
+        <TabsList>
+          <TabsTrigger value="new">New patient</TabsTrigger>
+          <TabsTrigger value="intake">Send intake form</TabsTrigger>
+        </TabsList>
 
-            <Separator />
+        <TabsContent value="new" className="mt-4">
+          <PatientForm
+            defaultValues={EMPTY_PATIENT_FORM}
+            submit={async (value) => {
+              await createPatient.mutateAsync(value)
+            }}
+            submitLabel={
+              <>
+                <UserPlus data-icon="inline-start" />
+                Create Patient
+              </>
+            }
+            submittingLabel="Creating…"
+            saved={createPatient.isSuccess}
+            onDirtyChange={(dirty) => {
+              dirtyRef.current = dirty
+            }}
+          />
+        </TabsContent>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field className="sm:col-span-2">
-                <FieldLabel htmlFor="street">Street address</FieldLabel>
-                <Input id="street" placeholder="123 Main St" />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="city">City</FieldLabel>
-                <Input id="city" placeholder="City" />
-              </Field>
-              <SelectField label="State" options={STATES} placeholder="State" />
-              <Field>
-                <FieldLabel htmlFor="zip">ZIP</FieldLabel>
-                <Input id="zip" placeholder="00000" />
-              </Field>
-              <SelectField label="Office" options={[...OFFICES]} placeholder="Select office" />
-              <SelectField label="Language" options={["English", "Spanish"]} placeholder="Select" />
-              <SelectField label="Referral source" options={REFERRALS} placeholder="Select" />
-            </div>
+        <TabsContent value="intake" className="mt-4">
+          <IntakeForm />
+        </TabsContent>
+      </Tabs>
 
-            <Separator />
-
-            <Field orientation="horizontal">
-              <FieldLabel htmlFor="athome">At Home program</FieldLabel>
-              <Switch id="athome" checked={atHome} onCheckedChange={setAtHome} />
-            </Field>
-            {atHome ? (
-              <SelectField
-                label="Program type"
-                options={["At-Home GLP-1", "At-Home Lipoden", "At-Home Maintenance"]}
-                placeholder="Select program"
-              />
-            ) : null}
-
-            <Field>
-              <FieldLabel htmlFor="history">Meds &amp; history</FieldLabel>
-              <Textarea
-                id="history"
-                rows={4}
-                placeholder="Current medications, allergies, and relevant history…"
-              />
-            </Field>
-          </FieldGroup>
-        </CardContent>
-        <CardFooter className="justify-end">
-          <Button>
-            <UserPlus data-icon="inline-start" />
-            Create Patient
-          </Button>
-        </CardFooter>
-      </Card>
+      <AlertDialog open={confirmingLeave} onOpenChange={setConfirmingLeave}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard this patient?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Nothing has been saved. What you entered will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => router.push("/patients")}>
+              Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

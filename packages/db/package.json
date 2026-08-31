@@ -13,12 +13,16 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
-    "test:integration": "vitest run -c vitest.integration.config.ts"
+    "test:integration": "vitest run -c vitest.integration.config.ts",
+    "issue-temp-password": "node scripts/issue-temp-password.ts",
+    "migrate-users": "node scripts/migrate-users.ts",
+    "migrate-patients": "node scripts/migrate-patients.ts"
   },
   "dependencies": {
     "@fastehr/contracts": "workspace:*",
     "@prisma/adapter-pg": "7.9.1",
-    "@prisma/client": "7.9.1"
+    "@prisma/client": "7.9.1",
+    "better-auth": "1.7.1"
   },
   "devDependencies": {
     "@fastehr/config": "workspace:*",

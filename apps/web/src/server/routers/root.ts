@@ -3,6 +3,7 @@ import { patientDisplayName } from '@fastehr/core'
 import { protectedProcedure, publicProcedure } from '../procedures.ts'
 import { router } from '../trpc.ts'
 import { patientRouter } from './patient.ts'
+import { staffUserRouter } from './staff-user.ts'
 
 /**
  * Root router — framework-agnostic. It knows nothing about Next.js, HTTP
@@ -17,6 +18,8 @@ export const appRouter = router({
   health: publicProcedure.query(() => ({ status: 'ok' as const })),
 
   patient: patientRouter,
+
+  staffUsers: staffUserRouter,
 
   patientDisplayName: protectedProcedure
     .input(patientSchema.pick({ firstName: true, lastName: true }))

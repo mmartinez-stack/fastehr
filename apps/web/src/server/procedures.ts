@@ -1,7 +1,7 @@
 import { officeScopedInput } from '@fastehr/contracts'
 import { TRPCError } from '@trpc/server'
 import { auditPhiAccess } from './middleware/audit.ts'
-import { requireAuth, requireRole } from './middleware/auth.ts'
+import { requireAdminRole, requireAuth, requireRole } from './middleware/auth.ts'
 import { publicProcedure } from './trpc.ts'
 
 /**
@@ -26,6 +26,13 @@ export const protectedProcedure = publicProcedure
   .use(auditPhiAccess)
   .use(requireAuth)
   .use(requireRole)
+
+/**
+ * Procedures reserved for administrators — currently the staff-account CRUD.
+ * Composed on top of the protected chain, so audit → authenticate → authorize
+ * still runs first and a refused probe still leaves its trace.
+ */
+export const adminProcedure = protectedProcedure.use(requireAdminRole)
 
 /**
  * Procedures that read or write for a single clinic site.

@@ -31,6 +31,27 @@ export default async function SmokePage() {
     firstName: 'Ada',
     lastName: 'Lovelace',
     dateOfBirth: '1815-12-10',
+    gender: null,
+    heightInches: null,
+    healthyWeight: null,
+    language: null,
+    office: null,
+    email: null,
+    phone: null,
+    phoneFollowUpAllowed: true,
+    addressStreet: null,
+    addressCity: null,
+    addressState: null,
+    addressZip: null,
+    referralSource: null,
+    referredByPatientId: null,
+    historyNotes: null,
+    programType: null,
+    status: 'active',
+    creditCardNumber: null,
+    creditCardExpMonth: null,
+    creditCardExpYear: null,
+    creditCardZip: null,
   })
 
   return (
@@ -49,11 +70,11 @@ export default async function SmokePage() {
             </Badge>
           </li>
           <li className="flex items-center justify-between">
-            <span>tRPC — server caller</span>
+            <span>tRPC: server caller</span>
             <Badge>{`in-process: ${health.status}`}</Badge>
           </li>
           <li className="flex items-center justify-between">
-            <span>tRPC — client, from prefetch</span>
+            <span>tRPC: client, from prefetch</span>
             <HealthStatus />
           </li>
         </ul>

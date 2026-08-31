@@ -29,7 +29,7 @@ const NOTIFICATIONS = [
 
 export default function SettingsPage() {
   return (
-    <div className="mx-auto w-full max-w-4xl">
+    <div>
       <PageHeader title="Settings" description="Configure your clinic, macros, and notifications." />
 
       <Tabs defaultValue="clinic" className="mt-6">
