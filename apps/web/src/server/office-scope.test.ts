@@ -43,23 +43,23 @@ afterEach(() => {
 
 describe('office scoping', () => {
   it('allows a site the actor holds', async () => {
-    await expect(callFor('Downtown', ['Downtown', 'Eastside'])).resolves.toBe('queue for Downtown')
+    await expect(callFor('Sylmar', ['Sylmar', 'Montebello'])).resolves.toBe('queue for Sylmar')
   })
 
   it('refuses a site the actor does not hold', async () => {
     // The attack this closes is a query string edit, not a compromise: the
     // office used to be a React context the browser chose and defaulted to
-    // "Downtown". Asking for another site has to be refused by the server,
+    // "Sylmar". Asking for another site has to be refused by the server,
     // because the client is where the value came from.
-    await expect(callFor('Eastside', ['Downtown'])).rejects.toThrow('FORBIDDEN')
+    await expect(callFor('Montebello', ['Sylmar'])).rejects.toThrow('FORBIDDEN')
   })
 
   it('refuses an actor scoped to no site at all', async () => {
-    await expect(callFor('Downtown', [])).rejects.toThrow('FORBIDDEN')
+    await expect(callFor('Sylmar', [])).rejects.toThrow('FORBIDDEN')
   })
 
   it('records the refusal as a denial, with the actor that made it', async () => {
-    await expect(callFor('Eastside', ['Downtown'])).rejects.toThrow()
+    await expect(callFor('Montebello', ['Sylmar'])).rejects.toThrow()
 
     expect(recorded).toEqual([
       expect.objectContaining({ actorId: 'user-1', outcome: 'denied', code: 'FORBIDDEN' }),
@@ -69,13 +69,13 @@ describe('office scoping', () => {
   it('never records which site was asked for', async () => {
     // The audit event has no field for input, and a site name is a weak
     // identifier when paired with a timestamp and an actor.
-    await expect(callFor('Eastside', ['Downtown'])).rejects.toThrow()
+    await expect(callFor('Montebello', ['Sylmar'])).rejects.toThrow()
 
-    expect(JSON.stringify(recorded)).not.toContain('Eastside')
+    expect(JSON.stringify(recorded)).not.toContain('Montebello')
   })
 
   it('rejects an office outside the contract before authorization runs', async () => {
-    const caller = probeRouter.createCaller(createContext({ actor: actor(['Downtown']) }))
+    const caller = probeRouter.createCaller(createContext({ actor: actor(['Sylmar']) }))
 
     // @ts-expect-error — the contract is an enum; this is the runtime guard.
     await expect(caller.queue({ office: 'Springfield' })).rejects.toThrow()

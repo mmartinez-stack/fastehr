@@ -13,7 +13,7 @@ import { appRouter } from './routers/root.ts'
  * quote the offending value; a hand-written refinement message can, and this is
  * what makes that harmless.
  */
-const CLINICIAN: Actor = { id: 'user-1', roles: ['clinician'], offices: ['Downtown'] }
+const CLINICIAN: Actor = { id: 'user-1', roles: ['clinician'], offices: ['Sylmar'] }
 
 async function callWithInput(input: unknown, actor: Actor | null = CLINICIAN) {
   // A query, so: GET with the input in the query string, superjson-enveloped.

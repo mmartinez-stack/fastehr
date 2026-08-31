@@ -324,7 +324,7 @@ function makePatients(): Patient[] {
     const last = spanish
       ? at(lastNamesSpa, i % lastNamesSpa.length)
       : at(lastNamesEng, i % lastNamesEng.length)
-    const office = at(OFFICES, i % 3)
+    const office = at(OFFICES, i % OFFICES.length)
     const atHome = office === "At Home"
     const inactive = i === 4 || i === 11
     const missing = CONSENT_TYPES.filter((_, ci) => (i + ci) % 5 === 0).slice(0, 3)
@@ -385,7 +385,7 @@ export const patients: Patient[] = makePatients()
 
 const FOLLOWUP_NOTES = [
   "Phone Note: Refill Request. Any side effects to medications? No. New medical issues since last visit? No. Current weight confirmed. Blood pressure under good control? Yes. Pt requesting 4 weeks of medication. Plan: continue current dose, 1-2 day fast with electrolytes, eating window 12-6pm. Advised more protein and vegetables, 1 gallon water daily, weekly weight check at home. RTC in 4 weeks.",
-  "Tolerating medication well. No adverse effects reported. Reviewed diet log — compliant with low-carb plan. Continue titration; recheck in 2 weeks. Refill / Payment due next Monday. F/U scheduled.",
+  "Tolerating medication well. No adverse effects reported. Reviewed diet log, compliant with low-carb plan. Continue titration; recheck in 2 weeks. Refill / Payment due next Monday. F/U scheduled.",
   "Text sent to schedule appointment. Refill / Payment due Tuesday. Pt reports good energy, mild nausea resolving. Continue current regimen. F/U in 2 weeks.",
   "At-home follow-up. Weight check completed, reviewed injection technique. No injection-site reactions. Advised hydration and protein intake. Continue titration, RTC 4 weeks.",
   "Weight check + refill. Pt tolerating well, no new complaints. Increased dose per titration schedule. Discussed plateau strategies. Continue plan, recheck in 2 weeks.",
@@ -587,7 +587,7 @@ export const smsThreads: SmsThread[] = [
     unread: false,
     messages: [
       { id: "m1", direction: "in", text: "Is my refill ready for pickup?", time: iso(0, 8, 10) },
-      { id: "m2", direction: "out", text: "Yes! Your Semaglutide refill is ready at the Downtown office.", time: iso(0, 8, 30) },
+      { id: "m2", direction: "out", text: "Yes! Your Semaglutide refill is ready at the Sylmar office.", time: iso(0, 8, 30) },
       { id: "m3", direction: "in", text: "Thanks! See you then.", time: iso(0, 8, 40) },
     ],
   },
@@ -777,12 +777,12 @@ export function getStartTreatment(id: string): StartTreatment | undefined {
 // ---- staff / users ---------------------------------------------------------
 
 export const staffUsers: StaffUser[] = [
-  { id: "u1", name: "Dr. Kevin Nguyen", username: "knguyen", email: "k.nguyen@icardio.com", role: "Provider", office: "Downtown", active: true },
-  { id: "u2", name: "Dr. Rosa Alvarez", username: "ralvarez", email: "r.alvarez@icardio.com", role: "Provider", office: "Eastside", active: true },
+  { id: "u1", name: "Dr. Kevin Nguyen", username: "knguyen", email: "k.nguyen@icardio.com", role: "Provider", office: "Sylmar", active: true },
+  { id: "u2", name: "Dr. Rosa Alvarez", username: "ralvarez", email: "r.alvarez@icardio.com", role: "Provider", office: "Montebello", active: true },
   { id: "u3", name: "Jordan Carter, NP", username: "jcarter", email: "j.carter@icardio.com", role: "Provider", office: "At Home", active: true },
-  { id: "u4", name: "Amanda Ross", username: "aross", email: "a.ross@icardio.com", role: "Administrator", office: "Downtown", active: true },
-  { id: "u5", name: "Diego Morales", username: "dmorales", email: "d.morales@icardio.com", role: "Medical Assistant", office: "Eastside", active: true },
-  { id: "u6", name: "Chloe Simmons", username: "csimmons", email: "c.simmons@icardio.com", role: "Medical Assistant", office: "Downtown", active: false },
+  { id: "u4", name: "Amanda Ross", username: "aross", email: "a.ross@icardio.com", role: "Administrator", office: "Sylmar", active: true },
+  { id: "u5", name: "Diego Morales", username: "dmorales", email: "d.morales@icardio.com", role: "Medical Assistant", office: "Montebello", active: true },
+  { id: "u6", name: "Chloe Simmons", username: "csimmons", email: "c.simmons@icardio.com", role: "Medical Assistant", office: "Sylmar", active: false },
 ]
 
 export const currentUser = staffUsers[0]

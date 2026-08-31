@@ -82,8 +82,8 @@ function QueueTable({ rows }: { rows: QueueRow[] }) {
 
 export default function QueuesPage() {
   const { office } = useOffice()
-  const unsigned = unsignedQueue(office === "At Home" ? "Downtown" : office)
-  const signed = signedQueue(office === "At Home" ? "Downtown" : office)
+  const unsigned = unsignedQueue(office)
+  const signed = signedQueue(office)
 
   return (
     <div>
@@ -105,9 +105,9 @@ export default function QueuesPage() {
               <div className="flex flex-col gap-1">
                 <CardTitle className="flex items-center gap-2">
                   <FileText className="size-4 text-warning-foreground" />
-                  Clinic Queue — Unsigned
+                  Clinic Queue: Unsigned
                 </CardTitle>
-                <CardDescription>Downtown</CardDescription>
+                <CardDescription>{office}</CardDescription>
               </div>
               <Badge variant="ghost" className="bg-warning/15 text-warning-foreground">
                 {unsigned.length}
@@ -125,9 +125,9 @@ export default function QueuesPage() {
               <div className="flex flex-col gap-1">
                 <CardTitle className="flex items-center gap-2">
                   <FileCheck className="size-4 text-success" />
-                  Clinic Queue — Signed
+                  Clinic Queue: Signed
                 </CardTitle>
-                <CardDescription>Downtown</CardDescription>
+                <CardDescription>{office}</CardDescription>
               </div>
               <Badge variant="ghost" className="bg-success/15 text-success">
                 {signed.length}
@@ -141,7 +141,7 @@ export default function QueuesPage() {
 
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Refill Requests — Unsigned</CardTitle>
+            <CardTitle>Refill Requests: Unsigned</CardTitle>
             <CardDescription>
               Review, add notes, and sign off outstanding refill requests.
             </CardDescription>
