@@ -57,7 +57,7 @@ const NAV: {
 export function TopNav() {
   const pathname = usePathname()
   const { office, offices, setOffice } = useOffice()
-  const { role, roles, setRole } = useRole()
+  const { role, roles, canSwitch, setRole } = useRole()
   const router = useRouter()
 
   async function signOut() {
@@ -107,10 +107,11 @@ export function TopNav() {
 
         <div className="ml-auto flex items-center gap-2 lg:ml-0">
           {/*
-            Mockup-only. A real session carries one role and does not offer to
-            change it; this exists so a walkthrough can show the same screen
-            from both sides without two logins. See RoleProvider.
+            Admins only: a preview of another role's view for walkthroughs,
+            never a way to gain one — the server enforces the session's real
+            role regardless. See RoleProvider.
           */}
+          {canSwitch ? (
           <div className="hidden items-center gap-2 xl:flex">
             <span className="text-xs font-medium text-primary-foreground/75">
               Viewing as
@@ -132,6 +133,7 @@ export function TopNav() {
               </SelectContent>
             </Select>
           </div>
+          ) : null}
           <Select value={office} onValueChange={(v) => setOffice(v as typeof office)}>
             <SelectTrigger
               className="w-[130px] border-primary-foreground/25 bg-primary-foreground/10 text-primary-foreground"

@@ -37,6 +37,7 @@ first and produced a bug that type-checked.
 | [25](025-forms-validate-through-the-contract.md) | Forms validate through the contract; the mutation is the submit validator | `apps/web` · `packages/contracts` |
 | [26](026-legacy-credentials-verify-in-place.md) | Legacy credentials verify in place, and retire on first sign-in | `apps/web/src/server` · `packages/contracts` · `packages/db/scripts` |
 | [27](027-single-input-roster-search.md) | One roster search input; the format decides the field | `packages/contracts` · `packages/db` · `apps/web` |
+| [28](028-patient-record-sections.md) | The patient record is served and written by section | `packages/contracts` · `packages/db` · `apps/web/src/server` · `apps/web/src/features/patients` |
 
 ## Adding one
 

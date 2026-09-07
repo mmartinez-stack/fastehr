@@ -123,7 +123,6 @@ place (`Patient` model, `patient.*` procedures, the shared form in
 | `dobStr` | `dateOfBirth` | `DateTime @db.Date` | The string was the legacy source of truth; `dob` (a timestamp) is derived and discarded. |
 | `gender` | `gender` | `PatientGender?` | Legacy enum `male/female`, kept as a PG enum. |
 | `height` | `heightInches` | `Float?` | Unit named in the column, as the legacy form labeled it. |
-| `healthyWeight` | `healthyWeight` | `Float?` | |
 | `language` | `language` | `PatientLanguage?` | Legacy enum `english/spanish`. |
 | `office` | `office` | `String?` | Free string on the entity so historical values import; the form input constrains to the current list. |
 | `email` | `email` | `String?` | Normalized by the contract on write. |
@@ -132,7 +131,7 @@ place (`Patient` model, `patient.*` procedures, the shared form in
 | `address.street/city/state/zip` | `addressStreet/City/State/Zip` | `String?` | Flattened. |
 | `referralSource` | `referralSource` | `String?` | Free string on the entity, pick-list on the input. |
 | `referredByPt` | `referredByPatientId` | self-relation | Resolved through patient `legacyId` at import time. |
-| `hx` | `historyNotes` | `String?` | "Current medications and pertinent history". |
+| `hx` | `historyOther` | `String?` | "Current medications and pertinent history", verbatim. Since DIA-52 this is the "Other" free text under the medical-history checklist; the column was renamed, never parsed, and the structured lists (`patient_medications`, `patient_allergies`, `patient_conditions`) start empty for migrated records. |
 | `programType` | `programType` | `String?` | Pick-list on the input; `None` → NULL. |
 | `status` | `status` | `PatientStatus` | Legacy free string; `inactive` maps to `inactive`, anything else to `active` (matching the legacy UI's own check). |
 | `creditCardNumber`, `creditCardExpMonth/Year`, `creditCardZip` | same | `String?` | **Provisional** (2026-08-31): ported for billing continuity while the tokenized-processor design is pending; these columns are scheduled to be replaced by processor tokens, not to grow. The four fields are exactly what the legacy form rendered. |
@@ -177,6 +176,7 @@ place (`Patient` model, `patient.*` procedures, the shared form in
 | consent blobs (`treatmentConsent*`, `liposhotConsent*`, `ozempicWaiver*`, `testimonialConsent`) | Consent management is its own module with signature handling; a free-string signature column is not it. |
 | `isAtHome` | Derived from `office` (`… Home` suffix) — derived data is computed, not stored twice. |
 | `preferredContactTime`, `cutoffDate`, `programPrice`, `weight` | Defined in the legacy form group but never rendered to users (dead fields), or programmatically patched only. |
+| `healthyWeight` | Imported on 2026-08-31, dropped on 2026-09-06 (DIA-52): the Vitals tab is height only, and no screen or report read it. |
 | `dob` | Derived from `dobStr` (see above). |
 
 

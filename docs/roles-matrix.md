@@ -34,8 +34,12 @@ resolution re-checks `isActive` on every call.
 
 | Capability | Procedure kind | admin | provider | frontdesk |
 | --- | --- | :-: | :-: | :-: |
-| Patient roster search, type-ahead, detail (`patient.byId/search/suggest/searchByName`) | `protectedProcedure` | ✅ | ✅ | ✅ |
-| Patient create / update (`patient.create/update`) | `protectedProcedure` | ✅ | ✅ | ✅ |
+| Patient roster: recent, search, type-ahead, referred-by picker (`patient.recent/search/suggest/searchByName`; the phone column is nulled server-side for a provider) | `protectedProcedure` | ✅ | ✅ (no phone) | ✅ |
+| Patient chart: header plus the clinical half (`patient.byId`) | `protectedProcedure` | ✅ | ✅ | ✅ |
+| Patient demographics and billing reads (`patient.demographics/billing`) | `clericalProcedure` | ✅ | ❌ | ✅ |
+| Patient create (`patient.create`) | `clericalProcedure` | ✅ | ❌ | ✅ |
+| Clinical section save: vitals, medications, history, allergies, primary care doctor (`patient.updateClinical`) | `protectedProcedure` | ✅ | ✅ | ✅ |
+| Demographics and billing saves (`patient.updateDemographics/updateBilling`) | `clericalProcedure` | ✅ | ❌ | ✅ |
 | Patient activate/deactivate (`patient.setStatus`; no screen calls it since DIA-50, the column is kept unexposed) | `protectedProcedure` | ✅ | ✅ | ✅ |
 | Staff accounts: list, search, create, edit, enable/disable (`staffUsers.*`) | `adminProcedure` | ✅ | ❌ | ❌ |
 | Staff account delete (`staffUsers.delete`; confirmed in UI, never self) | `adminProcedure` | ✅ | ❌ | ❌ |
@@ -45,12 +49,11 @@ resolution re-checks `isActive` on every call.
 
 Notes that carry weight:
 
-- **Patient reads and writes are deliberately role-flat today.** Every active
-  staff member can read and edit patient records; nothing clinical is withheld
-  from `frontdesk` server-side yet. The clinical/clerical split visible in the
-  UI (below) is **not enforced**. When a per-role restriction is decided, it
-  lands as a procedure kind here first, and this table changes in the same
-  commit.
+- **The patient record is enforced by section (ADR 28).** A provider reads
+  and writes the clinical half only; the demographics and billing sections
+  are refused server-side, and the roster row they receive carries no phone.
+  Nothing clinical is withheld from `frontdesk`: the front desk and admins see
+  every section, as the Aug 31 sync decided.
 - **Office scoping is orthogonal to role** (ADR 22): the permitted set is part
   of the actor's identity, checked server-side; an admin is not exempt.
 - **No role can delete a patient** — deactivation only, matching the legacy
@@ -70,9 +73,9 @@ Notes that carry weight:
 
 ## Client surfaces (presentation, not enforcement)
 
-The mockup-era `role-provider.tsx` still drives which *views* render, through
-three coarse surfaces. Until each screen is wired to the real session role,
-this is a demonstration device — its own header comment says so.
+`role-provider.tsx` renders from the **session's** role, supplied by the app
+layout from the server (ADR 28), through three coarse surfaces. Admins may
+preview another role's view from the header switcher; no other role can.
 
 | Surface | What it shows | admin | provider | frontdesk |
 | --- | --- | :-: | :-: | :-: |
@@ -85,7 +88,8 @@ this is a demonstration device — its own header comment says so.
 | Concern | File |
 | --- | --- |
 | Role vocabulary | `packages/contracts/src/staff-role.ts` |
-| Procedure kinds (`protected` / `admin` / `officeScoped`) | `apps/web/src/server/procedures.ts` |
+| Procedure kinds (`protected` / `clerical` / `admin` / `officeScoped`) | `apps/web/src/server/procedures.ts` |
+| Record sections | ADR 28 |
 | Session + role page guards | `apps/web/src/server/guards.ts`, `apps/web/src/lib/guard-page.ts` |
 | Audit chain ordering | ADR 10 |
 | Office scoping | ADR 22 |

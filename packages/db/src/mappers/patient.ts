@@ -1,5 +1,15 @@
-import { patientSchema, type Patient } from '@fastehr/contracts'
-import type { Patient as PatientRow } from '../generated/client/client.ts'
+import {
+  patientSchema,
+  patientSummarySchema,
+  type Patient,
+  type PatientSummary,
+} from '@fastehr/contracts'
+import type {
+  Patient as PatientRow,
+  PatientAllergy as AllergyRow,
+  PatientCondition as ConditionRow,
+  PatientMedication as MedicationRow,
+} from '../generated/client/client.ts'
 
 /**
  * Row → contract mapping for `Patient`.
@@ -16,18 +26,29 @@ import type { Patient as PatientRow } from '../generated/client/client.ts'
  *    holds a uuid, that a date is real. Drift between schema.prisma and
  *    contracts fails loudly, at the row, with the field named.
  *
+ * Two mappers since DIA-52: the full record carries its three child lists
+ * (one read, with the relations included), while a roster row is the scalar
+ * row alone — a hundred search results do not fetch a hundred medication
+ * lists.
+ *
  * If a hot read path ever makes per-row parsing measurable, this function is
  * the single place that changes.
  */
-export function toPatient(row: PatientRow): Patient {
+
+/** A patient row with its clinical child lists, as `findById` reads it. */
+export type PatientRecordRow = PatientRow & {
+  medications: MedicationRow[]
+  allergies: AllergyRow[]
+  conditions: ConditionRow[]
+}
+
+export function toPatient(row: PatientRecordRow): Patient {
   return patientSchema.parse({
     id: row.id,
     firstName: row.firstName,
     lastName: row.lastName,
     dateOfBirth: toCalendarDate(row.dateOfBirth),
     gender: row.gender,
-    heightInches: row.heightInches,
-    healthyWeight: row.healthyWeight,
     language: row.language,
     office: row.office,
     email: row.email,
@@ -39,8 +60,27 @@ export function toPatient(row: PatientRow): Patient {
     addressZip: row.addressZip,
     referralSource: row.referralSource,
     referredByPatientId: row.referredByPatientId,
-    historyNotes: row.historyNotes,
     programType: row.programType,
+    heightInches: row.heightInches,
+    // Child rows arrive in `position` order (the repository asks for it);
+    // the contract carries the order, not the position numbers.
+    medications: row.medications.map((medication) => ({
+      name: medication.name,
+      dose: medication.dose,
+      frequency: medication.frequency,
+    })),
+    allergies: row.allergies.map((allergy) => ({ name: allergy.name, reaction: allergy.reaction })),
+    conditions: row.conditions.map((condition) => ({
+      condition: condition.condition,
+      onset: condition.onset,
+      treatedBy: condition.treatedBy,
+      medicated: condition.medicated,
+      medications: condition.medications,
+    })),
+    historyOther: row.historyOther,
+    pcpName: row.pcpName,
+    pcpAddress: row.pcpAddress,
+    pcpPhone: row.pcpPhone,
     status: row.status,
     // A timestamp, not a calendar date: the roster's over-a-year flag and
     // sort read it as an instant, so the ISO form goes across whole.
@@ -51,6 +91,19 @@ export function toPatient(row: PatientRow): Patient {
     creditCardZip: row.creditCardZip,
     // `legacyId` stays behind on purpose (rule 1 above) — it is an import
     // bookkeeping column, not part of the patient the application sees.
+  })
+}
+
+/** The roster row: identity, office, last visit, and the phone the front desk dials. */
+export function toPatientSummary(row: PatientRow): PatientSummary {
+  return patientSummarySchema.parse({
+    id: row.id,
+    firstName: row.firstName,
+    lastName: row.lastName,
+    dateOfBirth: toCalendarDate(row.dateOfBirth),
+    office: row.office,
+    lastVisitAt: row.lastVisitAt === null ? null : row.lastVisitAt.toISOString(),
+    phone: row.phone,
   })
 }
 

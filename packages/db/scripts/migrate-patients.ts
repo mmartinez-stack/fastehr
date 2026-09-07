@@ -8,7 +8,7 @@
  *
  *   docker exec mongo mongoexport --quiet -u admin -p secret \
  *     --authenticationDatabase admin -d fastehr -c patients \
- *     --fields _id,firstName,lastName,dobStr,gender,height,healthyWeight,language,office,email,phone,address,referralSource,referredByPt,hx,programType,status,creditCardNumber,creditCardExpMonth,creditCardExpYear,creditCardZip \
+ *     --fields _id,firstName,lastName,dobStr,gender,height,language,office,email,phone,address,referralSource,referredByPt,hx,programType,status,creditCardNumber,creditCardExpMonth,creditCardExpYear,creditCardZip \
  *     > patients.ndjson
  *
  * The card fields ride along under the provisional billing-continuity decision
@@ -71,7 +71,6 @@ interface ImportedPatient {
   dateOfBirth: string
   gender: PatientGender | null
   heightInches: number | null
-  healthyWeight: number | null
   language: PatientLanguage | null
   office: string | null
   email: string | null
@@ -84,7 +83,8 @@ interface ImportedPatient {
   referralSource: string | null
   /** The referrer's legacy id, resolved to a row id in the second pass. */
   referredByLegacyId: string | null
-  historyNotes: string | null
+  /** Legacy `hx`, verbatim — the "Other" history field since DIA-52. */
+  historyOther: string | null
   programType: string | null
   status: PatientStatus
   creditCardNumber: string | null
@@ -242,10 +242,6 @@ for (const [index, line] of lines.entries()) {
   if (raw.height !== undefined && raw.height !== null && heightInches === null) {
     note('heightInches', 'not numeric — imported as null')
   }
-  const healthyWeight = asNumber(raw.healthyWeight)
-  if (raw.healthyWeight !== undefined && raw.healthyWeight !== null && healthyWeight === null) {
-    note('healthyWeight', 'not numeric — imported as null')
-  }
 
   const emailRaw = asTrimmed(raw.email)?.toLowerCase() ?? null
   const email = patientSchema.shape.email.safeParse(emailRaw)
@@ -278,7 +274,6 @@ for (const [index, line] of lines.entries()) {
     dateOfBirth: dateOfBirth.data,
     gender: gender.success ? gender.data : null,
     heightInches,
-    healthyWeight,
     language: language.success ? language.data : null,
     office: asTrimmed(raw.office),
     email: email.success ? email.data : null,
@@ -292,7 +287,7 @@ for (const [index, line] of lines.entries()) {
     addressZip: asTrimmed(address.zip),
     referralSource: asTrimmed(raw.referralSource),
     referredByLegacyId: parseObjectId(raw.referredByPt),
-    historyNotes: asTrimmed(raw.hx),
+    historyOther: asTrimmed(raw.hx),
     // The legacy pick-list's `None` is "no program", which is absence here.
     programType: programType === 'None' ? null : programType,
     // The legacy UI's own check: `inactive` is inactive, anything else is active.
@@ -310,8 +305,19 @@ for (const [index, line] of lines.entries()) {
   // referral aside) is what `toPatient` will re-parse on every read. Failing
   // here, with paths and codes only, beats failing there with a live roster.
   const validated = patientSchema
-    .omit({ id: true, referredByPatientId: true })
-    .safeParse({ ...candidate, legacyId: undefined, referredByLegacyId: undefined, createdAt: undefined })
+    .omit({ id: true, referredByPatientId: true, medications: true, allergies: true, conditions: true })
+    .safeParse({
+      ...candidate,
+      legacyId: undefined,
+      referredByLegacyId: undefined,
+      createdAt: undefined,
+      // Not in the legacy collection; a migrated record starts with empty
+      // clinical lists and no primary care doctor.
+      lastVisitAt: null,
+      pcpName: null,
+      pcpAddress: null,
+      pcpPhone: null,
+    })
   if (!validated.success) {
     const fields = validated.error.issues.map((issue) => `${issue.path.join('.')}:${issue.code}`)
     skips.push({ legacyId, reason: `contract rejection — ${fields.join(', ')}` })

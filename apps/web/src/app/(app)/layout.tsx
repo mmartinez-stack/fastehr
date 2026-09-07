@@ -1,7 +1,7 @@
 import type React from "react"
 import { OfficeProvider } from "@/components/office-provider"
 import { RoleProvider } from "@/components/role-provider"
-import { permittedOffices } from "@/trpc/session"
+import { sessionIdentity } from "@/trpc/session"
 import { TopNav } from "@/components/top-nav"
 import { SmsBanner } from "@/components/sms-banner"
 
@@ -10,13 +10,13 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode
 }) {
-  // The server decides which sites this user may see; the provider only lets
-  // them pick among those. See ADR 22.
-  const offices = await permittedOffices()
+  // The server decides who this is: which sites they may see (ADR 22) and
+  // which role's view renders (ADR 28). The providers only carry that down.
+  const identity = await sessionIdentity()
 
   return (
-    <RoleProvider>
-      <OfficeProvider offices={offices}>
+    <RoleProvider sessionRole={identity?.role ?? null}>
+      <OfficeProvider offices={identity?.offices ?? []}>
         <div className="flex min-h-screen flex-col bg-background">
           <TopNav />
           <SmsBanner />

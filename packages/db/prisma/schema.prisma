@@ -64,11 +64,29 @@ model Patient {
   // Demographics from the legacy patient form. Required on the form but
   // nullable here: records imported from the legacy collection predate the
   // form's validators and may lack any of them.
-  gender        PatientGender?
-  heightInches  Float?
-  healthyWeight Float?
-  language      PatientLanguage?
-  office        String?
+  gender   PatientGender?
+  language PatientLanguage?
+  office   String?
+
+  // --- Clinical sections (DIA-52). The record is one row plus three child
+  // tables; which sections a caller may read or write is decided per role in
+  // the server layer, not here. ---
+
+  // Vitals. Total inches, as the legacy form captured it; the form shows feet
+  // and inches and composes them, so migrated heights are untouched. (Healthy
+  // weight was dropped with DIA-52: nothing read it.)
+  heightInches Float?
+  medications  PatientMedication[]
+  allergies    PatientAllergy[]
+  conditions   PatientCondition[]
+  // Medical history, "Other": free text at the end of the checklist. Holds
+  // the legacy `hx` ("current medications and pertinent history") verbatim —
+  // the column was renamed, never parsed, so nothing was lost.
+  historyOther String?
+  // Primary care doctor.
+  pcpName    String?
+  pcpAddress String?
+  pcpPhone   String?
 
   // Optional contact details. Stored normalized (lowercase email, ten bare
   // digits) — `createPatientInput` in @fastehr/contracts is the single place
@@ -91,9 +109,7 @@ model Patient {
   referredByPatient   Patient?  @relation("PatientReferrals", fields: [referredByPatientId], references: [id])
   referrals           Patient[] @relation("PatientReferrals")
 
-  // Legacy `hx` — current medications and pertinent history, free text.
-  historyNotes String?
-  programType  String?
+  programType String?
 
   // Kept in the schema, no longer exposed: the Aug 31 sync replaced the
   // active/inactive badge with the last-visit date (DIA-50). Nothing renders
@@ -127,6 +143,56 @@ model Patient {
   // The roster's default order: most recently seen first.
   @@index([lastVisitAt])
   @@map("patients")
+}
+
+/**
+ * The medication list — one row per line item, in the order entered. Replaces
+ * the free-text half of the legacy `hx` field for records edited from now on.
+ */
+model PatientMedication {
+  id        String  @id @default(uuid())
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  name      String
+  dose      String?
+  frequency String?
+  position  Int
+
+  @@index([patientId, position])
+  @@map("patient_medications")
+}
+
+/** Medication allergies — name and reaction, free text per row. */
+model PatientAllergy {
+  id        String  @id @default(uuid())
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  name      String
+  reaction  String?
+  position  Int
+
+  @@index([patientId, position])
+  @@map("patient_allergies")
+}
+
+/**
+ * The medical-history checklist: one row per condition the patient answered
+ * "Yes" to. Absence is "No" — the checklist's vocabulary lives in contracts
+ * (`PATIENT_CONDITIONS`), and the column is a plain string so replacing the
+ * stub list with the final one is a vocabulary change, not a migration.
+ */
+model PatientCondition {
+  id          String  @id @default(uuid())
+  patientId   String
+  patient     Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  condition   String
+  onset       String?
+  treatedBy   String?
+  medicated   Boolean @default(false)
+  medications String?
+
+  @@unique([patientId, condition])
+  @@map("patient_conditions")
 }
 
 /**

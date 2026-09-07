@@ -7,40 +7,56 @@ import { STAFF_ROLES, type StaffRole } from "@fastehr/contracts"
 /**
  * Which role's view of the application is on screen.
  *
- * The vocabulary is the real one — `StaffRole` from contracts, the same enum
- * the database enforces — so the switcher's options are exactly the roles an
- * account can hold. The Aug 7 sync split the interface in two: a provider
- * sees the clinical record, the front desk sees the clerical one, and an
- * admin sees both. That split is the subject of this mockup, so the mockup
- * has to be able to show it — hence a switcher, in the header, that a
- * stakeholder can flip during a walkthrough.
+ * The role is the **session's**, resolved server-side and passed down by the
+ * app layout (ADR 28) — the same `StaffRole` the database enforces. What
+ * renders from it is presentation: which tabs, which nav entries, which
+ * columns. Enforcement is the server layer's: a provider whose browser
+ * somehow asked for the demographics section would be refused there, and
+ * the refusal audited. Nothing downstream should treat this context as
+ * having decided anything.
  *
- * **This is a demonstration device, not a security boundary, and the
- * distinction is not a nuance.** The role lives in client state where the
- * viewer can set it to anything, every screen still renders from the same mock
- * fixtures, and nothing is withheld — the administrative view is one click
- * away from the provider view by design. Real scoping needs the role model
- * (DIA-29) underneath it and enforcement in the server layer (M3), at which
- * point this provider is replaced by the session's actual role rather than
- * extended. Nothing downstream should come to depend on it as though it
- * decided anything.
+ * One demonstration device survives from the mockup: an **admin** may switch
+ * the view to preview what a provider or the front desk sees. Only an admin,
+ * because an admin is entitled to every section server-side, so a preview
+ * can never run into a FORBIDDEN it would not otherwise get. For any other
+ * role the switcher does not render and `setRole` is inert.
  */
 interface RoleContextValue {
   /** The role whose view is rendered. */
   role: StaffRole
   /** Every role the switcher offers — the full vocabulary. */
   roles: readonly StaffRole[]
+  /** Whether this session may preview other roles' views (admins only). */
+  canSwitch: boolean
   setRole: (r: StaffRole) => void
 }
 
 const RoleContext = React.createContext<RoleContextValue | null>(null)
 
-export function RoleProvider({ children }: { children: React.ReactNode }) {
-  const [role, setRole] = React.useState<StaffRole>("provider")
+export function RoleProvider({
+  sessionRole,
+  children,
+}: {
+  /** The session's role from the server; `null` only for an anonymous render. */
+  sessionRole: StaffRole | null
+  children: React.ReactNode
+}) {
+  // Anonymous renders (the login redirect is already in flight) get the
+  // least-exposing view rather than a guess at a wider one.
+  const actual = sessionRole ?? "provider"
+  const canSwitch = sessionRole === "admin"
+  const [preview, setPreview] = React.useState<StaffRole>(actual)
 
   const value = React.useMemo(
-    () => ({ role, roles: STAFF_ROLES, setRole }),
-    [role],
+    () => ({
+      role: canSwitch ? preview : actual,
+      roles: STAFF_ROLES,
+      canSwitch,
+      setRole: (next: StaffRole) => {
+        if (canSwitch) setPreview(next)
+      },
+    }),
+    [actual, canSwitch, preview],
   )
 
   return <RoleContext.Provider value={value}>{children}</RoleContext.Provider>
@@ -59,8 +75,8 @@ export function useRole() {
  * division — clinical record against clerical record — and a matrix of
  * per-screen flags would encode more structure than the decision behind it
  * contains. `staff` is the third only because clinic-wide reporting and staff
- * accounts sit in neither half. DIA-25 produces the real matrix; this stays
- * coarse until it does.
+ * accounts sit in neither half. The server-enforced matrix is
+ * docs/roles-matrix.md; this stays coarse to match it.
  */
 export interface RoleSurfaces {
   /** Charting, visit records, weight history, prescribing. */

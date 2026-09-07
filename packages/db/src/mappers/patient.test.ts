@@ -1,15 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { Patient as PatientRow } from '../generated/client/client.ts'
-import { toPatient } from './patient.ts'
+import { toPatient, toPatientSummary, type PatientRecordRow } from './patient.ts'
 
-const row: PatientRow = {
+const row: PatientRecordRow = {
   id: '3f1a7a1e-8c9b-4d2a-9f10-6b2c5d4e7a81',
   firstName: 'Ada',
   lastName: 'Lovelace',
   dateOfBirth: new Date('1815-12-10T00:00:00.000Z'),
   gender: null,
-  heightInches: null,
-  healthyWeight: null,
   language: null,
   office: null,
   email: null,
@@ -21,8 +18,12 @@ const row: PatientRow = {
   addressZip: null,
   referralSource: null,
   referredByPatientId: null,
-  historyNotes: null,
   programType: null,
+  heightInches: null,
+  historyOther: null,
+  pcpName: null,
+  pcpAddress: null,
+  pcpPhone: null,
   status: 'active',
   lastVisitAt: null,
   creditCardNumber: null,
@@ -32,38 +33,48 @@ const row: PatientRow = {
   legacyId: null,
   createdAt: new Date('2026-01-02T09:30:00.000Z'),
   updatedAt: new Date('2026-01-02T09:30:00.000Z'),
+  medications: [],
+  allergies: [],
+  conditions: [],
+}
+
+const EXPECTED = {
+  id: '3f1a7a1e-8c9b-4d2a-9f10-6b2c5d4e7a81',
+  firstName: 'Ada',
+  lastName: 'Lovelace',
+  dateOfBirth: '1815-12-10',
+  gender: null,
+  language: null,
+  office: null,
+  email: null,
+  phone: null,
+  phoneFollowUpAllowed: true,
+  addressStreet: null,
+  addressCity: null,
+  addressState: null,
+  addressZip: null,
+  referralSource: null,
+  referredByPatientId: null,
+  programType: null,
+  heightInches: null,
+  medications: [],
+  allergies: [],
+  conditions: [],
+  historyOther: null,
+  pcpName: null,
+  pcpAddress: null,
+  pcpPhone: null,
+  status: 'active',
+  lastVisitAt: null,
+  creditCardNumber: null,
+  creditCardExpMonth: null,
+  creditCardExpYear: null,
+  creditCardZip: null,
 }
 
 describe('toPatient', () => {
   it('maps a row to the contract shape', () => {
-    expect(toPatient(row)).toEqual({
-      id: '3f1a7a1e-8c9b-4d2a-9f10-6b2c5d4e7a81',
-      firstName: 'Ada',
-      lastName: 'Lovelace',
-      dateOfBirth: '1815-12-10',
-      gender: null,
-      heightInches: null,
-      healthyWeight: null,
-      language: null,
-      office: null,
-      email: null,
-      phone: null,
-      phoneFollowUpAllowed: true,
-      addressStreet: null,
-      addressCity: null,
-      addressState: null,
-      addressZip: null,
-      referralSource: null,
-      referredByPatientId: null,
-      historyNotes: null,
-      programType: null,
-      status: 'active',
-      lastVisitAt: null,
-      creditCardNumber: null,
-      creditCardExpMonth: null,
-      creditCardExpYear: null,
-      creditCardZip: null,
-    })
+    expect(toPatient(row)).toEqual(EXPECTED)
   })
 
   it('passes stored demographics through', () => {
@@ -87,6 +98,40 @@ describe('toPatient', () => {
     expect(mapped.status).toBe('inactive')
   })
 
+  it('maps the child lists in the order they arrive, without their bookkeeping', () => {
+    const mapped = toPatient({
+      ...row,
+      medications: [
+        { id: 'm2', patientId: row.id, name: 'Lisinopril', dose: '10 mg', frequency: 'daily', position: 1 },
+        { id: 'm1', patientId: row.id, name: 'Metformin', dose: null, frequency: null, position: 0 },
+      ],
+      allergies: [{ id: 'a1', patientId: row.id, name: 'Penicillin', reaction: 'hives', position: 0 }],
+      conditions: [
+        {
+          id: 'c1',
+          patientId: row.id,
+          condition: 'diabetes',
+          onset: '2019',
+          treatedBy: null,
+          medicated: true,
+          medications: 'Metformin',
+        },
+      ],
+    })
+
+    // The repository orders by position; the mapper keeps what it is given.
+    expect(mapped.medications).toEqual([
+      { name: 'Lisinopril', dose: '10 mg', frequency: 'daily' },
+      { name: 'Metformin', dose: null, frequency: null },
+    ])
+    expect(mapped.allergies).toEqual([{ name: 'Penicillin', reaction: 'hives' }])
+    expect(mapped.conditions).toEqual([
+      { condition: 'diabetes', onset: '2019', treatedBy: null, medicated: true, medications: 'Metformin' },
+    ])
+    expect(mapped.medications[0]).not.toHaveProperty('position')
+    expect(mapped.medications[0]).not.toHaveProperty('patientId')
+  })
+
   it('carries the last visit as an ISO instant, not a calendar day', () => {
     // Unlike the date of birth, this is a timestamp: the roster compares it
     // against "a year ago", so the time of day and the zone travel with it.
@@ -99,6 +144,15 @@ describe('toPatient', () => {
     // Entity-side `office` is a plain string on purpose — a historical office
     // must read back rather than fail the parse (see contracts/patient.ts).
     expect(toPatient({ ...row, office: 'Van Nuys (closed)' }).office).toBe('Van Nuys (closed)')
+    // Likewise a checklist key from an older vocabulary.
+    expect(
+      toPatient({
+        ...row,
+        conditions: [
+          { id: 'c9', patientId: row.id, condition: 'gout', onset: null, treatedBy: null, medicated: false, medications: null },
+        ],
+      }).conditions[0]?.condition,
+    ).toBe('gout')
   })
 
   it('drops bookkeeping columns the contract does not declare', () => {
@@ -122,5 +176,27 @@ describe('toPatient', () => {
   it('rejects a row that violates the contract instead of passing it through', () => {
     expect(() => toPatient({ ...row, id: 'not-a-uuid' })).toThrow()
     expect(() => toPatient({ ...row, firstName: '' })).toThrow()
+  })
+})
+
+describe('toPatientSummary', () => {
+  it('maps a bare row to the roster shape — identity, office, last visit, phone', () => {
+    const { medications: _m, allergies: _a, conditions: _c, ...bare } = row
+    expect(toPatientSummary({ ...bare, phone: '9515550000', office: 'Sylmar' })).toEqual({
+      id: row.id,
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      dateOfBirth: '1815-12-10',
+      office: 'Sylmar',
+      lastVisitAt: null,
+      phone: '9515550000',
+    })
+  })
+
+  it('never carries the clinical or card columns', () => {
+    const { medications: _m, allergies: _a, conditions: _c, ...bare } = row
+    const summary = toPatientSummary({ ...bare, creditCardNumber: '4111111111111111', historyOther: 'x' })
+    expect(summary).not.toHaveProperty('creditCardNumber')
+    expect(summary).not.toHaveProperty('historyOther')
   })
 })

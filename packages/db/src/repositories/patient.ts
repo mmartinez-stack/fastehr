@@ -3,14 +3,17 @@ import {
   type CreatePatientInput,
   type Patient,
   type PatientSearchInterpretation,
+  type PatientSummary,
   type SearchPatientsByNameInput,
   type SearchPatientsInput,
   type SetPatientStatusInput,
   type SuggestPatientsInput,
-  type UpdatePatientInput,
+  type UpdatePatientBillingInput,
+  type UpdatePatientClinicalInput,
+  type UpdatePatientDemographicsInput,
 } from '@fastehr/contracts'
 import type { PrismaClient } from '../client.ts'
-import { toPatient } from '../mappers/patient.ts'
+import { toPatient, toPatientSummary } from '../mappers/patient.ts'
 
 /**
  * Patient reads and writes — the query set ported from the legacy patient
@@ -19,6 +22,12 @@ import { toPatient } from '../mappers/patient.ts'
  * only read that takes no criterion is `listRecent`, capped at the legacy 30:
  * the whole table is never served.
  *
+ * Writes are per section since DIA-52 (ADR 28): demographics, clinical, and
+ * billing each have their own update, because each is a different role's to
+ * make. The repository does not check roles — the server layer does — but
+ * the shape of the API is what makes a section-scoped procedure unable to
+ * write outside its section by accident.
+ *
  * The interface is declared in terms of `@fastehr/contracts` types only: no
  * `Prisma.PatientWhereInput`, no `Decimal`, no `select` objects. A consumer
  * cannot express a query in Prisma's vocabulary through this API, which is what
@@ -26,17 +35,21 @@ import { toPatient } from '../mappers/patient.ts'
  * time.
  */
 export interface PatientRepository {
+  /** The whole record, child lists included — one read, one patient. */
   findById(id: string): Promise<Patient | null>
   /** The roster's default view — legacy `GET /patients`: the 30 most recently seen. */
-  listRecent(): Promise<Patient[]>
+  listRecent(): Promise<PatientSummary[]>
   /** The roster search (ADR 27, amended): substring names, exact phone, two calendar days; capped. */
-  search(input: SearchPatientsInput): Promise<Patient[]>
+  search(input: SearchPatientsInput): Promise<PatientSummary[]>
   /** The roster's type-ahead: the same interpretation, a few rows deep. */
-  suggest(input: SuggestPatientsInput): Promise<Patient[]>
+  suggest(input: SuggestPatientsInput): Promise<PatientSummary[]>
   /** The referred-by picker — legacy `/patients/search`, substring on names. */
-  searchByName(input: SearchPatientsByNameInput): Promise<Patient[]>
+  searchByName(input: SearchPatientsByNameInput): Promise<PatientSummary[]>
   create(input: CreatePatientInput): Promise<Patient>
-  update(input: UpdatePatientInput): Promise<Patient>
+  updateDemographics(input: UpdatePatientDemographicsInput): Promise<Patient | null>
+  /** Replaces the three child lists wholesale — the form submits the whole section. */
+  updateClinical(input: UpdatePatientClinicalInput): Promise<Patient | null>
+  updateBilling(input: UpdatePatientBillingInput): Promise<Patient | null>
   setStatus(input: SetPatientStatusInput): Promise<Patient>
 }
 
@@ -60,12 +73,19 @@ const ROSTER_ORDER = [
   { firstName: 'asc' as const },
 ]
 
+/** The child lists, in the order they were entered. */
+const RECORD_INCLUDE = {
+  medications: { orderBy: { position: 'asc' as const } },
+  allergies: { orderBy: { position: 'asc' as const } },
+  conditions: { orderBy: { condition: 'asc' as const } },
+}
+
 /**
- * One definition of "what the form said" → "what the row stores", shared by
- * create and update so the two writes cannot drift. Absent optional fields
- * store NULL — an update that clears a field really clears it.
+ * Section → columns, one definition per section shared by create and update
+ * so the two writes cannot drift. Absent optional fields store NULL — an
+ * update that clears a field really clears it.
  */
-function toWriteData(input: CreatePatientInput) {
+function demographicsData(input: Omit<UpdatePatientDemographicsInput, 'id'>) {
   return {
     firstName: input.firstName,
     lastName: input.lastName,
@@ -74,8 +94,6 @@ function toWriteData(input: CreatePatientInput) {
     // `toCalendarDate`, and like it, deliberately not local time.
     dateOfBirth: new Date(input.dateOfBirth),
     gender: input.gender,
-    heightInches: input.heightInches,
-    healthyWeight: input.healthyWeight ?? null,
     language: input.language ?? null,
     office: input.office ?? null,
     email: input.email ?? null,
@@ -87,8 +105,46 @@ function toWriteData(input: CreatePatientInput) {
     phoneFollowUpAllowed: input.phoneFollowUpAllowed,
     referralSource: input.referralSource ?? null,
     referredByPatientId: input.referredByPatientId ?? null,
-    historyNotes: input.historyNotes ?? null,
     programType: input.programType ?? null,
+  }
+}
+
+function clinicalScalars(input: Omit<UpdatePatientClinicalInput, 'id'>) {
+  return {
+    heightInches: input.heightInches,
+    historyOther: input.historyOther ?? null,
+    pcpName: input.pcpName ?? null,
+    pcpAddress: input.pcpAddress ?? null,
+    pcpPhone: input.pcpPhone ?? null,
+  }
+}
+
+/** The child lists as nested creates; `position` is the order the form had them in. */
+function clinicalLists(input: Omit<UpdatePatientClinicalInput, 'id'>) {
+  return {
+    medications: input.medications.map((row, position) => ({
+      name: row.name,
+      dose: row.dose ?? null,
+      frequency: row.frequency ?? null,
+      position,
+    })),
+    allergies: input.allergies.map((row, position) => ({
+      name: row.name,
+      reaction: row.reaction ?? null,
+      position,
+    })),
+    conditions: input.conditions.map((row) => ({
+      condition: row.condition,
+      onset: row.onset ?? null,
+      treatedBy: row.treatedBy ?? null,
+      medicated: row.medicated,
+      medications: row.medications ?? null,
+    })),
+  }
+}
+
+function billingData(input: Omit<UpdatePatientBillingInput, 'id'>) {
+  return {
     creditCardNumber: input.creditCardNumber ?? null,
     creditCardExpMonth: input.creditCardExpMonth ?? null,
     creditCardExpYear: input.creditCardExpYear ?? null,
@@ -152,9 +208,13 @@ export function createPatientRepository(getClient: () => PrismaClient): PatientR
     return rows.map((row) => row.patientId)
   }
 
+  async function exists(id: string): Promise<boolean> {
+    return (await getClient().patient.count({ where: { id } })) > 0
+  }
+
   return {
     async findById(id) {
-      const row = await getClient().patient.findUnique({ where: { id } })
+      const row = await getClient().patient.findUnique({ where: { id }, include: RECORD_INCLUDE })
       return row === null ? null : toPatient(row)
     },
 
@@ -165,7 +225,7 @@ export function createPatientRepository(getClient: () => PrismaClient): PatientR
         orderBy: ROSTER_ORDER,
         take: LIST_LIMIT,
       })
-      return rows.map(toPatient)
+      return rows.map(toPatientSummary)
     },
 
     async search(input) {
@@ -179,7 +239,7 @@ export function createPatientRepository(getClient: () => PrismaClient): PatientR
         orderBy: ROSTER_ORDER,
         take: SEARCH_LIMIT,
       })
-      return rows.map(toPatient)
+      return rows.map(toPatientSummary)
     },
 
     async suggest(input) {
@@ -188,7 +248,7 @@ export function createPatientRepository(getClient: () => PrismaClient): PatientR
         orderBy: ROSTER_ORDER,
         take: SUGGEST_LIMIT,
       })
-      return rows.map(toPatient)
+      return rows.map(toPatientSummary)
     },
 
     async searchByName(input) {
@@ -202,27 +262,75 @@ export function createPatientRepository(getClient: () => PrismaClient): PatientR
         orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
         take: PICKER_LIMIT,
       })
-      return rows.map(toPatient)
+      return rows.map(toPatientSummary)
     },
 
     async create(input) {
-      const row = await getClient().patient.create({ data: toWriteData(input) })
+      const lists = clinicalLists(input)
+      const row = await getClient().patient.create({
+        data: {
+          ...demographicsData(input),
+          ...clinicalScalars(input),
+          ...billingData(input),
+          medications: { create: lists.medications },
+          allergies: { create: lists.allergies },
+          conditions: { create: lists.conditions },
+        },
+        include: RECORD_INCLUDE,
+      })
       return toPatient(row)
     },
 
-    async update(input) {
+    async updateDemographics(input) {
       const { id, ...rest } = input
-      const row = await getClient().patient.update({ where: { id }, data: toWriteData(rest) })
+      if (!(await exists(id))) return null
+      const row = await getClient().patient.update({
+        where: { id },
+        data: demographicsData(rest),
+        include: RECORD_INCLUDE,
+      })
+      return toPatient(row)
+    },
+
+    async updateClinical(input) {
+      const { id, ...rest } = input
+      if (!(await exists(id))) return null
+      const lists = clinicalLists(rest)
+      // One statement: the scalars and a delete-then-create of each list,
+      // atomic under Prisma's nested write. A partially replaced medication
+      // list is exactly the kind of record that cannot be allowed to exist.
+      const row = await getClient().patient.update({
+        where: { id },
+        data: {
+          ...clinicalScalars(rest),
+          medications: { deleteMany: {}, create: lists.medications },
+          allergies: { deleteMany: {}, create: lists.allergies },
+          conditions: { deleteMany: {}, create: lists.conditions },
+        },
+        include: RECORD_INCLUDE,
+      })
+      return toPatient(row)
+    },
+
+    async updateBilling(input) {
+      const { id, ...rest } = input
+      if (!(await exists(id))) return null
+      const row = await getClient().patient.update({
+        where: { id },
+        data: billingData(rest),
+        include: RECORD_INCLUDE,
+      })
       return toPatient(row)
     },
 
     async setStatus(input) {
-      // Deliberately its own write, not a variant of `update`: the legacy UI's
-      // activate/deactivate action changed status and nothing else. No screen
-      // calls it since DIA-50; it stays because the column does.
+      // Deliberately its own write, not a variant of an update: the legacy
+      // UI's activate/deactivate action changed status and nothing else. No
+      // screen calls it since DIA-50; it stays because the column does.
       const row = await getClient().patient.update({
         where: { id: input.id },
         data: { status: input.status },
+        include: RECORD_INCLUDE,
       })
       return toPatient(row)
     },

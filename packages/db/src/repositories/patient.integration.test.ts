@@ -8,9 +8,10 @@ import { db } from '../index.ts'
  *
  * What only this level can prove: that `@db.Date` behaves as the mapper assumes
  * across the driver, that the public API returns contract shapes and not rows,
- * and that a row violating a contract is caught at the boundary rather than
- * flowing upward. The unit tests cover the mapper given a `Date`; they cannot
- * tell you the database hands it one.
+ * that the child lists really are replaced atomically, and that a row
+ * violating a contract is caught at the boundary rather than flowing upward.
+ * The unit tests cover the mapper given a `Date`; they cannot tell you the
+ * database hands it one.
  *
  * Runs under `TZ=America/Los_Angeles` (see vitest.integration.config.ts).
  */
@@ -31,14 +32,12 @@ const GRACE = {
   dateOfBirth: new Date('1906-12-09T00:00:00.000Z'),
 }
 
-/** A full legacy-form submission, post-contract-parse (the router's output). */
+/** A full sectioned submission, post-contract-parse (the router's output). */
 const GRACE_INPUT: CreatePatientInput = {
   firstName: 'Grace',
   lastName: 'Hopper',
   gender: 'female',
-  heightInches: 60,
   dateOfBirth: '1906-12-09',
-  healthyWeight: 120,
   language: 'english',
   office: 'Sylmar',
   email: 'grace@example.com',
@@ -50,8 +49,21 @@ const GRACE_INPUT: CreatePatientInput = {
   phoneFollowUpAllowed: true,
   referralSource: 'word of mouth',
   referredByPatientId: undefined,
-  historyNotes: 'None pertinent.',
   programType: undefined,
+  heightInches: 60,
+  medications: [
+    { name: 'Metformin', dose: '500 mg', frequency: 'twice daily' },
+    { name: 'Lisinopril', dose: undefined, frequency: undefined },
+  ],
+  allergies: [{ name: 'Penicillin', reaction: 'hives' }],
+  conditions: [
+    { condition: 'diabetes', onset: '2019', treatedBy: 'Dr. Smith', medicated: true, medications: 'Metformin' },
+    { condition: 'hypertension', onset: undefined, treatedBy: undefined, medicated: false, medications: undefined },
+  ],
+  historyOther: 'None pertinent.',
+  pcpName: 'Dr. Jones',
+  pcpAddress: undefined,
+  pcpPhone: '9515550001',
   creditCardNumber: '4111111111111111',
   creditCardExpMonth: '12',
   creditCardExpYear: '2030',
@@ -74,8 +86,6 @@ describe('patient repository', () => {
       lastName: 'Lovelace',
       dateOfBirth: '1815-12-10',
       gender: null,
-      heightInches: null,
-      healthyWeight: null,
       language: null,
       office: null,
       email: null,
@@ -87,8 +97,15 @@ describe('patient repository', () => {
       addressZip: null,
       referralSource: null,
       referredByPatientId: null,
-      historyNotes: null,
       programType: null,
+      heightInches: null,
+      medications: [],
+      allergies: [],
+      conditions: [],
+      historyOther: null,
+      pcpName: null,
+      pcpAddress: null,
+      pcpPhone: null,
       status: 'active',
       lastVisitAt: null,
       creditCardNumber: null,
@@ -116,7 +133,7 @@ describe('patient repository', () => {
     expect(await db.patients.findById('00000000-0000-4000-8000-000000000000')).toBeNull()
   })
 
-  it('sorts a search by most recently seen first, patients with no visit last', async () => {
+  it('sorts the roster by most recently seen first, patients with no visit last', async () => {
     // Legacy `GET /patients` sorted by `recentVisit` descending; DIA-50 makes
     // that the roster's one order. Ada was seen most recently, Grace a year
     // before, and the third patient never.
@@ -144,14 +161,27 @@ describe('patient repository', () => {
     ).toEqual(['Ada', 'Grace', 'Katherine'])
   })
 
-  it('creates a patient from the full form input and round-trips it', async () => {
+  it('roster rows are summaries: no clinical lists, no card columns', async () => {
+    await db.patients.create(GRACE_INPUT)
+
+    const [row] = await db.patients.listRecent()
+    expect(row).toEqual({
+      id: expect.any(String),
+      firstName: 'Grace',
+      lastName: 'Hopper',
+      dateOfBirth: '1906-12-09',
+      office: 'Sylmar',
+      lastVisitAt: null,
+      phone: '9515550000',
+    })
+  })
+
+  it('creates a patient from the full sectioned input and round-trips it', async () => {
     const created = await db.patients.create(GRACE_INPUT)
 
     expect(created).toMatchObject({
       firstName: 'Grace',
       gender: 'female',
-      heightInches: 60,
-      healthyWeight: 120,
       language: 'english',
       office: 'Sylmar',
       email: 'grace@example.com',
@@ -160,8 +190,23 @@ describe('patient repository', () => {
       phone: '9515550000',
       phoneFollowUpAllowed: true,
       referralSource: 'word of mouth',
-      historyNotes: 'None pertinent.',
       programType: null,
+      heightInches: 60,
+      // Lists come back in the order they were entered, with absent
+      // optional fields as null.
+      medications: [
+        { name: 'Metformin', dose: '500 mg', frequency: 'twice daily' },
+        { name: 'Lisinopril', dose: null, frequency: null },
+      ],
+      allergies: [{ name: 'Penicillin', reaction: 'hives' }],
+      conditions: [
+        { condition: 'diabetes', onset: '2019', treatedBy: 'Dr. Smith', medicated: true, medications: 'Metformin' },
+        { condition: 'hypertension', onset: null, treatedBy: null, medicated: false, medications: null },
+      ],
+      historyOther: 'None pertinent.',
+      pcpName: 'Dr. Jones',
+      pcpAddress: null,
+      pcpPhone: '9515550001',
       status: 'active',
       creditCardNumber: '4111111111111111',
       creditCardExpMonth: '12',
@@ -177,40 +222,107 @@ describe('patient repository', () => {
   it('stores absent optional fields as null', async () => {
     const created = await db.patients.create({
       ...GRACE_INPUT,
-      healthyWeight: undefined,
       language: undefined,
       office: undefined,
       email: undefined,
       referralSource: undefined,
-      historyNotes: undefined,
+      historyOther: undefined,
+      pcpName: undefined,
     })
 
-    expect(created.healthyWeight).toBeNull()
     expect(created.language).toBeNull()
     expect(created.office).toBeNull()
     expect(created.email).toBeNull()
     expect(created.referralSource).toBeNull()
-    expect(created.historyNotes).toBeNull()
+    expect(created.historyOther).toBeNull()
+    expect(created.pcpName).toBeNull()
   })
 
-  it('updates every form field and clears the ones an update leaves blank', async () => {
+  it('updates demographics without touching the clinical or billing sections', async () => {
     const created = await db.patients.create(GRACE_INPUT)
 
-    const updated = await db.patients.update({
+    const updated = await db.patients.updateDemographics({
       ...GRACE_INPUT,
       id: created.id,
       lastName: 'Hopper-Murray',
       office: 'At Home',
       programType: 'Basic Program',
-      healthyWeight: undefined, // cleared on the form → cleared in the row
+      email: undefined, // cleared on the form → cleared in the row
     })
 
-    expect(updated.lastName).toBe('Hopper-Murray')
-    expect(updated.office).toBe('At Home')
-    expect(updated.programType).toBe('Basic Program')
-    expect(updated.healthyWeight).toBeNull()
-    expect(updated.status).toBe('active') // update never touches status
+    expect(updated).toEqual({
+      ...created,
+      lastName: 'Hopper-Murray',
+      office: 'At Home',
+      programType: 'Basic Program',
+      email: null,
+    })
     expect(await db.patients.findById(created.id)).toEqual(updated)
+  })
+
+  it('replaces the clinical lists wholesale and leaves the rest alone', async () => {
+    const created = await db.patients.create(GRACE_INPUT)
+
+    const updated = await db.patients.updateClinical({
+      id: created.id,
+      heightInches: 61.5,
+      medications: [{ name: 'Lisinopril', dose: '10 mg', frequency: 'daily' }],
+      allergies: [],
+      conditions: [{ condition: 'hypertension', onset: '2021', treatedBy: undefined, medicated: true, medications: 'Lisinopril' }],
+      historyOther: undefined,
+      pcpName: 'Dr. Lee',
+      pcpAddress: '2 Clinic Rd',
+      pcpPhone: undefined,
+    })
+
+    expect(updated).toEqual({
+      ...created,
+      heightInches: 61.5,
+      medications: [{ name: 'Lisinopril', dose: '10 mg', frequency: 'daily' }],
+      allergies: [],
+      conditions: [{ condition: 'hypertension', onset: '2021', treatedBy: null, medicated: true, medications: 'Lisinopril' }],
+      historyOther: null,
+      pcpName: 'Dr. Lee',
+      pcpAddress: '2 Clinic Rd',
+      pcpPhone: null,
+    })
+    // The old rows are gone, not orphaned: one medication row in the table.
+    expect(await prisma.patientMedication.count()).toBe(1)
+    expect(await prisma.patientAllergy.count()).toBe(0)
+    expect(await prisma.patientCondition.count()).toBe(1)
+    expect(await db.patients.findById(created.id)).toEqual(updated)
+  })
+
+  it('updates billing alone', async () => {
+    const created = await db.patients.create(GRACE_INPUT)
+
+    const updated = await db.patients.updateBilling({
+      id: created.id,
+      creditCardNumber: undefined,
+      creditCardExpMonth: undefined,
+      creditCardExpYear: undefined,
+      creditCardZip: undefined,
+    })
+
+    expect(updated).toEqual({
+      ...created,
+      creditCardNumber: null,
+      creditCardExpMonth: null,
+      creditCardExpYear: null,
+      creditCardZip: null,
+    })
+  })
+
+  it('returns null from a section update for a record that does not exist', async () => {
+    expect(
+      await db.patients.updateBilling({
+        id: '00000000-0000-4000-8000-000000000000',
+        creditCardNumber: undefined,
+        creditCardExpMonth: undefined,
+        creditCardExpYear: undefined,
+        creditCardZip: undefined,
+      }),
+    ).toBeNull()
   })
 
   it('sets status without touching anything else', async () => {
@@ -304,14 +416,6 @@ describe('patient repository', () => {
     expect(suggested[0]?.firstName).toBe('Pat11') // most recently seen first
   })
 
-  it('searches by calendar day of birth through the separate filter', async () => {
-    await prisma.patient.createMany({ data: [ADA, GRACE] })
-
-    expect(
-      (await db.patients.search({ dateOfBirth: '1815-12-10' })).map((p) => p.id),
-    ).toEqual([ADA.id])
-  })
-
   it('finds an inactive patient like any other — status is not a filter', async () => {
     // The column stays (DIA-50 keeps the field) but nothing reads it: an
     // inactive patient is still on the roster and still found by name.
@@ -320,8 +424,8 @@ describe('patient repository', () => {
     })
 
     expect(
-      (await db.patients.search({ query: { kind: 'name', name: 'hopper' } })).map((p) => p.status),
-    ).toEqual(['inactive'])
+      (await db.patients.search({ query: { kind: 'name', name: 'hopper' } })).map((p) => p.id),
+    ).toEqual([GRACE.id])
   })
 
   it('combines the query and the date of birth as AND', async () => {

@@ -1,7 +1,12 @@
 import { officeScopedInput } from '@fastehr/contracts'
 import { TRPCError } from '@trpc/server'
 import { auditPhiAccess } from './middleware/audit.ts'
-import { requireAdminRole, requireAuth, requireRole } from './middleware/auth.ts'
+import {
+  requireAdminRole,
+  requireAuth,
+  requireClericalRole,
+  requireRole,
+} from './middleware/auth.ts'
 import { publicProcedure } from './trpc.ts'
 
 /**
@@ -33,6 +38,13 @@ export const protectedProcedure = publicProcedure
  * still runs first and a refused probe still leaves its trace.
  */
 export const adminProcedure = protectedProcedure.use(requireAdminRole)
+
+/**
+ * Procedures for the clerical half of a patient record — demographics,
+ * billing, and creating a record (ADR 28). Admins and the front desk. A
+ * provider gets FORBIDDEN, and the audit trail shows the probe.
+ */
+export const clericalProcedure = protectedProcedure.use(requireClericalRole)
 
 /**
  * Procedures that read or write for a single clinic site.
