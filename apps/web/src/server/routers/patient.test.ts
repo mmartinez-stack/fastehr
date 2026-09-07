@@ -117,6 +117,7 @@ function fakeDb(overrides: Partial<Db['patients']> = {}): Db {
       },
       update: async () => null,
       setActive: async () => null,
+      delete: async () => null,
     },
   }
 }

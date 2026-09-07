@@ -11,11 +11,13 @@ export {
   createStaffUserInput,
   updateStaffUserInput,
   setStaffUserActiveInput,
+  deleteStaffUserInput,
   searchStaffUsersInput,
   type StaffUser,
   type CreateStaffUserInput,
   type UpdateStaffUserInput,
   type SetStaffUserActiveInput,
+  type DeleteStaffUserInput,
   type SearchStaffUsersInput,
 } from './staff-user.ts'
 export { describeValidationFailure, type ValidationFailure } from './errors.ts'

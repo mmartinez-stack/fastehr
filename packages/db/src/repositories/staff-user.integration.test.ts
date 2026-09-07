@@ -109,6 +109,40 @@ describe('staff-user repository', () => {
     expect(await db.staffUsers.update({ id: 'ghost', name: 'X' })).toBeNull()
   })
 
+  it('deletes the account with its sessions and credential, and misses return null', async () => {
+    const id = await seed('leaving-for-good@example.com')
+    await prisma.account.create({
+      data: {
+        id: 'acc-del',
+        userId: id,
+        accountId: id,
+        providerId: 'credential',
+        issuer: 'local:credential',
+        password: 'not-a-real-hash',
+        updatedAt: new Date(),
+      },
+    })
+    await prisma.session.create({
+      data: {
+        id: 'sess-del',
+        token: 'token-del',
+        userId: id,
+        expiresAt: new Date(Date.now() + 3_600_000),
+        updatedAt: new Date(),
+      },
+    })
+
+    const deleted = await db.staffUsers.delete({ id })
+    expect(deleted).toMatchObject({ email: 'leaving-for-good@example.com', hasCredential: true })
+
+    // The row and everything hanging off it are gone — the FK cascades.
+    expect(await prisma.user.count()).toBe(0)
+    expect(await prisma.account.count()).toBe(0)
+    expect(await prisma.session.count()).toBe(0)
+
+    expect(await db.staffUsers.delete({ id: 'ghost' })).toBeNull()
+  })
+
   it('deactivation kills live sessions in the same transaction', async () => {
     const id = await seed('leaving@example.com')
     await prisma.session.create({

@@ -38,6 +38,7 @@ resolution re-checks `isActive` on every call.
 | Patient create / update (`patient.create/update`) | `protectedProcedure` | ✅ | ✅ | ✅ |
 | Patient activate/deactivate (`patient.setStatus`) | `protectedProcedure` | ✅ | ✅ | ✅ |
 | Staff accounts: list, search, create, edit, enable/disable (`staffUsers.*`) | `adminProcedure` | ✅ | ❌ | ❌ |
+| Staff account delete (`staffUsers.delete`; confirmed in UI, never self) | `adminProcedure` | ✅ | ❌ | ❌ |
 | Anything office-scoped (future queues etc.) | `officeScopedProcedure` | own offices only | own offices only | own offices only |
 | `/users` page render | `guardPage('admin')` | ✅ | ❌ | ❌ |
 | Issue a temporary password | not a procedure — the `issue-temp-password` runbook, CLI-only | operator with DB access | ❌ | ❌ |
@@ -52,10 +53,17 @@ Notes that carry weight:
   commit.
 - **Office scoping is orthogonal to role** (ADR 22): the permitted set is part
   of the actor's identity, checked server-side; an admin is not exempt.
-- **No role can delete** a patient or a staff account — deactivation only, by
-  design, at the repository layer.
-- An admin cannot deactivate their own account (`staffUsers.setActive` refuses
-  it), so a clinic cannot end up admin-less by one misclick.
+- **No role can delete a patient** — deactivation only, matching the legacy
+  system, whose patient DELETE route was retired ("patients can no longer be
+  deleted"). Staff accounts *can* be hard-deleted by an admin (legacy parity:
+  `DELETE /users/:id` was admin-only there too), behind an explicit
+  confirmation dialog; sessions and the credential go with the row. The legacy
+  lesson — 38,047 orphaned clinical signatures — means `staffUsers.delete`
+  must start refusing users referenced by clinical records the day the visits
+  domain lands (noted in the repository).
+- An admin cannot deactivate **or delete** their own account
+  (`staffUsers.setActive` and `staffUsers.delete` both refuse it), so a clinic
+  cannot end up admin-less by one misclick.
 - Refused attempts are audited: the audit middleware is outermost precisely so
   a `FORBIDDEN` probe leaves a trace (ADR 10).
 

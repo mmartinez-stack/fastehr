@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type {
   CreateStaffUserInput,
+  DeleteStaffUserInput,
   SearchStaffUsersInput,
   SetStaffUserActiveInput,
   StaffUser,
@@ -12,9 +13,13 @@ import { toStaffUser } from '../mappers/staff-user.ts'
 /**
  * Staff account administration. Contract types only, as ADR 3 requires.
  *
- * Deliberately no `delete`: the legacy system hard-deleted 22 accounts and
- * left 38,047 clinical signatures pointing at nothing (entity inventory §1).
- * Deactivation is the only removal this repository offers.
+ * `delete` is a hard delete, restored on request for legacy parity (the old
+ * system had DELETE /users/:id, admin-only). The legacy lesson still stands:
+ * that path orphaned 38,047 clinical signatures against 22 vanished accounts
+ * (entity inventory §1). Today no other table references a user, and sessions
+ * and credential accounts cascade at the FK — but the day the visits domain
+ * lands, this method must start refusing any user a clinical record points
+ * at. Deactivation remains the everyday removal.
  */
 export interface StaffUserRepository {
   list(): Promise<StaffUser[]>
@@ -23,6 +28,7 @@ export interface StaffUserRepository {
   create(input: CreateStaffUserInput): Promise<StaffUser>
   update(input: UpdateStaffUserInput): Promise<StaffUser | null>
   setActive(input: SetStaffUserActiveInput): Promise<StaffUser | null>
+  delete(input: DeleteStaffUserInput): Promise<StaffUser | null>
 }
 
 /** The one write failure an admin can cause from the form and must see by name. */
@@ -123,6 +129,20 @@ export function createStaffUserRepository(getClient: () => PrismaClient): StaffU
         ...(input.isActive ? [] : [client.session.deleteMany({ where: { userId: input.id } })]),
       ])
       return toStaffUser(row, row.accounts.length > 0)
+    },
+
+    async delete(input) {
+      const client = getClient()
+      const existing = await client.user.findUnique({
+        where: { id: input.id },
+        include: { accounts: CREDENTIAL_FILTER },
+      })
+      if (existing === null) return null
+
+      // Sessions and credential accounts go with the row — the FK is
+      // ON DELETE CASCADE — so a deleted user cannot keep a live session.
+      await client.user.delete({ where: { id: input.id } })
+      return toStaffUser(existing, existing.accounts.length > 0)
     },
   }
 }

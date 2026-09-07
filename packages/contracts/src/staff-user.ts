@@ -55,6 +55,12 @@ export const setStaffUserActiveInput = z.object({
 
 export type SetStaffUserActiveInput = z.infer<typeof setStaffUserActiveInput>
 
+export const deleteStaffUserInput = z.object({
+  id: z.string().min(1),
+})
+
+export type DeleteStaffUserInput = z.infer<typeof deleteStaffUserInput>
+
 /**
  * The Users screen search — the roster's single-input pattern (ADR 27)
  * applied to staff: the format decides the field. An `@` anywhere means

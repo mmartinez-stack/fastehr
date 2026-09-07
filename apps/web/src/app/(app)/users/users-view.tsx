@@ -32,6 +32,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Field,
   FieldDescription,
   FieldError,
@@ -47,10 +57,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { RequiredMark } from "@/components/required-mark"
+import { ROLE_LABEL } from "@/lib/staff-role-label"
 import { toFormErrors, validationFrom, type FormCopy, type FormErrors } from "@/lib/form-errors"
 import { trpc } from "@/trpc/client"
 import { toast } from "sonner"
-import { CircleCheck, CircleSlash, PencilIcon, Search, UserPlusIcon } from "lucide-react"
+import { CircleCheck, CircleSlash, PencilIcon, Search, Trash2, UserPlusIcon } from "lucide-react"
 
 /**
  * Staff administration on the reference form pattern (docs/forms.md, ADR 25):
@@ -61,12 +72,6 @@ import { CircleCheck, CircleSlash, PencilIcon, Search, UserPlusIcon } from "luci
  * query means email, anything else is a name, both matched by substring. Row
  * actions are inline buttons on the row — never folded into an overflow menu.
  */
-
-const ROLE_LABEL: Record<StaffRole, string> = {
-  admin: "Admin",
-  provider: "Provider",
-  frontdesk: "Front Desk",
-}
 
 const ROLE_OPTIONS = STAFF_ROLES.map((value) => ({ value, label: ROLE_LABEL[value] }))
 
@@ -169,46 +174,49 @@ function CreateUserForm({ onDone }: { onDone: () => void }) {
       noValidate
     >
       <FieldGroup>
-        <form.Field name="name">
-          {(field) => (
-            <Field data-invalid={!field.state.meta.isValid}>
-              <FieldLabel htmlFor="u-name">
-                Full name
-                <RequiredMark />
-              </FieldLabel>
-              <Input
-                id="u-name"
-                value={field.state.value}
-                onChange={(event) => field.handleChange(event.target.value)}
-                onBlur={field.handleBlur}
-                aria-invalid={!field.state.meta.isValid}
-                placeholder="Jane Doe"
-              />
-              <FieldError errors={field.state.meta.errors} />
-            </Field>
-          )}
-        </form.Field>
-        <form.Field name="email">
-          {(field) => (
-            <Field data-invalid={!field.state.meta.isValid}>
-              <FieldLabel htmlFor="u-email">
-                Email
-                <RequiredMark />
-              </FieldLabel>
-              <Input
-                id="u-email"
-                type="email"
-                value={field.state.value}
-                onChange={(event) => field.handleChange(event.target.value)}
-                onBlur={field.handleBlur}
-                aria-invalid={!field.state.meta.isValid}
-                placeholder="jane@example.com"
-              />
-              <FieldError errors={field.state.meta.errors} />
-            </Field>
-          )}
-        </form.Field>
-        <form.Field name="role">{roleSelect}</form.Field>
+        {/* The wide dialog is spent on columns, never on stretched fields. */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <form.Field name="name">
+            {(field) => (
+              <Field data-invalid={!field.state.meta.isValid}>
+                <FieldLabel htmlFor="u-name">
+                  Full name
+                  <RequiredMark />
+                </FieldLabel>
+                <Input
+                  id="u-name"
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  onBlur={field.handleBlur}
+                  aria-invalid={!field.state.meta.isValid}
+                  placeholder="Jane Doe"
+                />
+                <FieldError errors={field.state.meta.errors} />
+              </Field>
+            )}
+          </form.Field>
+          <form.Field name="email">
+            {(field) => (
+              <Field data-invalid={!field.state.meta.isValid}>
+                <FieldLabel htmlFor="u-email">
+                  Email
+                  <RequiredMark />
+                </FieldLabel>
+                <Input
+                  id="u-email"
+                  type="email"
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  onBlur={field.handleBlur}
+                  aria-invalid={!field.state.meta.isValid}
+                  placeholder="jane@example.com"
+                />
+                <FieldError errors={field.state.meta.errors} />
+              </Field>
+            )}
+          </form.Field>
+          <form.Field name="role">{roleSelect}</form.Field>
+        </div>
       </FieldGroup>
       <DialogFooter className="mt-4">
         <Button type="button" variant="outline" onClick={onDone}>
@@ -226,7 +234,18 @@ function CreateUserForm({ onDone }: { onDone: () => void }) {
   )
 }
 
-function EditUserForm({ user, onDone }: { user: StaffUser; onDone: () => void }) {
+function EditUserForm({
+  user,
+  onDone,
+  onDelete,
+  canDelete,
+}: {
+  user: StaffUser
+  onDone: () => void
+  /** Hands off to the confirmation dialog — nothing is deleted from here. */
+  onDelete: () => void
+  canDelete: boolean
+}) {
   const utils = trpc.useUtils()
   const update = trpc.staffUsers.update.useMutation()
 
@@ -268,27 +287,43 @@ function EditUserForm({ user, onDone }: { user: StaffUser; onDone: () => void })
       noValidate
     >
       <FieldGroup>
-        <form.Field name="name">
-          {(field) => (
-            <Field data-invalid={!field.state.meta.isValid}>
-              <FieldLabel htmlFor="e-name">
-                Full name
-                <RequiredMark />
-              </FieldLabel>
-              <Input
-                id="e-name"
-                value={field.state.value}
-                onChange={(event) => field.handleChange(event.target.value)}
-                onBlur={field.handleBlur}
-                aria-invalid={!field.state.meta.isValid}
-              />
-              <FieldError errors={field.state.meta.errors} />
-            </Field>
-          )}
-        </form.Field>
-        <form.Field name="role">{roleSelect}</form.Field>
+        {/* The wide dialog is spent on columns, never on stretched fields. */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <form.Field name="name">
+            {(field) => (
+              <Field data-invalid={!field.state.meta.isValid}>
+                <FieldLabel htmlFor="e-name">
+                  Full name
+                  <RequiredMark />
+                </FieldLabel>
+                <Input
+                  id="e-name"
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  onBlur={field.handleBlur}
+                  aria-invalid={!field.state.meta.isValid}
+                />
+                <FieldError errors={field.state.meta.errors} />
+              </Field>
+            )}
+          </form.Field>
+          <form.Field name="role">{roleSelect}</form.Field>
+        </div>
       </FieldGroup>
       <DialogFooter className="mt-4">
+        {/* Legacy parity: DELETE /users/:id was admin-only. Disabled for the
+            signed-in admin, matching the row's Disable button; the server
+            refuses self-deletion regardless. */}
+        <Button
+          type="button"
+          variant="destructive"
+          className="mr-auto"
+          disabled={!canDelete}
+          onClick={onDelete}
+        >
+          <Trash2 data-icon="inline-start" />
+          Delete
+        </Button>
         <Button type="button" variant="outline" onClick={onDone}>
           Cancel
         </Button>
@@ -323,6 +358,23 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
 
   const [addOpen, setAddOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<StaffUser | null>(null)
+  const [deleting, setDeleting] = React.useState<StaffUser | null>(null)
+
+  const deleteUser = trpc.staffUsers.delete.useMutation({
+    onSuccess: (deleted) => {
+      toast.success(`${deleted.name} deleted`)
+      void utils.staffUsers.invalidate()
+      setDeleting(null)
+    },
+    onError: (error) => {
+      toast.error(
+        error.message === "cannot delete your own account"
+          ? "You cannot delete your own account."
+          : "The account could not be deleted. Try again.",
+      )
+      setDeleting(null)
+    },
+  })
 
   const setActive = trpc.staffUsers.setActive.useMutation({
     onSuccess: (updated) => {
@@ -520,7 +572,7 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
       </Card>
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>Add staff member</DialogTitle>
             <DialogDescription>
@@ -533,16 +585,53 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
       </Dialog>
 
       <Dialog open={editing !== null} onOpenChange={(open) => (open ? undefined : setEditing(null))}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>Edit staff member</DialogTitle>
             <DialogDescription>{editing?.email}</DialogDescription>
           </DialogHeader>
           {editing === null ? null : (
-            <EditUserForm key={editing.id} user={editing} onDone={() => setEditing(null)} />
+            <EditUserForm
+              key={editing.id}
+              user={editing}
+              onDone={() => setEditing(null)}
+              canDelete={editing.id !== currentUserId}
+              onDelete={() => {
+                setDeleting(editing)
+                setEditing(null)
+              }}
+            />
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={deleting !== null}
+        onOpenChange={(open) => (open ? undefined : setDeleting(null))}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleting === null
+                ? ""
+                : `${deleting.name} (${deleting.email}) and their sign-in credential will be removed permanently. This cannot be undone. To remove access but keep the account, use Disable instead.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleteUser.isPending}
+              onClick={() => {
+                if (deleting !== null) deleteUser.mutate({ id: deleting.id })
+              }}
+            >
+              {deleteUser.isPending ? "Deleting..." : "Delete account"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

@@ -46,6 +46,7 @@ function fakeDb(overrides: Partial<Db['staffUsers']> = {}): Db {
       create: async () => JUNE,
       update: async () => JUNE,
       setActive: async () => JUNE,
+      delete: async () => JUNE,
       ...overrides,
     },
   }
@@ -178,5 +179,38 @@ describe('setActive', () => {
     await expect(caller.staffUsers.setActive({ id: 'ghost', isActive: false })).rejects.toThrow(
       'NOT_FOUND',
     )
+  })
+})
+
+describe('delete', () => {
+  it('forwards the id and returns the removed account', async () => {
+    const del = vi.fn(async () => JUNE)
+    const caller = callerWith(fakeDb({ delete: del }))
+
+    expect(await caller.staffUsers.delete({ id: JUNE.id })).toEqual(JUNE)
+    expect(del).toHaveBeenCalledWith({ id: JUNE.id })
+  })
+
+  it('refuses to let an admin delete their own account', async () => {
+    const del = vi.fn(async () => JUNE)
+    const caller = callerWith(fakeDb({ delete: del }))
+
+    await expect(caller.staffUsers.delete({ id: ADMIN.id })).rejects.toThrow(
+      'cannot delete your own account',
+    )
+    expect(del).not.toHaveBeenCalled()
+  })
+
+  it('is admin-gated, before the repository', async () => {
+    const del = vi.fn(async () => JUNE)
+    const caller = callerWith(fakeDb({ delete: del }), PROVIDER)
+
+    await expect(caller.staffUsers.delete({ id: JUNE.id })).rejects.toThrow('FORBIDDEN')
+    expect(del).not.toHaveBeenCalled()
+  })
+
+  it('surfaces an unknown id as NOT_FOUND', async () => {
+    const caller = callerWith(fakeDb({ delete: async () => null }))
+    await expect(caller.staffUsers.delete({ id: 'ghost' })).rejects.toThrow('NOT_FOUND')
   })
 })
