@@ -29,10 +29,13 @@ export const patientRouter = router({
     .input(patientSchema.pick({ id: true }))
     .query(({ ctx, input }) => ctx.db.patients.findById(input.id)),
 
+  /** The roster's default view — the legacy queue's "30 most recently seen". */
+  recent: protectedProcedure.query(({ ctx }) => ctx.db.patients.listRecent()),
+
   /**
    * The roster search (legacy `/patients/find`, minus the raw Mongo query).
-   * There is no unfiltered list and no "recent" default any more (DIA-59):
-   * the input refuses an empty search, so the whole table is never served.
+   * There is no unfiltered `list` (DIA-59): the input refuses an empty
+   * search, and `recent` is capped, so the whole table is never served.
    */
   search: protectedProcedure
     .input(searchPatientsInput)

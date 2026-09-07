@@ -42,6 +42,7 @@ export default function EditPatientPage() {
 
   const updatePatient = trpc.patient.update.useMutation({
     onSuccess: (updated) => {
+      void utils.patient.recent.invalidate()
       void utils.patient.search.invalidate()
       void utils.patient.suggest.invalidate()
       void utils.patient.byId.invalidate({ id: params.id })

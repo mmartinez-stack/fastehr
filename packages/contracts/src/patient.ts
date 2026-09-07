@@ -408,9 +408,9 @@ const interpretedQuery = z
 /**
  * The roster search. Three criteria, each optional, ANDed: the text query,
  * a date of birth, and a date of service ("patients seen on Monday" — any
- * visit on that clinic day, DIA-59). An entirely empty search is refused:
- * the roster never lists the whole table, it renders only what a criterion
- * selected. There is no status filter: status left the roster with DIA-50.
+ * visit on that clinic day, DIA-59). An entirely empty search is refused —
+ * the caller shows the capped recent list instead of asking for everyone.
+ * There is no status filter: status left the roster with DIA-50.
  */
 export const searchPatientsInput = z
   .object({

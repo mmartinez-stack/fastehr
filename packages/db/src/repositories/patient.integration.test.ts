@@ -133,7 +133,12 @@ describe('patient repository', () => {
       ],
     })
 
-    // All three share the letter "a"; the roster has one order.
+    expect((await db.patients.listRecent()).map((patient) => patient.firstName)).toEqual([
+      'Ada',
+      'Grace',
+      'Katherine',
+    ])
+    // All three share the letter "a"; the roster has one order, not two.
     expect(
       (await db.patients.search({ query: { kind: 'name', name: 'a' } })).map((p) => p.firstName),
     ).toEqual(['Ada', 'Grace', 'Katherine'])

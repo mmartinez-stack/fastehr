@@ -1,6 +1,6 @@
 # ADR 27 — One roster search input; the format decides the field
 
-**Status:** accepted, amended 2026-09-06 (substring names, no default list, date of service)  
+**Status:** accepted, amended 2026-09-06 (substring names, date of service, no whole-table list)  
 **Applies to:** `packages/contracts/src/patient.ts` · `packages/db/src/repositories/patient.ts` · `apps/web/src/app/(app)/patients/page.tsx`
 
 The patient roster's search is a single text input for names and phone, plus a
@@ -91,10 +91,12 @@ stakeholder sync, and this ADR now describes the result:
   match, and front-desk staff were typing whole names to find anyone. A
   two-word query still checks both orientations, now with each part a
   substring of its field. Phone stays exact and DOB stays by calendar day.
-- **There is no default list.** The recent-30 fallback and the unbounded
-  `patient.list` procedure are gone: an empty search is refused by the input
-  and renders nothing, so the ~50k-row table is never served whole. The
-  100-row cap remains, and the roster says so when it is hit.
+- **The whole table is never served.** The unbounded `patient.list`
+  procedure is gone and an empty search is refused by the input. The recent-30
+  view stays as the roster's opening screen (the stakeholder's call on
+  review: the queue should open on the patients most recently seen, as the
+  legacy one did), now ordered by last visit. The 100-row search cap remains,
+  and the roster says so when it is hit.
 - **A third criterion, date of service**: any patient with a visit on that
   calendar day, reckoned in the clinic's zone (`CLINIC_TIME_ZONE` in
   contracts), ANDed with the others.

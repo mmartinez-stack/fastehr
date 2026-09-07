@@ -24,13 +24,13 @@ import { useSurfaces } from "@/components/role-provider"
 import { trpc } from "@/trpc/client"
 
 /**
- * The patient roster — search-driven, and only search-driven (DIA-59): the
- * table renders nothing until a criterion is set, and the ~50k-row roster is
- * never listed whole. One search input for names and phone (ADR 27, as
- * amended) — the format of what was typed decides the field, names match by
- * substring — plus two date fields, date of birth and date of service; all
- * three combine as AND. Match semantics live server-side in
- * `patient.search`.
+ * The patient roster — the legacy patient queue on the real seam. It opens
+ * on the 30 most recently seen patients (legacy `GET /patients`), and the
+ * ~50k-row roster is never listed whole: everything past that is a search.
+ * One search input for names and phone (ADR 27, as amended) — the format of
+ * what was typed decides the field, names match by substring — plus two date
+ * fields, date of birth and date of service; all three combine as AND. Match
+ * semantics live server-side in `patient.search`.
  *
  * The search box also suggests as the user types: two characters, a short
  * debounce, and `patient.suggest` returns a handful of matches to jump to.
@@ -139,10 +139,12 @@ export default function PatientsPage() {
   // and the day boundary does not need to move under an open screen.
   const [now] = React.useState(() => Date.now())
 
+  const recent = trpc.patient.recent.useQuery(undefined, { enabled: submitted === null })
   const search = trpc.patient.search.useQuery(
     submitted ?? { query: "", dateOfBirth: "", serviceDate: "" },
     { enabled: submitted !== null },
   )
+  const active = submitted === null ? recent : search
 
   // Type-ahead: only for a query the interpreter accepts, after it settles.
   const settled = useDebounced(query.trim(), SUGGEST_DELAY_MS)
@@ -153,7 +155,7 @@ export default function PatientsPage() {
   )
   const suggestions = suggestable && suggesting ? (suggest.data ?? []) : []
 
-  const patients = search.data ?? []
+  const patients = active.data ?? []
   const columns = clerical ? 6 : 5
 
   const runSearch = () => {
@@ -179,7 +181,7 @@ export default function PatientsPage() {
     <div>
       <PageHeader
         title="Patients"
-        description="Search the clinic patient roster."
+        description="Search and manage the clinic patient roster."
       >
         <Button render={<Link href="/patients/new" />} nativeButton={false}>
           <UserPlus data-icon="inline-start" />
@@ -339,31 +341,25 @@ export default function PatientsPage() {
                   </TableCell>
                 </TableRow>
               ))}
-              {submitted === null ? (
+              {active.isPending ? (
                 <TableRow>
                   <TableCell colSpan={columns} className="py-8 text-center text-muted-foreground">
-                    Search by name, phone, date of birth, or the day a patient was seen.
+                    Loading patients…
                   </TableCell>
                 </TableRow>
-              ) : search.isPending ? (
+              ) : active.isError ? (
                 <TableRow>
                   <TableCell colSpan={columns} className="py-8 text-center text-muted-foreground">
-                    Searching…
-                  </TableCell>
-                </TableRow>
-              ) : search.isError ? (
-                <TableRow>
-                  <TableCell colSpan={columns} className="py-8 text-center text-muted-foreground">
-                    The search could not run. Try again.
+                    The roster could not be loaded. Try again.
                   </TableCell>
                 </TableRow>
               ) : patients.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={columns} className="py-8 text-center text-muted-foreground">
-                    No patients match your search.
+                    {submitted === null ? "No patients yet." : "No patients match your search."}
                   </TableCell>
                 </TableRow>
-              ) : patients.length >= SEARCH_CAP ? (
+              ) : submitted !== null && patients.length >= SEARCH_CAP ? (
                 <TableRow>
                   <TableCell colSpan={columns} className="py-4 text-center text-muted-foreground">
                     Showing the first {SEARCH_CAP} matches. Narrow the search to see the rest.

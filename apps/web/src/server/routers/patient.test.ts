@@ -95,6 +95,7 @@ function fakeDb(overrides: Partial<Db['patients']> = {}): Db {
   return {
     patients: {
       findById: async () => null,
+      listRecent: async () => [],
       search: async () => [],
       suggest: async () => [],
       searchByName: async () => [],
@@ -168,13 +169,17 @@ describe('patient router', () => {
     expect(findById).not.toHaveBeenCalled()
   })
 
-  it('has no unfiltered list — the roster is search-driven', () => {
-    // The whole-table `list` and the recent-30 default left with DIA-59;
-    // the only way to read rows is a search with a criterion.
+  it('lists recent through the repository', async () => {
+    const caller = callerWith(fakeDb({ listRecent: async () => [ADA] }))
+
+    expect(await caller.patient.recent()).toEqual([ADA])
+  })
+
+  it('has no unfiltered list — only the capped recent view and searches', () => {
+    // The whole-table `list` left with DIA-59; `recent` is capped at 30.
     const paths = Object.keys(appRouter._def.procedures)
-    expect(paths).toContain('patient.search')
+    expect(paths).toContain('patient.recent')
     expect(paths).not.toContain('patient.list')
-    expect(paths).not.toContain('patient.recent')
   })
 
   it('searches with the query interpreted by format', async () => {

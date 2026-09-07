@@ -26,6 +26,7 @@ function fakeDb(overrides: Partial<Db['staffUsers']> = {}): Db {
   return {
     patients: {
       findById: async () => null,
+      listRecent: async () => [],
       search: async () => [],
       suggest: async () => [],
       searchByName: async () => [],

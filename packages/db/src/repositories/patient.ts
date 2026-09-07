@@ -15,9 +15,9 @@ import { toPatient } from '../mappers/patient.ts'
 /**
  * Patient reads and writes — the query set ported from the legacy patient
  * endpoints (docs/legacy-data-mapping.md § patients): search/save, no delete
- * (the legacy system disabled patient deletion, and so does this one), and
- * since DIA-59 no unfiltered list either: every read of more than one row
- * goes through `search`, whose input refuses to be empty.
+ * (the legacy system disabled patient deletion, and so does this one). The
+ * only read that takes no criterion is `listRecent`, capped at the legacy 30:
+ * the whole table is never served.
  *
  * The interface is declared in terms of `@fastehr/contracts` types only: no
  * `Prisma.PatientWhereInput`, no `Decimal`, no `select` objects. A consumer
@@ -27,6 +27,8 @@ import { toPatient } from '../mappers/patient.ts'
  */
 export interface PatientRepository {
   findById(id: string): Promise<Patient | null>
+  /** The roster's default view — legacy `GET /patients`: the 30 most recently seen. */
+  listRecent(): Promise<Patient[]>
   /** The roster search (ADR 27, amended): substring names, exact phone, two calendar days; capped. */
   search(input: SearchPatientsInput): Promise<Patient[]>
   /** The roster's type-ahead: the same interpretation, a few rows deep. */
@@ -39,10 +41,11 @@ export interface PatientRepository {
 }
 
 /**
- * The legacy caps, kept: 100 rows for a search, 30 for the picker. The
- * type-ahead shows a handful — it is for jumping to a record, not reading a
- * list.
+ * The legacy caps, kept: 30 rows for the default list and the picker, 100
+ * for a search. The type-ahead shows a handful — it is for jumping to a
+ * record, not reading a list.
  */
+const LIST_LIMIT = 30
 const SEARCH_LIMIT = 100
 const PICKER_LIMIT = 30
 const SUGGEST_LIMIT = 8
@@ -153,6 +156,16 @@ export function createPatientRepository(getClient: () => PrismaClient): PatientR
     async findById(id) {
       const row = await getClient().patient.findUnique({ where: { id } })
       return row === null ? null : toPatient(row)
+    },
+
+    async listRecent() {
+      // Legacy `GET /patients` sorted by `recentVisit` descending — the
+      // patients most recently *seen*, which `lastVisitAt` carries.
+      const rows = await getClient().patient.findMany({
+        orderBy: ROSTER_ORDER,
+        take: LIST_LIMIT,
+      })
+      return rows.map(toPatient)
     },
 
     async search(input) {
