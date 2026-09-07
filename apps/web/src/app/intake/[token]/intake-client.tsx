@@ -6,24 +6,17 @@ import type { PatientOffice } from "@fastehr/contracts"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty"
-import {
-  CLINICAL_SECTIONS,
-  EMPTY_PATIENT_FORM,
-  PatientForm,
-  type PatientSection,
-} from "@/features/patients/patient-form"
+import { EMPTY_PATIENT_FORM, PatientForm } from "@/features/patients/patient-form"
+import { INTAKE_TABS } from "@/features/patients/patient-tabs"
 import { trpc } from "@/trpc/client"
 
 /**
- * The person's side of the intake: the same sectioned form the front desk
+ * The person's side of the intake: the same tabbed form the front desk
  * uses, minus Billing (no card details are ever asked for here), with the
  * office required because it decides which queue the submission lands in.
  * The name arrives prefilled from the request; everything else is theirs to
  * type. One submit, then a thank-you — the link is spent.
  */
-
-/** Every section but Billing. */
-const INTAKE_SECTIONS: readonly PatientSection[] = ["demographics", ...CLINICAL_SECTIONS]
 
 export function IntakeClient({ token }: { token: string }) {
   const invite = trpc.intake.open.useQuery({ token }, { retry: false })
@@ -72,7 +65,7 @@ export function IntakeClient({ token }: { token: string }) {
           </div>
           <PatientForm
             title="Your information"
-            sections={INTAKE_SECTIONS}
+            sections={INTAKE_TABS}
             defaultValues={{
               ...EMPTY_PATIENT_FORM,
               firstName: invite.data.firstName,

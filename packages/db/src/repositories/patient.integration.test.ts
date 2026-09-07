@@ -55,12 +55,6 @@ const GRACE_INPUT: CreatePatientInput = {
     { name: 'Metformin', dose: '500 mg', frequency: 'twice daily' },
     { name: 'Lisinopril', dose: undefined, frequency: undefined },
   ],
-  allergies: [{ name: 'Penicillin', reaction: 'hives' }],
-  conditions: [
-    { condition: 'diabetes', onset: '2019', treatedBy: 'Dr. Smith', medicated: true, medications: 'Metformin' },
-    { condition: 'hypertension', onset: undefined, treatedBy: undefined, medicated: false, medications: undefined },
-  ],
-  historyOther: 'None pertinent.',
   pcpName: 'Dr. Jones',
   pcpAddress: undefined,
   pcpPhone: '9515550001',
@@ -100,8 +94,6 @@ describe('patient repository', () => {
       programType: null,
       heightInches: null,
       medications: [],
-      allergies: [],
-      conditions: [],
       historyOther: null,
       pcpName: null,
       pcpAddress: null,
@@ -116,6 +108,15 @@ describe('patient repository', () => {
     // Bookkeeping columns exist in the table and must not reach a caller.
     expect(patient).not.toHaveProperty('createdAt')
     expect(patient).not.toHaveProperty('legacyId')
+  })
+
+  it('has no healthy weight column any more', async () => {
+    // Dropped by 20260906150000_patient_record_sections; nothing reads or
+    // writes it, and the migration history is the record of its removal.
+    const columns = await prisma.$queryRaw<{ column_name: string }[]>`
+      SELECT column_name FROM information_schema.columns WHERE table_name = 'patients'
+    `
+    expect(columns.map((column) => column.column_name)).not.toContain('healthyWeight')
   })
 
   it('reads a DATE column as the calendar day it is, west of UTC', async () => {
@@ -198,12 +199,7 @@ describe('patient repository', () => {
         { name: 'Metformin', dose: '500 mg', frequency: 'twice daily' },
         { name: 'Lisinopril', dose: null, frequency: null },
       ],
-      allergies: [{ name: 'Penicillin', reaction: 'hives' }],
-      conditions: [
-        { condition: 'diabetes', onset: '2019', treatedBy: 'Dr. Smith', medicated: true, medications: 'Metformin' },
-        { condition: 'hypertension', onset: null, treatedBy: null, medicated: false, medications: null },
-      ],
-      historyOther: 'None pertinent.',
+      historyOther: null,
       pcpName: 'Dr. Jones',
       pcpAddress: null,
       pcpPhone: '9515550001',
@@ -226,7 +222,6 @@ describe('patient repository', () => {
       office: undefined,
       email: undefined,
       referralSource: undefined,
-      historyOther: undefined,
       pcpName: undefined,
     })
 
@@ -234,8 +229,13 @@ describe('patient repository', () => {
     expect(created.office).toBeNull()
     expect(created.email).toBeNull()
     expect(created.referralSource).toBeNull()
-    expect(created.historyOther).toBeNull()
     expect(created.pcpName).toBeNull()
+  })
+
+  it('round-trips a height entered as feet and inches: 5 ft 4 in stores as 64', async () => {
+    const created = await db.patients.create({ ...GRACE_INPUT, heightInches: 5 * 12 + 4 })
+    expect(created.heightInches).toBe(64)
+    expect((await db.patients.findById(created.id))?.heightInches).toBe(64)
   })
 
   it('updates demographics without touching the clinical or billing sections', async () => {
@@ -260,16 +260,14 @@ describe('patient repository', () => {
     expect(await db.patients.findById(created.id)).toEqual(updated)
   })
 
-  it('replaces the clinical lists wholesale and leaves the rest alone', async () => {
+  it('replaces the medication list wholesale and leaves the rest alone', async () => {
     const created = await db.patients.create(GRACE_INPUT)
 
+    // A removed row (Metformin) stays removed; a changed one is the new row.
     const updated = await db.patients.updateClinical({
       id: created.id,
       heightInches: 61.5,
       medications: [{ name: 'Lisinopril', dose: '10 mg', frequency: 'daily' }],
-      allergies: [],
-      conditions: [{ condition: 'hypertension', onset: '2021', treatedBy: undefined, medicated: true, medications: 'Lisinopril' }],
-      historyOther: undefined,
       pcpName: 'Dr. Lee',
       pcpAddress: '2 Clinic Rd',
       pcpPhone: undefined,
@@ -279,18 +277,42 @@ describe('patient repository', () => {
       ...created,
       heightInches: 61.5,
       medications: [{ name: 'Lisinopril', dose: '10 mg', frequency: 'daily' }],
-      allergies: [],
-      conditions: [{ condition: 'hypertension', onset: '2021', treatedBy: null, medicated: true, medications: 'Lisinopril' }],
-      historyOther: null,
       pcpName: 'Dr. Lee',
       pcpAddress: '2 Clinic Rd',
       pcpPhone: null,
     })
     // The old rows are gone, not orphaned: one medication row in the table.
     expect(await prisma.patientMedication.count()).toBe(1)
-    expect(await prisma.patientAllergy.count()).toBe(0)
-    expect(await prisma.patientCondition.count()).toBe(1)
     expect(await db.patients.findById(created.id)).toEqual(updated)
+
+    // Removing the last row leaves an empty list, not a stale one.
+    const emptied = await db.patients.updateClinical({
+      id: created.id,
+      heightInches: 61.5,
+      medications: [],
+      pcpName: 'Dr. Lee',
+      pcpAddress: '2 Clinic Rd',
+      pcpPhone: undefined,
+    })
+    expect(emptied?.medications).toEqual([])
+    expect(await prisma.patientMedication.count()).toBe(0)
+  })
+
+  it('leaves the legacy history text untouched by a clinical save', async () => {
+    // The column is read-only until the history section is built: the
+    // migrated text must survive every save of the Medical tab.
+    await prisma.patient.create({ data: { ...ADA, historyOther: 'HTN. Prior phentermine, tolerated.' } })
+
+    const updated = await db.patients.updateClinical({
+      id: ADA.id,
+      heightInches: 64,
+      medications: [],
+      pcpName: undefined,
+      pcpAddress: undefined,
+      pcpPhone: undefined,
+    })
+
+    expect(updated?.historyOther).toBe('HTN. Prior phentermine, tolerated.')
   })
 
   it('updates billing alone', async () => {

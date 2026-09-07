@@ -5,6 +5,7 @@ import {
   interpretPatientSearch,
   patientClinicalInput,
   patientDemographicsInput,
+  patientSchema,
   searchPatientsInput,
   sendPatientIntakeInput,
   suggestPatientsInput,
@@ -46,13 +47,6 @@ const SUBMITTED = {
     // The blank line the form adds to type into — not a row.
     { name: '', dose: '', frequency: '' },
   ],
-  conditions: [
-    { condition: 'diabetes', present: true, onset: '2019', treatedBy: 'Dr. Smith', medicated: true, medications: 'Metformin' },
-    // Answered "No", with stale detail text a hidden field kept in state.
-    { condition: 'thyroid', present: false, onset: 'stale', treatedBy: '', medicated: false, medications: '' },
-  ],
-  historyOther: ' None pertinent. ',
-  allergies: [{ name: 'Penicillin', reaction: ' hives ' }],
   pcpName: 'Dr. Jones',
   pcpAddress: '',
   pcpPhone: '951-555-0001',
@@ -81,9 +75,6 @@ const VALID = {
   programType: undefined,
   heightInches: 64.5,
   medications: [{ name: 'Metformin', dose: '500 mg', frequency: 'twice daily' }],
-  conditions: [{ condition: 'diabetes', onset: '2019', treatedBy: 'Dr. Smith', medicated: true, medications: 'Metformin' }],
-  historyOther: 'None pertinent.',
-  allergies: [{ name: 'Penicillin', reaction: 'hives' }],
   pcpName: 'Dr. Jones',
   pcpAddress: undefined,
   pcpPhone: '9515550001',
@@ -113,7 +104,6 @@ describe('createPatientInput', () => {
       language: '',
       office: '',
       referralSource: '',
-      historyOther: '',
       pcpPhone: '',
     })
 
@@ -121,8 +111,13 @@ describe('createPatientInput', () => {
     expect(parsed.language).toBeUndefined()
     expect(parsed.office).toBeUndefined()
     expect(parsed.referralSource).toBeUndefined()
-    expect(parsed.historyOther).toBeUndefined()
     expect(parsed.pcpPhone).toBeUndefined()
+  })
+
+  it('round-trips a height typed as feet and inches through the stored total', () => {
+    // 5' 4" is 64 inches — the number patients confuse with 5' 4" when asked
+    // for a total, which is why the form never asks for one.
+    expect(createPatientInput.parse({ ...SUBMITTED, heightFeet: '5', heightInchesPart: '4' }).heightInches).toBe(64)
   })
 
   it('composes feet and inches into the stored total, rounded to hundredths', () => {
@@ -145,10 +140,8 @@ describe('createPatientInput', () => {
     const parsed = createPatientInput.parse({
       ...SUBMITTED,
       medications: [{ name: '', dose: '', frequency: '' }],
-      allergies: [],
     })
     expect(parsed.medications).toEqual([])
-    expect(parsed.allergies).toEqual([])
 
     // A dose without a medication name is a mistake, not a blank line.
     expect(codesFor({ ...SUBMITTED, medications: [{ name: '', dose: '10 mg', frequency: '' }] })).toEqual({
@@ -156,18 +149,14 @@ describe('createPatientInput', () => {
     })
   })
 
-  it('stores only the checklist items answered Yes, without the hidden details of a No', () => {
-    expect(createPatientInput.parse(SUBMITTED).conditions).toEqual([
-      { condition: 'diabetes', onset: '2019', treatedBy: 'Dr. Smith', medicated: true, medications: 'Metformin' },
-    ])
-    expect(codesFor({ ...SUBMITTED, conditions: [{ ...SUBMITTED.conditions[0], condition: 'hangnail' }] })).toEqual({
-      'conditions.0.condition': ['invalid_value'],
-    })
-    // The same item twice cannot be stored (unique per patient).
-    expect(
-      createPatientInput.safeParse({ ...SUBMITTED, conditions: [SUBMITTED.conditions[0], SUBMITTED.conditions[0]] })
-        .success,
-    ).toBe(false)
+  it('never writes the history text, and has no healthy weight', () => {
+    // Medical history is out of scope: the legacy text stays on the entity,
+    // read-only, and an input carrying it is stripped rather than stored.
+    const parsed = createPatientInput.parse({ ...SUBMITTED, historyOther: 'typed anyway', healthyWeight: 150 })
+    expect(parsed).not.toHaveProperty('historyOther')
+    expect(parsed).not.toHaveProperty('healthyWeight')
+    expect(patientClinicalInput.parse({ ...SUBMITTED, historyOther: 'typed anyway' })).not.toHaveProperty('historyOther')
+    expect(Object.keys(patientSchema.shape)).not.toContain('healthyWeight')
   })
 
   it('rejects empty names as too_small', () => {

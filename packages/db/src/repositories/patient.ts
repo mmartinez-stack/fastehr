@@ -47,7 +47,11 @@ export interface PatientRepository {
   searchByName(input: SearchPatientsByNameInput): Promise<PatientSummary[]>
   create(input: CreatePatientInput): Promise<Patient>
   updateDemographics(input: UpdatePatientDemographicsInput): Promise<Patient | null>
-  /** Replaces the three child lists wholesale — the form submits the whole section. */
+  /**
+   * Replaces the medication list wholesale — the form submits the whole
+   * section. `historyOther` is not an input: it is read-only until the
+   * history section is built, and this write leaves it as it is.
+   */
   updateClinical(input: UpdatePatientClinicalInput): Promise<Patient | null>
   updateBilling(input: UpdatePatientBillingInput): Promise<Patient | null>
   setStatus(input: SetPatientStatusInput): Promise<Patient>
@@ -73,11 +77,9 @@ const ROSTER_ORDER = [
   { firstName: 'asc' as const },
 ]
 
-/** The child lists, in the order they were entered. */
+/** The medication list, in the order it was entered. */
 const RECORD_INCLUDE = {
   medications: { orderBy: { position: 'asc' as const } },
-  allergies: { orderBy: { position: 'asc' as const } },
-  conditions: { orderBy: { condition: 'asc' as const } },
 }
 
 /**
@@ -112,35 +114,20 @@ function demographicsData(input: Omit<UpdatePatientDemographicsInput, 'id'>) {
 function clinicalScalars(input: Omit<UpdatePatientClinicalInput, 'id'>) {
   return {
     heightInches: input.heightInches,
-    historyOther: input.historyOther ?? null,
     pcpName: input.pcpName ?? null,
     pcpAddress: input.pcpAddress ?? null,
     pcpPhone: input.pcpPhone ?? null,
   }
 }
 
-/** The child lists as nested creates; `position` is the order the form had them in. */
-function clinicalLists(input: Omit<UpdatePatientClinicalInput, 'id'>) {
-  return {
-    medications: input.medications.map((row, position) => ({
-      name: row.name,
-      dose: row.dose ?? null,
-      frequency: row.frequency ?? null,
-      position,
-    })),
-    allergies: input.allergies.map((row, position) => ({
-      name: row.name,
-      reaction: row.reaction ?? null,
-      position,
-    })),
-    conditions: input.conditions.map((row) => ({
-      condition: row.condition,
-      onset: row.onset ?? null,
-      treatedBy: row.treatedBy ?? null,
-      medicated: row.medicated,
-      medications: row.medications ?? null,
-    })),
-  }
+/** The medication list as nested creates; `position` is the order the form had them in. */
+function medicationRows(input: Omit<UpdatePatientClinicalInput, 'id'>) {
+  return input.medications.map((row, position) => ({
+    name: row.name,
+    dose: row.dose ?? null,
+    frequency: row.frequency ?? null,
+    position,
+  }))
 }
 
 function billingData(input: Omit<UpdatePatientBillingInput, 'id'>) {
@@ -266,15 +253,12 @@ export function createPatientRepository(getClient: () => PrismaClient): PatientR
     },
 
     async create(input) {
-      const lists = clinicalLists(input)
       const row = await getClient().patient.create({
         data: {
           ...demographicsData(input),
           ...clinicalScalars(input),
           ...billingData(input),
-          medications: { create: lists.medications },
-          allergies: { create: lists.allergies },
-          conditions: { create: lists.conditions },
+          medications: { create: medicationRows(input) },
         },
         include: RECORD_INCLUDE,
       })
@@ -295,17 +279,14 @@ export function createPatientRepository(getClient: () => PrismaClient): PatientR
     async updateClinical(input) {
       const { id, ...rest } = input
       if (!(await exists(id))) return null
-      const lists = clinicalLists(rest)
-      // One statement: the scalars and a delete-then-create of each list,
+      // One statement: the scalars and a delete-then-create of the list,
       // atomic under Prisma's nested write. A partially replaced medication
       // list is exactly the kind of record that cannot be allowed to exist.
       const row = await getClient().patient.update({
         where: { id },
         data: {
           ...clinicalScalars(rest),
-          medications: { deleteMany: {}, create: lists.medications },
-          allergies: { deleteMany: {}, create: lists.allergies },
-          conditions: { deleteMany: {}, create: lists.conditions },
+          medications: { deleteMany: {}, create: medicationRows(rest) },
         },
         include: RECORD_INCLUDE,
       })

@@ -1,14 +1,32 @@
 # ADR 28 — The patient record is served and written by section
 
-**Status:** accepted  
-**Applies to:** `packages/contracts/src/patient.ts` · `packages/db/src/repositories/patient.ts` · `apps/web/src/server/routers/patient.ts` · `apps/web/src/server/procedures.ts` · `apps/web/src/features/patients/patient-form.tsx`
+**Status:** accepted, amended 2026-09-07 (three tabs; history and allergies out of scope)  
+**Applies to:** `packages/contracts/src/patient.ts` · `packages/db/src/repositories/patient.ts` · `apps/web/src/server/routers/patient.ts` · `apps/web/src/server/procedures.ts` · `apps/web/src/features/patients/patient-form.tsx` · `apps/web/src/features/patients/patient-tabs.ts`
 
-The Aug 31 stakeholder sync (DIA-52) split the patient record into tabs —
-Demographics, Vitals, Medications, Medical history, Allergies, Primary care
-doctor, Billing — and assigned them to roles: a provider sees the clinical
-tabs and never Demographics or Billing; the front desk and admins see all of
-them. The ticket asked for that to be enforced server-side, not only by
-hiding tabs.
+The Aug 31 stakeholder sync (DIA-52) split the patient record into tabs and
+assigned them to roles: a provider sees the clinical side and never contact
+details or billing; the front desk and admins see all of it. The ticket
+asked for that to be enforced server-side, not only by hiding tabs.
+
+**Amendment, 2026-09-07.** The record has exactly three tabs, the same on
+the create, edit, and intake screens and for every role, in one fixed order:
+**Medical** (first and default: vitals as feet plus inches, the medication
+line items, the primary care doctor), **Patient Info** (the demographics and
+contact fields), **Billing** (the card block with its banner). A role decides
+only which of the three render — `patientTabsFor` in
+`apps/web/src/features/patients/patient-tabs.ts`, derived from the same
+surfaces the navigation uses — never the layout; a role with one tab still
+gets a tab list. No field of one tab renders inside another; the chart
+header carries the patient's name and date of birth and nothing else.
+
+Medical history and allergies are **out of scope**. The Medical tab ends in a
+labelled placeholder that shows the legacy "medications and pertinent
+history" text (`historyOther`) read-only; no input writes that column, so a
+save of the Medical tab cannot touch it. The checklist and allergy list an
+earlier cut built are removed from the contract, the mapper, the repository,
+and the form. Their tables (`patient_conditions`, `patient_allergies`) stay
+in the schema, dormant: dropping them is a migration this amendment does not
+need, and the migration history stays additive.
 
 ## Decision
 
@@ -22,9 +40,10 @@ hiding tabs.
   the create form submits every tab at once.
 - The repository speaks the full entity and offers one update per section.
   There is no record-wide update any more.
-- Procedures serve sections: `patient.byId` returns the header plus the
-  clinical half to every role; `patient.demographics` and `patient.billing`
-  are `clericalProcedure` (admin or front desk); `patient.updateClinical` is
+- Procedures serve sections, and a section is a tab's data set:
+  `patient.byId` returns the header plus the Medical tab to every role;
+  `patient.demographics` (the Patient Info tab) and `patient.billing` are
+  `clericalProcedure` (admin or front desk); `patient.updateClinical` is
   open to every role, the other two updates and `patient.create` are clerical.
   The roster procedures return a summary row with the phone nulled for a
   provider.
@@ -51,10 +70,11 @@ wrong. With sections, a new column must be placed in a section schema to
 leave the server at all, and the section it lands in decides who sees it.
 Forgetting is a type error at the mapper, not a leak.
 
-The other candidate, separate procedures per *tab* (seven of them), was more
-granular than the decision behind it: the sync described two halves, clinical
-and clerical, plus billing isolated for its own reasons. Three read groups
-and three writes match that; seven would encode structure nobody asked for.
+The other candidate, separate procedures per *sub-section* (vitals,
+medications, and so on), was more granular than the decision behind it: the
+sync described two halves, clinical and clerical, plus billing isolated for
+its own reasons. Three read groups and three writes match that, and since the
+amendment they are exactly the three tabs.
 
 ## Consequences
 
@@ -65,9 +85,8 @@ and three writes match that; seven would encode structure nobody asked for.
   them carries `phone: null` — the column's absence is not a client choice.
 - Creating a patient is a front-desk task. A provider's new-patient page says
   so; a provider's `patient.create` is refused and audited.
-- The old combined "current medications and pertinent history" text is the
-  "Other" field of Medical history (`historyOther`, a column rename, no data
-  moved). Healthy weight is gone: no screen and no report read it.
-- The medical-history checklist vocabulary (`PATIENT_CONDITIONS`) is a stub;
-  the stored key is a plain string so replacing the list is a contracts
-  change, not a migration.
+- The old combined "current medications and pertinent history" text stays
+  in `historyOther` (a column rename, no data moved), shown read-only in the
+  Medical tab's history placeholder until that section is built. Healthy
+  weight is gone: the column was dropped, and no schema, input, screen, or
+  report reads it.

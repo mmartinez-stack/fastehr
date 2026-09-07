@@ -9,7 +9,6 @@ import {
   patientClinicalInput,
   patientDemographicsInput,
   CREDIT_CARD_EXP_MONTHS,
-  PATIENT_CONDITIONS,
   PATIENT_GENDERS,
   PATIENT_LANGUAGES,
   PATIENT_OFFICES,
@@ -17,7 +16,6 @@ import {
   PATIENT_REFERRAL_SOURCES,
   type PatientBilling,
   type PatientChart,
-  type PatientCondition,
   type PatientDemographics,
   type PatientGender,
   type IntakeSubmission,
@@ -28,7 +26,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import {
@@ -39,7 +36,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Textarea } from "@/components/ui/textarea"
 import {
   Field,
   FieldDescription,
@@ -56,71 +52,31 @@ import {
   type FormErrors,
 } from "@/lib/form-errors"
 import { trpc } from "@/trpc/client"
+import { splitHeight } from "./height.ts"
+import { PATIENT_TAB_LABEL, PATIENT_TABS, type PatientTab } from "./patient-tabs.ts"
 import { US_STATES } from "./us-states.ts"
 
 /**
  * The patient record form, shared by /patients/new and /patients/[id]/edit
  * and by the self-service intake — the legacy create/edit form restructured
- * into tabs (DIA-52) on the reference pattern (docs/forms.md, ADR 25): the
- * section input schemas from contracts validate on both sides, the mutations
- * run inside the submit validator, and every message a user reads lives in
- * the copy table here.
+ * into three tabs (DIA-52, ADR 28) on the reference pattern (docs/forms.md,
+ * ADR 25): the section input schemas from contracts validate on both sides,
+ * the mutations run inside the submit validator, and every message a user
+ * reads lives in the copy table here.
  *
  * Tabs are sections, and sections are the unit of authorization (ADR 28).
- * The page decides which sections render from the session's role and which
- * mutations a save runs; this component only validates the sections it was
- * given and shows them. Demographics and Billing are the clerical half;
- * Vitals, Medications, Medical history, Allergies, and Primary care doctor
- * are the clinical half a provider edits.
+ * The page decides which tabs render (`patientTabsFor`, from the session's
+ * role) and which mutations a save runs; this component only validates the
+ * tabs it was given and shows them, in the one fixed order. Medical holds
+ * vitals, medications, and the primary care doctor, with the out-of-scope
+ * medical history and allergies as a labelled, read-only placeholder;
+ * Patient Info is the clerical half; Billing is the card block on its own.
+ * No field of one tab ever renders inside another.
  *
  * Layout inside a tab: one responsive grid, two columns from `sm`, four from
  * `lg`, eight at `3xl` (extra width buys columns, never wider fields). Short
  * fields span one column; the free-text ones span two.
  */
-
-export const PATIENT_SECTIONS = [
-  "demographics",
-  "vitals",
-  "medications",
-  "history",
-  "allergies",
-  "pcp",
-  "billing",
-] as const
-export type PatientSection = (typeof PATIENT_SECTIONS)[number]
-
-/** The clinical half — what a provider sees. */
-export const CLINICAL_SECTIONS: readonly PatientSection[] = [
-  "vitals",
-  "medications",
-  "history",
-  "allergies",
-  "pcp",
-]
-
-const SECTION_LABEL: Record<PatientSection, string> = {
-  demographics: "Demographics",
-  vitals: "Vitals",
-  medications: "Medications",
-  history: "Medical history",
-  allergies: "Allergies",
-  pcp: "Primary care doctor",
-  billing: "Billing",
-}
-
-/** The checklist copy — the stub vocabulary's labels, replaced with the list. */
-const CONDITION_LABEL: Record<PatientCondition, string> = {
-  thyroid: "Thyroid condition",
-  heart_disease: "Heart disease",
-  diabetes: "Diabetes",
-  kidney_disease: "Kidney disease",
-  hypertension: "High blood pressure",
-  high_cholesterol: "High cholesterol",
-  sleep_apnea: "Sleep apnea",
-  depression_or_anxiety: "Depression or anxiety",
-  glaucoma: "Glaucoma",
-  pregnancy_or_breastfeeding: "Pregnant or breastfeeding",
-}
 
 /**
  * What the mutations accept: the form's strings with `gender` narrowed to the
@@ -135,22 +91,8 @@ export interface MedicationRowValues {
   frequency: string
 }
 
-export interface AllergyRowValues {
-  name: string
-  reaction: string
-}
-
-export interface ConditionRowValues {
-  condition: PatientCondition
-  present: boolean
-  onset: string
-  treatedBy: string
-  medicated: boolean
-  medications: string
-}
-
 export interface PatientFormValues {
-  // Demographics
+  // Patient Info
   firstName: string
   lastName: string
   gender: string
@@ -167,17 +109,12 @@ export interface PatientFormValues {
   referralSource: string
   referredByPatientId: string
   programType: string
-  // Vitals
+  // Medical: vitals
   heightFeet: string
   heightInchesPart: string
-  // Medications
+  // Medical: medications
   medications: MedicationRowValues[]
-  // Medical history
-  conditions: ConditionRowValues[]
-  historyOther: string
-  // Allergies
-  allergies: AllergyRowValues[]
-  // Primary care doctor
+  // Medical: primary care doctor
   pcpName: string
   pcpAddress: string
   pcpPhone: string
@@ -189,19 +126,6 @@ export interface PatientFormValues {
 }
 
 const EMPTY_MEDICATION: MedicationRowValues = { name: "", dose: "", frequency: "" }
-const EMPTY_ALLERGY: AllergyRowValues = { name: "", reaction: "" }
-
-/** Every checklist item, answered "No" — the form's starting point. */
-function emptyConditions(): ConditionRowValues[] {
-  return PATIENT_CONDITIONS.map((condition) => ({
-    condition,
-    present: false,
-    onset: "",
-    treatedBy: "",
-    medicated: false,
-    medications: "",
-  }))
-}
 
 export const EMPTY_PATIENT_FORM: PatientFormValues = {
   firstName: "",
@@ -223,9 +147,6 @@ export const EMPTY_PATIENT_FORM: PatientFormValues = {
   heightFeet: "",
   heightInchesPart: "",
   medications: [],
-  conditions: emptyConditions(),
-  historyOther: "",
-  allergies: [],
   pcpName: "",
   pcpAddress: "",
   pcpPhone: "",
@@ -233,14 +154,6 @@ export const EMPTY_PATIENT_FORM: PatientFormValues = {
   creditCardExpMonth: "",
   creditCardExpYear: "",
   creditCardZip: "",
-}
-
-/** Total inches → the two fields, hundredths kept ("64.5" → 5 ft, 4.5 in). */
-function splitHeight(total: number | null): { heightFeet: string; heightInchesPart: string } {
-  if (total === null) return { heightFeet: "", heightInchesPart: "" }
-  const feet = Math.floor(total / 12)
-  const inches = Math.round((total - feet * 12) * 100) / 100
-  return { heightFeet: String(feet), heightInchesPart: String(inches) }
 }
 
 /**
@@ -253,7 +166,6 @@ export function toPatientFormValues(
   demographics: PatientDemographics | null,
   billing: PatientBilling | null,
 ): PatientFormValues {
-  const present = new Map(chart.conditions.map((row) => [row.condition, row]))
   return {
     ...EMPTY_PATIENT_FORM,
     firstName: chart.firstName,
@@ -283,21 +195,6 @@ export function toPatientFormValues(
       dose: row.dose ?? "",
       frequency: row.frequency ?? "",
     })),
-    conditions: PATIENT_CONDITIONS.map((condition) => {
-      const stored = present.get(condition)
-      return stored === undefined
-        ? { condition, present: false, onset: "", treatedBy: "", medicated: false, medications: "" }
-        : {
-            condition,
-            present: true,
-            onset: stored.onset ?? "",
-            treatedBy: stored.treatedBy ?? "",
-            medicated: stored.medicated,
-            medications: stored.medications ?? "",
-          }
-    }),
-    historyOther: chart.historyOther ?? "",
-    allergies: chart.allergies.map((row) => ({ name: row.name, reaction: row.reaction ?? "" })),
     pcpName: chart.pcpName ?? "",
     pcpAddress: chart.pcpAddress ?? "",
     pcpPhone: chart.pcpPhone ?? "",
@@ -318,7 +215,6 @@ export function toPatientFormValues(
  * with absent fields undefined rather than null).
  */
 export function toIntakeFormValues(submission: IntakeSubmission): PatientFormValues {
-  const present = new Map(submission.conditions.map((row) => [row.condition, row]))
   return {
     ...EMPTY_PATIENT_FORM,
     firstName: submission.firstName,
@@ -343,21 +239,6 @@ export function toIntakeFormValues(submission: IntakeSubmission): PatientFormVal
       dose: row.dose ?? "",
       frequency: row.frequency ?? "",
     })),
-    conditions: PATIENT_CONDITIONS.map((condition) => {
-      const stored = present.get(condition)
-      return stored === undefined
-        ? { condition, present: false, onset: "", treatedBy: "", medicated: false, medications: "" }
-        : {
-            condition,
-            present: true,
-            onset: stored.onset ?? "",
-            treatedBy: stored.treatedBy ?? "",
-            medicated: stored.medicated,
-            medications: stored.medications ?? "",
-          }
-    }),
-    historyOther: submission.historyOther ?? "",
-    allergies: submission.allergies.map((row) => ({ name: row.name, reaction: row.reaction ?? "" })),
     pcpName: submission.pcpName ?? "",
     pcpAddress: submission.pcpAddress ?? "",
     pcpPhone: submission.pcpPhone ?? "",
@@ -404,13 +285,6 @@ const COPY: FormCopy = {
   "medications.dose": { too_big: "Dose can be at most 50 characters." },
   "medications.frequency": { too_big: "Frequency can be at most 50 characters." },
   medications: { too_big: "The list is limited to 50 medications." },
-  "conditions.onset": { too_big: "Keep this under 100 characters." },
-  "conditions.treatedBy": { too_big: "Keep this under 100 characters." },
-  "conditions.medications": { too_big: "Keep this under 200 characters." },
-  historyOther: { too_big: "History is limited to 10,000 characters." },
-  "allergies.name": { too_small: "Enter the medication.", too_big: "Name can be at most 100 characters." },
-  "allergies.reaction": { too_big: "Reaction can be at most 200 characters." },
-  allergies: { too_big: "The list is limited to 50 allergies." },
   pcpName: { too_big: "Name can be at most 100 characters." },
   pcpAddress: { too_big: "Address can be at most 200 characters." },
   pcpPhone: { invalid_format: "Enter a phone number with ten digits." },
@@ -423,14 +297,10 @@ const COPY: FormCopy = {
 const SAVE_FAILED = "The patient could not be saved. Check your connection and try again."
 
 /** Which tab a field path belongs to, so an error on a hidden tab can be pointed at. */
-function sectionOf(path: string): PatientSection {
-  if (path.startsWith("height")) return "vitals"
-  if (path.startsWith("medications")) return "medications"
-  if (path.startsWith("conditions") || path === "historyOther") return "history"
-  if (path.startsWith("allergies")) return "allergies"
-  if (path.startsWith("pcp")) return "pcp"
+function sectionOf(path: string): PatientTab {
+  if (path.startsWith("height") || path.startsWith("medications") || path.startsWith("pcp")) return "medical"
   if (path.startsWith("creditCard")) return "billing"
-  return "demographics"
+  return "patientInfo"
 }
 
 /**
@@ -440,9 +310,9 @@ function sectionOf(path: string): PatientSection {
  */
 function toTabbedErrors(
   failure: ValidationFailure,
-): { errors: FormErrors; sections: Set<PatientSection> } {
+): { errors: FormErrors; sections: Set<PatientTab> } {
   const fields: Record<string, { message: string }> = {}
-  const sections = new Set<PatientSection>()
+  const sections = new Set<PatientTab>()
   for (const [path, codes] of Object.entries(failure.fieldErrors)) {
     const code = codes[0]
     if (code === undefined) continue
@@ -463,11 +333,11 @@ function toTabbedErrors(
  */
 function clientFailure(
   value: PatientFormValues,
-  sections: readonly PatientSection[],
+  sections: readonly PatientTab[],
 ): ValidationFailure | null {
   const schemas = [
-    ...(sections.includes("demographics") ? [patientDemographicsInput] : []),
-    ...(sections.some((section) => CLINICAL_SECTIONS.includes(section)) ? [patientClinicalInput] : []),
+    ...(sections.includes("patientInfo") ? [patientDemographicsInput] : []),
+    ...(sections.includes("medical") ? [patientClinicalInput] : []),
     ...(sections.includes("billing") ? [patientBillingInput] : []),
   ]
   const merged: ValidationFailure = { fieldErrors: {}, formErrors: [] }
@@ -562,6 +432,16 @@ function ReferredByPatientPicker({
 
 const GRID = "grid gap-4 sm:grid-cols-2 lg:grid-cols-4 3xl:grid-cols-8"
 
+/** A titled block inside a tab — the Medical tab is several of these, in one fixed order. */
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-3">
+      <h3 className="text-sm font-semibold">{title}</h3>
+      {children}
+    </section>
+  )
+}
+
 export function PatientForm({
   title = "Patient details",
   sections,
@@ -576,11 +456,18 @@ export function PatientForm({
   allowReferralPicker = true,
   /** On for the intake, where the office decides the queue. */
   officeRequired = false,
+  historyOnFile = null,
 }: {
   title?: string
-  /** The tabs to render — decided by the page from the session's role. */
-  sections: readonly PatientSection[]
+  /** The tabs to render — decided by the page from the session's role, always in PATIENT_TABS order. */
+  sections: readonly PatientTab[]
   defaultValues: PatientFormValues
+  /**
+   * The legacy "medications and pertinent history" text on the record, shown
+   * read-only in the Medical tab's placeholder. Not a form value: nothing
+   * here can write it back.
+   */
+  historyOnFile?: string | null
   /** Runs the mutation(s); a thrown tRPC error is mapped back onto the fields. */
   submit: (value: PatientFormSubmission) => Promise<void>
   submitLabel: React.ReactNode
@@ -594,10 +481,12 @@ export function PatientForm({
   allowReferralPicker?: boolean
   officeRequired?: boolean
 }) {
-  const [tab, setTab] = React.useState<PatientSection>(sections[0] ?? "demographics")
+  // Opens on the first tab given, which in PATIENT_TABS order is Medical
+  // whenever the role renders it.
+  const [tab, setTab] = React.useState<PatientTab>(sections[0] ?? "medical")
   // Tabs holding an error after the last submit — shown as a count on the
   // trigger, so a failure on a hidden tab is never a silent one.
-  const [erroring, setErroring] = React.useState<Set<PatientSection>>(new Set())
+  const [erroring, setErroring] = React.useState<Set<PatientTab>>(new Set())
 
   const applyFailure = (failure: ValidationFailure): FormErrors => {
     const { errors, sections: failed } = toTabbedErrors(failure)
@@ -727,7 +616,7 @@ export function PatientForm({
 
   const asItems = (values: readonly string[]) => values.map((value) => ({ value, label: value }))
 
-  const demographicsTab = (
+  const patientInfoTab = (
     <FieldGroup>
       <div className={GRID}>
         {textField("firstName", "First name", { placeholder: "First name", className: "sm:col-span-2", required: true })}
@@ -845,20 +734,18 @@ export function PatientForm({
     </FieldGroup>
   )
 
-  const vitalsTab = (
-    <FieldGroup>
-      <div className={GRID}>
-        {selectField("heightFeet", "Height (feet)", asItems(FEET), { required: true, placeholder: "ft" })}
-        {textField("heightInchesPart", "Height (inches)", {
-          placeholder: "4",
-          description: "0 to 11, decimals allowed.",
-          required: true,
-        })}
-      </div>
-    </FieldGroup>
+  const vitals = (
+    <div className={GRID}>
+      {selectField("heightFeet", "Height (feet)", asItems(FEET), { required: true, placeholder: "ft" })}
+      {textField("heightInchesPart", "Height (inches)", {
+        placeholder: "4",
+        description: "0 to 11, decimals allowed.",
+        required: true,
+      })}
+    </div>
   )
 
-  const medicationsTab = (
+  const medications = (
     <form.Field name="medications" mode="array">
       {(list) => (
         <FieldGroup>
@@ -900,146 +787,48 @@ export function PatientForm({
     </form.Field>
   )
 
-  const historyTab = (
-    <FieldGroup>
+  const primaryCareDoctor = (
+    <div className={GRID}>
+      {textField("pcpName", "Doctor's name", { placeholder: "Dr. Name", className: "sm:col-span-2" })}
+      {textField("pcpAddress", "Address", { placeholder: "Practice address", className: "sm:col-span-2" })}
+      {textField("pcpPhone", "Phone", {
+        type: "tel",
+        placeholder: "(951) 555-0000",
+        description: "Any format, ten digits.",
+      })}
+    </div>
+  )
+
+  /**
+   * Out of scope for now: no checklist, no allergy list, and the legacy
+   * text is shown as it is, never parsed and never written. It is not a
+   * form field, so a save cannot carry it.
+   */
+  const historyPlaceholder = (
+    <div className="flex flex-col gap-2">
       <FieldDescription>
-        For each condition, answer Yes or No. A Yes opens the details.
+        Not yet part of this form. The history on file is shown for reference and cannot be
+        edited here.
       </FieldDescription>
-      <div className="flex flex-col divide-y divide-border rounded-lg border border-border">
-        {PATIENT_CONDITIONS.map((condition, index) => (
-          <form.Field key={condition} name={`conditions[${index}].present` as "phoneFollowUpAllowed"}>
-            {(presentField) => (
-              <div className="flex flex-col gap-3 px-4 py-3">
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-sm font-medium">{CONDITION_LABEL[condition]}</span>
-                  <RadioGroup
-                    value={presentField.state.value ? "yes" : "no"}
-                    onValueChange={(value) => presentField.handleChange(value === "yes")}
-                    className="flex flex-row items-center gap-5"
-                    aria-label={CONDITION_LABEL[condition]}
-                  >
-                    <label className="flex items-center gap-2 text-sm">
-                      <RadioGroupItem value="no" />
-                      No
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <RadioGroupItem value="yes" />
-                      Yes
-                    </label>
-                  </RadioGroup>
-                </div>
-                {presentField.state.value ? (
-                  <div className={GRID}>
-                    {textField(`conditions[${index}].onset`, "When", { placeholder: "2019, or age 40" })}
-                    {textField(`conditions[${index}].treatedBy`, "Who is treating it", { placeholder: "Dr. Name, clinic" })}
-                    <form.Field name={`conditions[${index}].medicated` as "phoneFollowUpAllowed"}>
-                      {(medicatedField) => (
-                        <Field className="sm:col-span-2">
-                          <FieldLabel htmlFor={medicatedField.name}>Currently medicated</FieldLabel>
-                          <div className="flex h-8 items-center gap-2">
-                            <Checkbox
-                              id={medicatedField.name}
-                              checked={medicatedField.state.value}
-                              onCheckedChange={(checked) => medicatedField.handleChange(checked === true)}
-                            />
-                            <span className="text-sm text-muted-foreground">Yes</span>
-                          </div>
-                        </Field>
-                      )}
-                    </form.Field>
-                    <form.Subscribe selector={(state) => state.values.conditions[index]?.medicated ?? false}>
-                      {(medicated) =>
-                        medicated
-                          ? textField(`conditions[${index}].medications`, "Which medications", {
-                              placeholder: "Names and doses",
-                              className: "sm:col-span-2 lg:col-span-4",
-                            })
-                          : null
-                      }
-                    </form.Subscribe>
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </form.Field>
-        ))}
-      </div>
-      <form.Field name="historyOther">
-        {(field) => (
-          <Field data-invalid={!field.state.meta.isValid}>
-            <FieldLabel htmlFor={field.name}>Other</FieldLabel>
-            <Textarea
-              id={field.name}
-              name={field.name}
-              rows={6}
-              value={field.state.value}
-              onChange={(event) => field.handleChange(event.target.value)}
-              onBlur={field.handleBlur}
-              aria-invalid={!field.state.meta.isValid}
-              placeholder="Anything else pertinent to the patient's history"
-            />
-            <FieldError errors={field.state.meta.errors} />
-          </Field>
-        )}
-      </form.Field>
-    </FieldGroup>
-  )
-
-  const allergiesTab = (
-    <form.Field name="allergies" mode="array">
-      {(list) => (
-        <FieldGroup>
-          {list.state.value.length === 0 ? (
-            <FieldDescription>No medication allergies listed. Add one per line.</FieldDescription>
-          ) : null}
-          {list.state.value.map((_, index) => (
-            <div key={index} className="flex items-start gap-3">
-              <div className={`${GRID} flex-1`}>
-                {textField(`allergies[${index}].name`, "Medication", {
-                  placeholder: "Name",
-                  className: "sm:col-span-2",
-                  required: true,
-                })}
-                {textField(`allergies[${index}].reaction`, "Reaction", {
-                  placeholder: "Rash, swelling…",
-                  className: "sm:col-span-2",
-                })}
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="mt-6"
-                aria-label="Remove allergy"
-                onClick={() => list.removeValue(index)}
-              >
-                <Trash2Icon />
-              </Button>
-            </div>
-          ))}
-          <div>
-            <Button type="button" variant="outline" size="sm" onClick={() => list.pushValue({ ...EMPTY_ALLERGY })}>
-              <PlusIcon data-icon="inline-start" />
-              Add allergy
-            </Button>
-          </div>
-          <FieldError errors={list.state.meta.errors} />
-        </FieldGroup>
+      {historyOnFile === null || historyOnFile.trim() === "" ? (
+        <p className="text-sm text-muted-foreground">No history on file.</p>
+      ) : (
+        <p
+          className="whitespace-pre-wrap rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm"
+          aria-label="History on file"
+        >
+          {historyOnFile}
+        </p>
       )}
-    </form.Field>
+    </div>
   )
 
-  const pcpTab = (
-    <FieldGroup>
-      <div className={GRID}>
-        {textField("pcpName", "Doctor's name", { placeholder: "Dr. Name", className: "sm:col-span-2" })}
-        {textField("pcpAddress", "Address", { placeholder: "Practice address", className: "sm:col-span-2" })}
-        {textField("pcpPhone", "Phone", {
-          type: "tel",
-          placeholder: "(951) 555-0000",
-          description: "Any format, ten digits.",
-        })}
-      </div>
+  const medicalTab = (
+    <FieldGroup className="divide-y divide-border [&>section+section]:pt-5">
+      <Section title="Vitals">{vitals}</Section>
+      <Section title="Medications">{medications}</Section>
+      <Section title="Primary care doctor">{primaryCareDoctor}</Section>
+      <Section title="Medical history and allergies">{historyPlaceholder}</Section>
     </FieldGroup>
   )
 
@@ -1072,13 +861,9 @@ export function PatientForm({
     </FieldGroup>
   )
 
-  const content: Record<PatientSection, React.ReactNode> = {
-    demographics: demographicsTab,
-    vitals: vitalsTab,
-    medications: medicationsTab,
-    history: historyTab,
-    allergies: allergiesTab,
-    pcp: pcpTab,
+  const content: Record<PatientTab, React.ReactNode> = {
+    medical: medicalTab,
+    patientInfo: patientInfoTab,
     billing: billingTab,
   }
 
@@ -1109,15 +894,17 @@ export function PatientForm({
           <Tabs
             value={tab}
             onValueChange={(value) => {
-              if (typeof value === "string" && (PATIENT_SECTIONS as readonly string[]).includes(value)) {
-                setTab(value as PatientSection)
+              if (typeof value === "string" && (PATIENT_TABS as readonly string[]).includes(value)) {
+                setTab(value as PatientTab)
               }
             }}
           >
+            {/* Always a tab list, even for a role with one tab: the layout is
+                the same for everyone, only the count differs. */}
             <TabsList className="flex-wrap">
               {sections.map((section) => (
                 <TabsTrigger key={section} value={section}>
-                  {SECTION_LABEL[section]}
+                  {PATIENT_TAB_LABEL[section]}
                   {erroring.has(section) ? (
                     <span
                       aria-label="Has errors"

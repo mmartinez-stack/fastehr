@@ -188,9 +188,10 @@ same reason (ADR 19).
 read `src/lib/mock-data.ts`, except the patient roster, `/patients/new`, and
 `/patients/[id]/edit`, which are wired end to end (legacy-parity form and
 search — docs/legacy-data-mapping.md § patients; the `/patients/[id]` detail
-view is still mockup; the record itself is tabbed and served by section per
-ADR 28, with the clinical half open to every role and demographics/billing
-clerical). The self-service intake is wired end to end (ADR 29): a texted
+view is still mockup; the record itself has three tabs, Medical, Patient
+Info, and Billing, each served by its own procedure per ADR 28 as amended,
+with Medical open to every role and the other two clerical; medical history
+and allergies are a read-only placeholder showing the legacy text). The self-service intake is wired end to end (ADR 29): a texted
 single-use link, a public form at `/intake/[token]`, and a per-office Pending
 tab on the roster; text messages go to the server log until `TWILIO_*` is
 set. The medical-director review queue (ADR 30) samples signed notes through

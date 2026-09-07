@@ -131,7 +131,7 @@ place (`Patient` model, `patient.*` procedures, the shared form in
 | `address.street/city/state/zip` | `addressStreet/City/State/Zip` | `String?` | Flattened. |
 | `referralSource` | `referralSource` | `String?` | Free string on the entity, pick-list on the input. |
 | `referredByPt` | `referredByPatientId` | self-relation | Resolved through patient `legacyId` at import time. |
-| `hx` | `historyOther` | `String?` | "Current medications and pertinent history", verbatim. Since DIA-52 this is the "Other" free text under the medical-history checklist; the column was renamed, never parsed, and the structured lists (`patient_medications`, `patient_allergies`, `patient_conditions`) start empty for migrated records. |
+| `hx` | `historyOther` | `String?` | "Current medications and pertinent history", verbatim. Shown read-only in the Medical tab's history placeholder (ADR 28 as amended) and written by nothing; the column was renamed, never parsed. The medication list (`patient_medications`) starts empty for migrated records; `patient_allergies` and `patient_conditions` exist but are dormant. |
 | `programType` | `programType` | `String?` | Pick-list on the input; `None` → NULL. |
 | `status` | `status` | `PatientStatus` | Legacy free string; `inactive` maps to `inactive`, anything else to `active` (matching the legacy UI's own check). |
 | `creditCardNumber`, `creditCardExpMonth/Year`, `creditCardZip` | same | `String?` | **Provisional** (2026-08-31): ported for billing continuity while the tokenized-processor design is pending; these columns are scheduled to be replaced by processor tokens, not to grow. The four fields are exactly what the legacy form rendered. |

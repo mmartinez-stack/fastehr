@@ -39,10 +39,11 @@ const optionalText = z.string().optional()
 /**
  * What a submission looks like once stored: the demographics and clinical
  * sections as the contract normalizes them (trimmed, phone as ten digits,
- * height as total inches, the checklist reduced to its Yes items), plus the
- * office the person chose. Optional fields are absent, not null — this is
- * JSON written from a parsed input, and the patient create takes the same
- * shape back.
+ * height as total inches), plus the office the person chose. Optional fields
+ * are absent, not null — this is JSON written from a parsed input, and the
+ * patient create takes the same shape back. A Zod object strips what it does
+ * not declare, so a submission stored under an earlier cut of the form (with
+ * a history checklist) still reads back.
  */
 export const intakeSubmissionSchema = z.object({
   firstName: z.string().min(1),
@@ -63,17 +64,6 @@ export const intakeSubmissionSchema = z.object({
   programType: optionalText,
   heightInches: z.number(),
   medications: z.array(z.object({ name: z.string(), dose: optionalText, frequency: optionalText })),
-  allergies: z.array(z.object({ name: z.string(), reaction: optionalText })),
-  conditions: z.array(
-    z.object({
-      condition: z.string(),
-      onset: optionalText,
-      treatedBy: optionalText,
-      medicated: z.boolean(),
-      medications: optionalText,
-    }),
-  ),
-  historyOther: optionalText,
   pcpName: optionalText,
   pcpAddress: optionalText,
   pcpPhone: optionalText,

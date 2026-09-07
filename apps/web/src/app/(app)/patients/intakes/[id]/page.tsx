@@ -20,23 +20,17 @@ import { Button } from "@/components/ui/button"
 import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty"
 import { PageHeader } from "@/components/page-header"
 import { useSurfaces } from "@/components/role-provider"
-import {
-  CLINICAL_SECTIONS,
-  PatientForm,
-  toIntakeFormValues,
-  type PatientSection,
-} from "@/features/patients/patient-form"
+import { PatientForm, toIntakeFormValues } from "@/features/patients/patient-form"
+import { INTAKE_TABS } from "@/features/patients/patient-tabs"
 import { trpc } from "@/trpc/client"
 
 /**
- * Reviewing a pending intake (DIA-72): the submission opens in the sectioned
+ * Reviewing a pending intake (DIA-72): the submission opens in the tabbed
  * form, editable, and the front desk either accepts it — the reviewed form
  * becomes the patient record and the page moves to it — or rejects it. Both
  * take the request out of the queue. Billing is absent, as it was on the
  * person's form; it is entered on the record afterwards.
  */
-
-const REVIEW_SECTIONS: readonly PatientSection[] = ["demographics", ...CLINICAL_SECTIONS]
 
 export default function ReviewIntakePage() {
   const params = useParams<{ id: string }>()
@@ -126,7 +120,7 @@ export default function ReviewIntakePage() {
       <PatientForm
         title="Submitted information"
         key={pending.id}
-        sections={REVIEW_SECTIONS}
+        sections={INTAKE_TABS}
         defaultValues={toIntakeFormValues(submission)}
         submit={async (value) => {
           const chart = await accept.mutateAsync({ ...value, id: pending.id })

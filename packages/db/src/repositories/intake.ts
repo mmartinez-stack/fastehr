@@ -47,8 +47,6 @@ export interface IntakeRepository {
 
 const RECORD_INCLUDE = {
   medications: { orderBy: { position: 'asc' as const } },
-  allergies: { orderBy: { position: 'asc' as const } },
-  conditions: { orderBy: { condition: 'asc' as const } },
 }
 
 export function createIntakeRepository(getClient: () => PrismaClient): IntakeRepository {
@@ -111,7 +109,7 @@ export function createIntakeRepository(getClient: () => PrismaClient): IntakeRep
       class NotPending extends Error {}
       try {
         return await client.$transaction(async (tx) => {
-          const { medications, allergies, conditions, ...scalars } = input.patient
+          const { medications, ...scalars } = input.patient
           const patientRow = await tx.patient.create({
             data: {
               firstName: scalars.firstName,
@@ -131,7 +129,6 @@ export function createIntakeRepository(getClient: () => PrismaClient): IntakeRep
               referredByPatientId: scalars.referredByPatientId ?? null,
               programType: scalars.programType ?? null,
               heightInches: scalars.heightInches,
-              historyOther: scalars.historyOther ?? null,
               pcpName: scalars.pcpName ?? null,
               pcpAddress: scalars.pcpAddress ?? null,
               pcpPhone: scalars.pcpPhone ?? null,
@@ -145,22 +142,6 @@ export function createIntakeRepository(getClient: () => PrismaClient): IntakeRep
                   dose: row.dose ?? null,
                   frequency: row.frequency ?? null,
                   position,
-                })),
-              },
-              allergies: {
-                create: allergies.map((row, position) => ({
-                  name: row.name,
-                  reaction: row.reaction ?? null,
-                  position,
-                })),
-              },
-              conditions: {
-                create: conditions.map((row) => ({
-                  condition: row.condition,
-                  onset: row.onset ?? null,
-                  treatedBy: row.treatedBy ?? null,
-                  medicated: row.medicated,
-                  medications: row.medications ?? null,
                 })),
               },
             },

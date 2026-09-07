@@ -25,9 +25,6 @@ const SUBMISSION: IntakeSubmission = {
   phoneFollowUpAllowed: true,
   heightInches: 64,
   medications: [{ name: 'Metformin', dose: '500 mg' }],
-  allergies: [{ name: 'Penicillin' }],
-  conditions: [{ condition: 'diabetes', onset: '2019', medicated: true, medications: 'Metformin' }],
-  historyOther: 'None pertinent.',
 }
 
 const PATIENT_INPUT: CreatePatientInput = {
@@ -38,8 +35,6 @@ const PATIENT_INPUT: CreatePatientInput = {
   referredByPatientId: undefined,
   programType: undefined,
   medications: [{ name: 'Metformin', dose: '500 mg', frequency: undefined }],
-  allergies: [{ name: 'Penicillin', reaction: undefined }],
-  conditions: [{ condition: 'diabetes', onset: '2019', treatedBy: undefined, medicated: true, medications: 'Metformin' }],
   pcpName: undefined,
   pcpAddress: undefined,
   pcpPhone: undefined,
@@ -120,8 +115,7 @@ describe('intake repository', () => {
       office: 'PennProgram',
       heightInches: 64,
       medications: [{ name: 'Metformin', dose: '500 mg', frequency: null }],
-      allergies: [{ name: 'Penicillin', reaction: null }],
-      conditions: [{ condition: 'diabetes', onset: '2019', treatedBy: null, medicated: true, medications: 'Metformin' }],
+      historyOther: null,
       creditCardNumber: null,
     })
     expect(await db.patients.findById(outcome?.patient.id ?? '')).toEqual(outcome?.patient)

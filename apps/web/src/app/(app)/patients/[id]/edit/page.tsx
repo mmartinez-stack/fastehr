@@ -19,41 +19,50 @@ import {
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty"
 import { PageHeader } from "@/components/page-header"
-import { useSurfaces } from "@/components/role-provider"
-import {
-  CLINICAL_SECTIONS,
-  PATIENT_SECTIONS,
-  PatientForm,
-  toPatientFormValues,
-} from "@/features/patients/patient-form"
+import { useRole } from "@/components/role-provider"
+import { PatientForm, toPatientFormValues } from "@/features/patients/patient-form"
+import { patientTabsFor } from "@/features/patients/patient-tabs"
 import { trpc } from "@/trpc/client"
 
 /**
- * Edit — the shared sectioned form, prefilled per section and saved per
- * section (ADR 28). Every role reads the chart (`patient.byId`: header plus
- * the clinical half); the clerical roles also read demographics and billing
- * and render those tabs. One Save runs the section mutations the role may
- * call, so a provider's save never carries a phone number and the server
- * never has to trust the tabs it cannot see.
+ * Edit — the shared three-tab form, prefilled per tab and saved per tab
+ * (ADR 28). Every role reads the Medical tab's data (`patient.byId`: header
+ * plus the clinical half); the roles that render Patient Info and Billing
+ * also read those sections. One Save runs the section mutations for the
+ * tabs rendered, so a provider's save never carries a phone number and the
+ * server never has to trust the tabs it cannot see. Which tabs render is
+ * `patientTabsFor`'s decision, made once from the session's role.
  *
  * The legacy Make Inactive / Make Active action is gone from here with
  * DIA-50: status is no longer exposed anywhere, though its column and
  * procedure remain.
  */
+/** "1985-12-10" → "Dec 10, 1985" without touching Date (and its timezones). */
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+function formatDob(iso: string): string {
+  const [y, m, d] = iso.split("-")
+  const month = m === undefined ? undefined : MONTHS[Number(m) - 1]
+  return month === undefined || d === undefined ? iso : `${month} ${Number(d)}, ${y}`
+}
+
 export default function EditPatientPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const utils = trpc.useUtils()
-  const { clerical } = useSurfaces()
+  const { role } = useRole()
+  const tabs = patientTabsFor(role)
+  const showsPatientInfo = tabs.includes("patientInfo")
+  const showsBilling = tabs.includes("billing")
   const [confirmingLeave, setConfirmingLeave] = React.useState(false)
   const [saved, setSaved] = React.useState(false)
   const dirtyRef = React.useRef(false)
 
   const chart = trpc.patient.byId.useQuery({ id: params.id })
-  // Clerical sections are fetched only by clerical roles: a provider's page
-  // never even asks, so there is nothing for the server to refuse.
-  const demographics = trpc.patient.demographics.useQuery({ id: params.id }, { enabled: clerical })
-  const billing = trpc.patient.billing.useQuery({ id: params.id }, { enabled: clerical })
+  // A tab's data is fetched only when the tab renders: a provider's page
+  // never even asks for Patient Info, so there is nothing for the server to
+  // refuse (it would, and audit the refusal).
+  const demographics = trpc.patient.demographics.useQuery({ id: params.id }, { enabled: showsPatientInfo })
+  const billing = trpc.patient.billing.useQuery({ id: params.id }, { enabled: showsBilling })
 
   const invalidate = () => {
     void utils.patient.recent.invalidate()
@@ -75,7 +84,8 @@ export default function EditPatientPage() {
     }
   }
 
-  const loading = chart.isPending || (clerical && (demographics.isPending || billing.isPending))
+  const loading =
+    chart.isPending || (showsPatientInfo && demographics.isPending) || (showsBilling && billing.isPending)
   if (loading) {
     return <p className="py-8 text-center text-muted-foreground">Loading patient…</p>
   }
@@ -92,12 +102,13 @@ export default function EditPatientPage() {
   }
 
   const record = chart.data
-  const sections = clerical ? PATIENT_SECTIONS : CLINICAL_SECTIONS
 
   return (
     <div>
       {/* Same compact header as /patients/new: the back arrow shares the
-          title row instead of spending a row of its own. */}
+          title row instead of spending a row of its own. The header carries
+          the name and date of birth and nothing else: those are the only
+          fields that may appear outside their tab. */}
       <div className="mb-3 flex items-start gap-2">
         <Button
           variant="ghost"
@@ -112,23 +123,22 @@ export default function EditPatientPage() {
         <PageHeader
           className="mb-0 flex-1"
           title={`${record.firstName} ${record.lastName}`}
-          description="Edit the patient record."
+          description={`Date of birth ${formatDob(record.dateOfBirth)}.`}
         />
       </div>
 
       <PatientForm
         // Remount on a fresh server copy so the form's defaults track the record.
         key={`${record.id}:${chart.dataUpdatedAt}`}
-        sections={sections}
+        sections={tabs}
         defaultValues={toPatientFormValues(record, demographics.data ?? null, billing.data ?? null)}
+        historyOnFile={record.historyOther}
         submit={async (value) => {
-          // The clinical half first: it is the one every role may save, so a
-          // refusal on a clerical section can never leave the chart unsaved.
+          // The Medical tab first: it is the one every role may save, so a
+          // refusal on a clerical tab can never leave the chart unsaved.
           await updateClinical.mutateAsync({ ...value, id: record.id })
-          if (clerical) {
-            await updateDemographics.mutateAsync({ ...value, id: record.id })
-            await updateBilling.mutateAsync({ ...value, id: record.id })
-          }
+          if (showsPatientInfo) await updateDemographics.mutateAsync({ ...value, id: record.id })
+          if (showsBilling) await updateBilling.mutateAsync({ ...value, id: record.id })
           setSaved(true)
           invalidate()
           toast.success(`${value.firstName} ${value.lastName} saved`)

@@ -4,12 +4,7 @@ import {
   type Patient,
   type PatientSummary,
 } from '@fastehr/contracts'
-import type {
-  Patient as PatientRow,
-  PatientAllergy as AllergyRow,
-  PatientCondition as ConditionRow,
-  PatientMedication as MedicationRow,
-} from '../generated/client/client.ts'
+import type { Patient as PatientRow, PatientMedication as MedicationRow } from '../generated/client/client.ts'
 
 /**
  * Row → contract mapping for `Patient`.
@@ -26,20 +21,19 @@ import type {
  *    holds a uuid, that a date is real. Drift between schema.prisma and
  *    contracts fails loudly, at the row, with the field named.
  *
- * Two mappers since DIA-52: the full record carries its three child lists
- * (one read, with the relations included), while a roster row is the scalar
- * row alone — a hundred search results do not fetch a hundred medication
- * lists.
+ * Two mappers since DIA-52: the full record carries its medication list (one
+ * read, with the relation included), while a roster row is the scalar row
+ * alone — a hundred search results do not fetch a hundred medication lists.
+ * The `patient_conditions` and `patient_allergies` tables are dormant (the
+ * history section is out of scope) and are not read here.
  *
  * If a hot read path ever makes per-row parsing measurable, this function is
  * the single place that changes.
  */
 
-/** A patient row with its clinical child lists, as `findById` reads it. */
+/** A patient row with its medication list, as `findById` reads it. */
 export type PatientRecordRow = PatientRow & {
   medications: MedicationRow[]
-  allergies: AllergyRow[]
-  conditions: ConditionRow[]
 }
 
 export function toPatient(row: PatientRecordRow): Patient {
@@ -68,14 +62,6 @@ export function toPatient(row: PatientRecordRow): Patient {
       name: medication.name,
       dose: medication.dose,
       frequency: medication.frequency,
-    })),
-    allergies: row.allergies.map((allergy) => ({ name: allergy.name, reaction: allergy.reaction })),
-    conditions: row.conditions.map((condition) => ({
-      condition: condition.condition,
-      onset: condition.onset,
-      treatedBy: condition.treatedBy,
-      medicated: condition.medicated,
-      medications: condition.medications,
     })),
     historyOther: row.historyOther,
     pcpName: row.pcpName,

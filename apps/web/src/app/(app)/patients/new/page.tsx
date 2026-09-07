@@ -21,18 +21,15 @@ import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty"
 import { PageHeader } from "@/components/page-header"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useSurfaces } from "@/components/role-provider"
-import {
-  EMPTY_PATIENT_FORM,
-  PATIENT_SECTIONS,
-  PatientForm,
-} from "@/features/patients/patient-form"
+import { EMPTY_PATIENT_FORM, PatientForm } from "@/features/patients/patient-form"
+import { PATIENT_TABS } from "@/features/patients/patient-tabs"
 import { trpc } from "@/trpc/client"
 import { IntakeForm } from "./intake-form"
 
 /**
  * Create — two tabs, the legacy page's two jobs made explicit. "New patient"
- * is the shared sectioned form (features/patients/patient-form.tsx, the
- * reference implementation per docs/forms.md) with every section, wired to
+ * is the shared three-tab form (features/patients/patient-form.tsx, the
+ * reference implementation per docs/forms.md) with every tab, wired to
  * `patient.create`; "Send intake form" is the legacy SMS side panel (see
  * intake-form.tsx). The page owns navigation: the back-guard dialog and the
  * success redirect.
@@ -107,7 +104,8 @@ export default function NewPatientPage() {
 
         <TabsContent value="new" className="mt-2">
           <PatientForm
-            sections={PATIENT_SECTIONS}
+            // Creating takes every tab at once; the page is clerical-only above.
+            sections={PATIENT_TABS}
             defaultValues={EMPTY_PATIENT_FORM}
             submit={async (value) => {
               await createPatient.mutateAsync(value)

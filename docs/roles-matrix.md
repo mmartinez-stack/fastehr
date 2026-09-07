@@ -37,11 +37,11 @@ resolution re-checks `isActive` on every call.
 | Capability | Procedure kind | admin | provider | frontdesk |
 | --- | --- | :-: | :-: | :-: |
 | Patient roster: recent, search, type-ahead, referred-by picker (`patient.recent/search/suggest/searchByName`; the phone column is nulled server-side for a provider) | `protectedProcedure` | ✅ | ✅ (no phone) | ✅ |
-| Patient chart: header plus the clinical half (`patient.byId`) | `protectedProcedure` | ✅ | ✅ | ✅ |
-| Patient demographics and billing reads (`patient.demographics/billing`) | `clericalProcedure` | ✅ | ❌ | ✅ |
+| Patient record, **Medical** tab: header plus vitals, medications, primary care doctor, and the read-only history text (`patient.byId`) | `protectedProcedure` | ✅ | ✅ | ✅ |
+| Patient record, **Patient Info** tab (`patient.demographics`) and **Billing** tab (`patient.billing`) reads | `clericalProcedure` | ✅ | ❌ | ✅ |
 | Patient create (`patient.create`) | `clericalProcedure` | ✅ | ❌ | ✅ |
-| Clinical section save: vitals, medications, history, allergies, primary care doctor (`patient.updateClinical`) | `protectedProcedure` | ✅ | ✅ | ✅ |
-| Demographics and billing saves (`patient.updateDemographics/updateBilling`) | `clericalProcedure` | ✅ | ❌ | ✅ |
+| Medical tab save: vitals, medications, primary care doctor; never the history text (`patient.updateClinical`) | `protectedProcedure` | ✅ | ✅ | ✅ |
+| Patient Info and Billing tab saves (`patient.updateDemographics/updateBilling`) | `clericalProcedure` | ✅ | ❌ | ✅ |
 | Send an intake link, review a submission, accept or reject it (`intake.send/byId/accept/reject`) | `clericalProcedure` (byId also checks the request's office against the actor's) | ✅ | ❌ | ✅ |
 | An office's pending intakes (`intake.listPending`) | `clericalOfficeScopedProcedure` | own offices only | ❌ | own offices only |
 | Review queue, note, sign-off (`review.queue/note/signOff`) | `medicalDirectorProcedure`: the `medicalDirector` flag, whatever the role | flag only | flag only | flag only |
@@ -57,11 +57,15 @@ resolution re-checks `isActive` on every call.
 
 Notes that carry weight:
 
-- **The patient record is enforced by section (ADR 28).** A provider reads
-  and writes the clinical half only; the demographics and billing sections
-  are refused server-side, and the roster row they receive carries no phone.
+- **The patient record is enforced by tab (ADR 28 as amended).** Three tabs,
+  Medical, Patient Info, Billing, each served by its own procedure. A
+  provider reads and writes the Medical tab only; the Patient Info and
+  Billing procedures refuse them server-side (`FORBIDDEN`, audited), and the
+  roster row they receive carries no phone. Which tabs a role renders is
+  decided once, in `apps/web/src/features/patients/patient-tabs.ts`, from the
+  same surfaces as the navigation; the layout is the same for every role.
   Nothing clinical is withheld from `frontdesk`: the front desk and admins see
-  every section, as the Aug 31 sync decided.
+  every tab, as the Aug 31 sync decided, and admins open on Medical.
 - **Office scoping is orthogonal to role** (ADR 22): the permitted set is part
   of the actor's identity, checked server-side; an admin is not exempt.
 - **No role can delete a patient** — deactivation only, matching the legacy
@@ -99,7 +103,7 @@ preview another role's view from the header switcher; no other role can.
 | Procedure kinds (`protected` / `clerical` / `admin` / `officeScoped` / `clericalOfficeScoped`) | `apps/web/src/server/procedures.ts` |
 | Intake tokens and queue | ADR 29 |
 | Review sampling and the medical-director flag | ADR 30 |
-| Record sections | ADR 28 |
+| Record sections and tabs | ADR 28, `apps/web/src/features/patients/patient-tabs.ts` |
 | Session + role page guards | `apps/web/src/server/guards.ts`, `apps/web/src/lib/guard-page.ts` |
 | Audit chain ordering | ADR 10 |
 | Office scoping | ADR 22 |

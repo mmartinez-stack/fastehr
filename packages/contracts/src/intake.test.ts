@@ -23,12 +23,6 @@ const FORM = {
   heightFeet: '5',
   heightInchesPart: '4',
   medications: [{ name: 'Metformin', dose: '', frequency: '' }],
-  conditions: [
-    { condition: 'diabetes', present: true, onset: '2019', treatedBy: '', medicated: false, medications: '' },
-    { condition: 'thyroid', present: false, onset: '', treatedBy: '', medicated: false, medications: '' },
-  ],
-  historyOther: '',
-  allergies: [],
   pcpName: '',
   pcpAddress: '',
   pcpPhone: '',
@@ -46,7 +40,6 @@ describe('submitIntakeInput', () => {
       phone: '9515550000',
       heightInches: 64,
       medications: [{ name: 'Metformin' }],
-      conditions: [{ condition: 'diabetes', onset: '2019', medicated: false }],
     })
     expect(submission).not.toHaveProperty('heightFeet')
     expect(submission).not.toHaveProperty('creditCardNumber')
@@ -72,6 +65,12 @@ describe('intakeSubmissionSchema', () => {
 
   it('rejects a blob missing what a patient create needs', () => {
     expect(intakeSubmissionSchema.safeParse({ firstName: 'Ada' }).success).toBe(false)
+  })
+
+  it('still reads a submission stored with the earlier history checklist, dropping it', () => {
+    const { token: _token, ...submission } = submitIntakeInput.parse(FORM)
+    const older = { ...submission, conditions: [{ condition: 'diabetes', medicated: false }], allergies: [], historyOther: 'x' }
+    expect(intakeSubmissionSchema.parse(older)).toEqual(submission)
   })
 })
 

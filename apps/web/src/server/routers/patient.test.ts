@@ -40,8 +40,6 @@ const ADA: Patient = {
   programType: null,
   heightInches: 64.5,
   medications: [{ name: 'Metformin', dose: '500 mg', frequency: 'twice daily' }],
-  allergies: [{ name: 'Penicillin', reaction: 'hives' }],
-  conditions: [{ condition: 'diabetes', onset: '2019', treatedBy: null, medicated: true, medications: 'Metformin' }],
   historyOther: 'None pertinent.',
   pcpName: 'Dr. Jones',
   pcpAddress: null,
@@ -64,8 +62,6 @@ const ADA_CHART = {
   lastVisitAt: null,
   heightInches: 64.5,
   medications: ADA.medications,
-  allergies: ADA.allergies,
-  conditions: ADA.conditions,
   historyOther: 'None pertinent.',
   pcpName: 'Dr. Jones',
   pcpAddress: null,
@@ -103,12 +99,6 @@ const SUBMITTED = {
   heightFeet: '5',
   heightInchesPart: '4',
   medications: [{ name: 'Metformin', dose: '', frequency: '' }],
-  conditions: [
-    { condition: 'diabetes' as const, present: true, onset: '', treatedBy: '', medicated: false, medications: '' },
-    { condition: 'thyroid' as const, present: false, onset: '', treatedBy: '', medicated: false, medications: '' },
-  ],
-  historyOther: '',
-  allergies: [],
   pcpName: '',
   pcpAddress: '',
   pcpPhone: '',
@@ -138,9 +128,6 @@ const NORMALIZED = {
   programType: undefined,
   heightInches: 64,
   medications: [{ name: 'Metformin', dose: undefined, frequency: undefined }],
-  conditions: [{ condition: 'diabetes', onset: undefined, treatedBy: undefined, medicated: false, medications: undefined }],
-  historyOther: undefined,
-  allergies: [],
   pcpName: undefined,
   pcpAddress: undefined,
   pcpPhone: undefined,
@@ -226,17 +213,32 @@ afterEach(() => {
 })
 
 describe('patient router: reads by section (ADR 28)', () => {
-  it('byId returns the chart — header and clinical half — to every role', async () => {
+  it('byId returns the chart — header and the Medical tab — to every role', async () => {
     const db = fakeDb({ findById: async () => ADA })
 
     for (const actor of [PROVIDER, FRONTDESK, ADMIN]) {
       const chart = await callerWith(db, actor).patient.byId({ id: ADA.id })
       expect(chart).toEqual(ADA_CHART)
-      // The clerical columns never ride along, whoever asks.
+      // The Patient Info and Billing columns never ride along, whoever asks.
       expect(chart).not.toHaveProperty('phone')
       expect(chart).not.toHaveProperty('email')
       expect(chart).not.toHaveProperty('creditCardNumber')
+      expect(chart).not.toHaveProperty('healthyWeight')
     }
+  })
+
+  it('serves every tab to an admin, each from its own procedure', async () => {
+    const db = fakeDb({ findById: async () => ADA })
+    const caller = callerWith(db, ADMIN)
+
+    expect(await caller.patient.byId({ id: ADA.id })).toEqual(ADA_CHART)
+    expect(await caller.patient.demographics({ id: ADA.id })).toMatchObject({ phone: '9515550000' })
+    expect(await caller.patient.billing({ id: ADA.id })).toEqual({
+      creditCardNumber: '4111111111111111',
+      creditCardExpMonth: '12',
+      creditCardExpYear: '2030',
+      creditCardZip: '90210',
+    })
   })
 
   it('passes the requested id through', async () => {
@@ -293,10 +295,15 @@ describe('patient router: reads by section (ADR 28)', () => {
     })
 
     // A provider is refused before the repository is read: the record never
-    // leaves the database for a caller who may not see it.
+    // leaves the database for a caller who may not see it. FORBIDDEN is what
+    // the HTTP layer sends as 403.
     findById.mockClear()
-    await expect(callerWith(db, PROVIDER).patient.demographics({ id: ADA.id })).rejects.toThrow('FORBIDDEN')
-    await expect(callerWith(db, PROVIDER).patient.billing({ id: ADA.id })).rejects.toThrow('FORBIDDEN')
+    await expect(callerWith(db, PROVIDER).patient.demographics({ id: ADA.id })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
+    await expect(callerWith(db, PROVIDER).patient.billing({ id: ADA.id })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
     expect(findById).not.toHaveBeenCalled()
   })
 
@@ -382,13 +389,21 @@ describe('patient router: writes by section (ADR 28)', () => {
       id: ADA.id,
       heightInches: 64,
       medications: NORMALIZED.medications,
-      allergies: [],
-      conditions: NORMALIZED.conditions,
-      historyOther: undefined,
       pcpName: undefined,
       pcpAddress: undefined,
       pcpPhone: undefined,
     })
+  })
+
+  it('strips the history text from a clinical save — it is read-only', async () => {
+    const updateClinical = vi.fn<Db['patients']['updateClinical']>(async () => ADA)
+    const caller = callerWith(fakeDb({ updateClinical }), PROVIDER)
+
+    // The wire can carry anything; the contract decides what reaches the repository.
+    const tampered = { ...SUBMITTED, id: ADA.id, historyOther: 'rewritten' } as typeof SUBMITTED & { id: string }
+    await caller.patient.updateClinical(tampered)
+
+    expect(updateClinical.mock.calls[0]?.[0]).not.toHaveProperty('historyOther')
   })
 
   it('keeps demographics and billing writes clerical', async () => {

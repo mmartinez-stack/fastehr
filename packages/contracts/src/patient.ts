@@ -5,17 +5,25 @@ import { officeSchema } from './office.ts'
  * Patient — the entity and its write inputs.
  *
  * The field set is the legacy patient form, reimplemented
- * (docs/legacy-data-mapping.md § patients) and restructured into sections at
- * the Aug 31 sync (DIA-52): demographics, vitals, medications, medical
- * history, allergies, primary care doctor, billing. Requiredness on the
- * inputs mirrors the legacy Angular form where a field existed there — the
- * legacy *backend* validated almost nothing, so the form's reactive
- * validators were the real contract and they are what these schemas encode.
+ * (docs/legacy-data-mapping.md § patients) and restructured into three tabs
+ * (DIA-52, ADR 28 as amended): Medical (vitals, medications, primary care
+ * doctor), Patient Info (demographics and contact details), and Billing.
+ * Requiredness on the inputs mirrors the legacy Angular form where a field
+ * existed there — the legacy *backend* validated almost nothing, so the
+ * form's reactive validators were the real contract and they are what these
+ * schemas encode.
  *
  * Sections are the unit of authorization (ADR 28): a provider reads and
- * writes the clinical sections and never sees demographics or billing; the
+ * writes the clinical section and never sees demographics or billing; the
  * front desk and admins see everything. Hence one read schema per section
- * and one update input per section, rather than one record-wide update.
+ * and one update input per section, rather than one record-wide update. The
+ * three read sections are the three tabs; `demographics` is the Patient Info
+ * tab's data, named for what it holds rather than for the tab.
+ *
+ * Medical history and allergies are out of scope for now: the legacy
+ * combined "medications and pertinent history" text is kept on the entity as
+ * `historyOther`, read-only, and no input writes it. The `patient_conditions`
+ * and `patient_allergies` tables exist from an earlier cut and are dormant.
  *
  * `createPatientInput` is deliberately not `patientSchema.omit(…)`: an input
  * schema normalizes (trims names, lowercases email, strips phone formatting)
@@ -101,27 +109,6 @@ export const PATIENT_PROGRAM_TYPES = [
 export const patientProgramTypeSchema = z.enum(PATIENT_PROGRAM_TYPES)
 export type PatientProgramType = z.infer<typeof patientProgramTypeSchema>
 
-/**
- * The medical-history checklist. **A stub**: ten common conditions until the
- * final list arrives from the clinic's mockup, at which point this array is
- * the only thing that changes — the column stores the key as a plain string,
- * so rows answered under the stub vocabulary keep reading back.
- */
-export const PATIENT_CONDITIONS = [
-  'thyroid',
-  'heart_disease',
-  'diabetes',
-  'kidney_disease',
-  'hypertension',
-  'high_cholesterol',
-  'sleep_apnea',
-  'depression_or_anxiety',
-  'glaucoma',
-  'pregnancy_or_breastfeeding',
-] as const
-export const patientConditionSchema = z.enum(PATIENT_CONDITIONS)
-export type PatientCondition = z.infer<typeof patientConditionSchema>
-
 /** The legacy expiration-month values, verbatim — unpadded month numbers. */
 export const CREDIT_CARD_EXP_MONTHS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'] as const
 export const creditCardExpMonthSchema = z.enum(CREDIT_CARD_EXP_MONTHS)
@@ -134,27 +121,6 @@ export const patientMedicationSchema = z.object({
   frequency: z.string().nullable(),
 })
 export type PatientMedication = z.infer<typeof patientMedicationSchema>
-
-/** One medication allergy, as stored. */
-export const patientAllergySchema = z.object({
-  name: z.string().min(1),
-  reaction: z.string().nullable(),
-})
-export type PatientAllergy = z.infer<typeof patientAllergySchema>
-
-/**
- * One checklist item the patient answered "Yes" to, as stored. Absence is
- * "No". The key is a plain string on the entity (a row answered under an
- * older vocabulary still reads back); the input constrains it to the list.
- */
-export const patientConditionEntrySchema = z.object({
-  condition: z.string().min(1),
-  onset: z.string().nullable(),
-  treatedBy: z.string().nullable(),
-  medicated: z.boolean(),
-  medications: z.string().nullable(),
-})
-export type PatientConditionEntry = z.infer<typeof patientConditionEntrySchema>
 
 export const patientSchema = z.object({
   id: z.uuid(),
@@ -180,12 +146,10 @@ export const patientSchema = z.object({
   /** Total inches, as the legacy form captured it; the form shows feet and inches. */
   heightInches: z.number().nullable(),
   medications: z.array(patientMedicationSchema),
-  allergies: z.array(patientAllergySchema),
-  conditions: z.array(patientConditionEntrySchema),
   /**
-   * Medical history, "Other": free text after the checklist. Carries the
-   * legacy `hx` ("current medications and pertinent history") verbatim for
-   * migrated records.
+   * The legacy `hx` ("current medications and pertinent history"), verbatim
+   * for migrated records. Read-only: shown in the Medical tab's history
+   * placeholder until the history section is built, and written by no input.
    */
   historyOther: z.string().nullable(),
   pcpName: z.string().nullable(),
@@ -250,8 +214,6 @@ export type PatientDemographics = z.infer<typeof patientDemographicsSchema>
 export const patientClinicalSchema = patientSchema.pick({
   heightInches: true,
   medications: true,
-  allergies: true,
-  conditions: true,
   historyOther: true,
   pcpName: true,
   pcpAddress: true,
@@ -377,26 +339,6 @@ const medicationRow = z.object({
   frequency: optionalText(50),
 })
 
-const allergyRow = z.object({
-  name: z.string().trim().min(1).max(100),
-  reaction: optionalText(200),
-})
-
-/**
- * One checklist item as the form submits it: every item, with `present`
- * false by default. Only the present ones are stored, and the details are
- * dropped for an item answered "No" — a form that hides them keeps stale text
- * in state, and that text must not be written.
- */
-const conditionRow = z.object({
-  condition: patientConditionSchema,
-  present: z.boolean(),
-  onset: optionalText(100),
-  treatedBy: optionalText(100),
-  medicated: z.boolean(),
-  medications: optionalText(200),
-})
-
 /** Two-letter state/territory code, as the legacy state dropdown stored it. */
 const stateCode = z.string().trim().toUpperCase().pipe(z.string().regex(/^[A-Z]{2}$/))
 
@@ -423,8 +365,8 @@ const creditCardExpYear = z.string().trim().regex(/^\d{4}$/)
  * reactive validators where the field existed there: names, gender, height,
  * the full address, and phone are required; email, language, office,
  * referral provenance, and program are optional. The new sections
- * (medications, checklist, allergies, primary care doctor) are optional
- * throughout — a patient with nothing to list has an empty list.
+ * (medications, primary care doctor) are optional throughout — a patient
+ * with nothing to list has an empty list.
  *
  * `status` is not an input — a record is created active and changes state
  * only through `setPatientStatusInput`.
@@ -453,12 +395,6 @@ export const clinicalFields = {
   heightFeet,
   heightInchesPart,
   medications: droppingBlankRows(medicationRow, 50),
-  allergies: droppingBlankRows(allergyRow, 50),
-  conditions: z
-    .array(conditionRow)
-    .max(PATIENT_CONDITIONS.length)
-    .refine((rows) => new Set(rows.map((row) => row.condition)).size === rows.length),
-  historyOther: optionalText(10000),
   pcpName: optionalText(100),
   pcpAddress: optionalText(200),
   pcpPhone: blankAsAbsent(normalizedPhone),
@@ -473,23 +409,18 @@ const billingFields = {
 
 /**
  * The clinical section's shape after parsing: feet and inches composed into
- * the stored total, the checklist reduced to the items answered "Yes".
+ * the stored total.
  */
-export function composeClinical<
-  Fields extends {
-    heightFeet: string
-    heightInchesPart: string
-    conditions: z.infer<typeof conditionRow>[]
-  },
->({ heightFeet, heightInchesPart, conditions, ...rest }: Fields) {
+export function composeClinical<Fields extends { heightFeet: string; heightInchesPart: string }>({
+  heightFeet,
+  heightInchesPart,
+  ...rest
+}: Fields) {
   return {
     ...rest,
     // Two decimals at most survive the regex, so the sum is exact enough;
     // rounding keeps 5 ft 4.1 in from storing as 64.10000000000001.
     heightInches: Math.round((Number(heightFeet) * 12 + Number(heightInchesPart)) * 100) / 100,
-    conditions: conditions
-      .filter((row) => row.present)
-      .map(({ present: _present, ...row }) => row),
   }
 }
 
