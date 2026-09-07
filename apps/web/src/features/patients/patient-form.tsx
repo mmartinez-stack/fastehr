@@ -886,12 +886,14 @@ export function PatientForm({
           <form.Field key={condition} name={`conditions[${index}].present` as "phoneFollowUpAllowed"}>
             {(presentField) => (
               <div className="flex flex-col gap-3 px-4 py-3">
-                <div className="flex items-center justify-between gap-4">
+                {/* Two aligned columns: the label gets a fixed track, so every
+                    No/Yes pair sits on the same vertical line down the list. */}
+                <div className="grid grid-cols-[minmax(0,18rem)_auto] items-center gap-4">
                   <span className="text-sm font-medium">{CONDITION_LABEL[condition]}</span>
                   <RadioGroup
                     value={presentField.state.value ? "yes" : "no"}
                     onValueChange={(value) => presentField.handleChange(value === "yes")}
-                    className="flex flex-row items-center gap-5"
+                    className="flex w-auto flex-row items-center gap-5"
                     aria-label={CONDITION_LABEL[condition]}
                   >
                     <label className="flex items-center gap-2 text-sm">
