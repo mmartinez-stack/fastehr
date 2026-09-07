@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Search, UserPlus } from "lucide-react"
+import { CircleCheck, CircleSlash, Search, UserPlus } from "lucide-react"
+import { toast } from "sonner"
 import { interpretPatientSearch, type PatientSearchProblem } from "@fastehr/contracts"
 
 import { Card, CardContent } from "@/components/ui/card"
@@ -78,6 +79,21 @@ export default function PatientsPage() {
   const [problem, setProblem] = React.useState<PatientSearchProblem | null>(null)
   // Contact details are clerical, on the roster as much as on the record.
   const { clerical } = useSurfaces()
+
+  const utils = trpc.useUtils()
+  // The legacy "Make Inactive"/"Make Active" pair, on the row. Deactivation is
+  // the roster's only removal: patients cannot be deleted, here or in the
+  // legacy system (its DELETE route is retired with "patients can no longer
+  // be deleted").
+  const setPatientStatus = trpc.patient.setStatus.useMutation({
+    onSuccess: (updated) => {
+      toast.success(
+        `${updated.firstName} ${updated.lastName} is now ${updated.status}`,
+      )
+      void utils.patient.invalidate()
+    },
+    onError: () => toast.error("The status could not be changed. Try again."),
+  })
 
   const recent = trpc.patient.recent.useQuery(undefined, { enabled: submitted === null })
   const search = trpc.patient.search.useQuery(
@@ -203,6 +219,7 @@ export default function PatientsPage() {
                 {clerical && <TableHead>Phone</TableHead>}
                 <TableHead>Office</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -231,23 +248,53 @@ export default function PatientsPage() {
                       {patient.status}
                     </Badge>
                   </TableCell>
+                  <TableCell>
+                    {/* Actions live on the row itself — no overflow menu. */}
+                    <div className="flex justify-end">
+                      {patient.status === "active" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={setPatientStatus.isPending}
+                          onClick={() =>
+                            setPatientStatus.mutate({ id: patient.id, status: "inactive" })
+                          }
+                        >
+                          <CircleSlash data-icon="inline-start" />
+                          Deactivate
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={setPatientStatus.isPending}
+                          onClick={() =>
+                            setPatientStatus.mutate({ id: patient.id, status: "active" })
+                          }
+                        >
+                          <CircleCheck data-icon="inline-start" />
+                          Activate
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
               {active.isPending ? (
                 <TableRow>
-                  <TableCell colSpan={clerical ? 6 : 5} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={clerical ? 7 : 6} className="py-8 text-center text-muted-foreground">
                     Loading patients…
                   </TableCell>
                 </TableRow>
               ) : active.isError ? (
                 <TableRow>
-                  <TableCell colSpan={clerical ? 6 : 5} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={clerical ? 7 : 6} className="py-8 text-center text-muted-foreground">
                     The roster could not be loaded. Try again.
                   </TableCell>
                 </TableRow>
               ) : patients.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={clerical ? 6 : 5} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={clerical ? 7 : 6} className="py-8 text-center text-muted-foreground">
                     {submitted === null ? "No patients yet." : "No patients match your search."}
                   </TableCell>
                 </TableRow>
