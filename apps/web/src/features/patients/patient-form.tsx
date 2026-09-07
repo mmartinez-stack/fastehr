@@ -819,7 +819,7 @@ export function PatientForm({
   )
 
   const medicalTab = (
-    <FieldGroup className="divide-y divide-border [&>section+section]:pt-5">
+    <FieldGroup className="[&>section+section]:mt-3 [&>section+section]:border-t [&>section+section]:border-border [&>section+section]:pt-6">
       <Section title="Vitals">{vitals}</Section>
       <Section title="Medications">{medications}</Section>
       <Section title="Primary care doctor">{primaryCareDoctor}</Section>
