@@ -878,69 +878,83 @@ export function PatientForm({
    * never written — not a form field, so a save cannot carry it. Allergies
    * are out of scope and have no place here yet.
    */
+  const conditionRow = (condition: PatientCondition, index: number) => (
+    <form.Field key={condition} name={`conditions[${index}].present` as "phoneFollowUpAllowed"}>
+      {(presentField) => (
+        <div className="flex flex-col gap-3 px-4 py-3">
+          {/* Two aligned columns: the label gets a fixed track, so every
+              No/Yes pair sits on the same vertical line down the list. */}
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
+            <span className="text-sm font-medium">{CONDITION_LABEL[condition]}</span>
+            <RadioGroup
+              value={presentField.state.value ? "yes" : "no"}
+              onValueChange={(value) => presentField.handleChange(value === "yes")}
+              className="flex w-auto flex-row items-center gap-5"
+              aria-label={CONDITION_LABEL[condition]}
+            >
+              <label className="flex items-center gap-2 text-sm">
+                <RadioGroupItem value="no" />
+                No
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <RadioGroupItem value="yes" />
+                Yes
+              </label>
+            </RadioGroup>
+          </div>
+          {presentField.state.value ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {textField(`conditions[${index}].onset`, "When", { placeholder: "2019, or age 40" })}
+              {textField(`conditions[${index}].treatedBy`, "Who is treating it", { placeholder: "Dr. Name, clinic" })}
+              <form.Field name={`conditions[${index}].medicated` as "phoneFollowUpAllowed"}>
+                {(medicatedField) => (
+                  <Field>
+                    <FieldLabel htmlFor={medicatedField.name}>Currently medicated</FieldLabel>
+                    <div className="flex h-8 items-center gap-2">
+                      <Checkbox
+                        id={medicatedField.name}
+                        checked={medicatedField.state.value}
+                        onCheckedChange={(checked) => medicatedField.handleChange(checked === true)}
+                      />
+                      <span className="text-sm text-muted-foreground">Yes</span>
+                    </div>
+                  </Field>
+                )}
+              </form.Field>
+              <form.Subscribe selector={(state) => state.values.conditions[index]?.medicated ?? false}>
+                {(medicated) =>
+                  medicated
+                    ? textField(`conditions[${index}].medications`, "Which medications", {
+                        placeholder: "Names and doses",
+                      })
+                    : null
+                }
+              </form.Subscribe>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </form.Field>
+  )
+
+  /**
+   * The checklist: every item asked, "No" by default, a "Yes" opening the
+   * details. Split into two lists side by side from `md`, so fourteen rows
+   * do not run the length of the page. Beneath it, the legacy history text
+   * as it is, never parsed and never written — not a form field, so a save
+   * cannot carry it. Allergies are out of scope and have no place here yet.
+   */
+  const half = Math.ceil(PATIENT_CONDITIONS.length / 2)
   const medicalHistory = (
     <div className="flex flex-col gap-4">
       <FieldDescription>For each condition, answer Yes or No. A Yes opens the details.</FieldDescription>
-      <div className="flex flex-col divide-y divide-border rounded-lg border border-border">
-        {PATIENT_CONDITIONS.map((condition, index) => (
-          <form.Field key={condition} name={`conditions[${index}].present` as "phoneFollowUpAllowed"}>
-            {(presentField) => (
-              <div className="flex flex-col gap-3 px-4 py-3">
-                {/* Two aligned columns: the label gets a fixed track, so every
-                    No/Yes pair sits on the same vertical line down the list. */}
-                <div className="grid grid-cols-[minmax(0,18rem)_auto] items-center gap-4">
-                  <span className="text-sm font-medium">{CONDITION_LABEL[condition]}</span>
-                  <RadioGroup
-                    value={presentField.state.value ? "yes" : "no"}
-                    onValueChange={(value) => presentField.handleChange(value === "yes")}
-                    className="flex w-auto flex-row items-center gap-5"
-                    aria-label={CONDITION_LABEL[condition]}
-                  >
-                    <label className="flex items-center gap-2 text-sm">
-                      <RadioGroupItem value="no" />
-                      No
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <RadioGroupItem value="yes" />
-                      Yes
-                    </label>
-                  </RadioGroup>
-                </div>
-                {presentField.state.value ? (
-                  <div className={GRID}>
-                    {textField(`conditions[${index}].onset`, "When", { placeholder: "2019, or age 40" })}
-                    {textField(`conditions[${index}].treatedBy`, "Who is treating it", { placeholder: "Dr. Name, clinic" })}
-                    <form.Field name={`conditions[${index}].medicated` as "phoneFollowUpAllowed"}>
-                      {(medicatedField) => (
-                        <Field className="sm:col-span-2">
-                          <FieldLabel htmlFor={medicatedField.name}>Currently medicated</FieldLabel>
-                          <div className="flex h-8 items-center gap-2">
-                            <Checkbox
-                              id={medicatedField.name}
-                              checked={medicatedField.state.value}
-                              onCheckedChange={(checked) => medicatedField.handleChange(checked === true)}
-                            />
-                            <span className="text-sm text-muted-foreground">Yes</span>
-                          </div>
-                        </Field>
-                      )}
-                    </form.Field>
-                    <form.Subscribe selector={(state) => state.values.conditions[index]?.medicated ?? false}>
-                      {(medicated) =>
-                        medicated
-                          ? textField(`conditions[${index}].medications`, "Which medications", {
-                              placeholder: "Names and doses",
-                              className: "sm:col-span-2 lg:col-span-4",
-                            })
-                          : null
-                      }
-                    </form.Subscribe>
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </form.Field>
-        ))}
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="flex flex-col divide-y divide-border rounded-lg border border-border">
+          {PATIENT_CONDITIONS.slice(0, half).map((condition, index) => conditionRow(condition, index))}
+        </div>
+        <div className="flex flex-col divide-y divide-border rounded-lg border border-border">
+          {PATIENT_CONDITIONS.slice(half).map((condition, index) => conditionRow(condition, index + half))}
+        </div>
       </div>
       <div className="flex flex-col gap-2">
         <h4 className="text-sm font-medium">History on file</h4>
