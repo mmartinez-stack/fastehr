@@ -134,7 +134,7 @@ place (`Patient` model, `patient.*` procedures, the shared form in
 | `hx` | `historyOther` | `String?` | "Current medications and pertinent history", verbatim. Shown read-only in the Medical tab's history placeholder (ADR 28 as amended) and written by nothing; the column was renamed, never parsed. The medication list (`patient_medications`) starts empty for migrated records; `patient_allergies` and `patient_conditions` exist but are dormant. |
 | `programType` | `programType` | `String?` | Pick-list on the input; `None` → NULL. |
 | `status` | `status` | `PatientStatus` | Legacy free string; `inactive` maps to `inactive`, anything else to `active` (matching the legacy UI's own check). |
-| `creditCardNumber`, `creditCardExpMonth/Year`, `creditCardZip` | same | `String?` | **Provisional** (2026-08-31): ported for billing continuity while the tokenized-processor design is pending; these columns are scheduled to be replaced by processor tokens, not to grow. The four fields are exactly what the legacy form rendered. |
+| `creditCardNumber`, `creditCardExpMonth/Year`, `creditCardZip` | same | `String?` | **Provisional** (2026-08-31): ported for billing continuity while the tokenized-processor design is pending; these columns are scheduled to be replaced by processor tokens, not to grow. The four fields are exactly what the legacy form rendered, except that the two expiration dropdowns became one "month/year" input (2026-09-07): the contract splits it into the two columns as `MM` and `YYYY`, and displays migrated rows of either convention (`1`/`01`, `25`/`2025`) the same way. |
 
 ### Transform decisions
 

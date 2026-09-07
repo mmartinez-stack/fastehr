@@ -103,8 +103,7 @@ const SUBMITTED = {
   pcpAddress: '',
   pcpPhone: '',
   creditCardNumber: '',
-  creditCardExpMonth: '',
-  creditCardExpYear: '',
+  creditCardExpiry: '',
   creditCardZip: '',
 }
 

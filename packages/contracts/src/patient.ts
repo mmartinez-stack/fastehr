@@ -109,11 +109,6 @@ export const PATIENT_PROGRAM_TYPES = [
 export const patientProgramTypeSchema = z.enum(PATIENT_PROGRAM_TYPES)
 export type PatientProgramType = z.infer<typeof patientProgramTypeSchema>
 
-/** The legacy expiration-month values, verbatim — unpadded month numbers. */
-export const CREDIT_CARD_EXP_MONTHS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'] as const
-export const creditCardExpMonthSchema = z.enum(CREDIT_CARD_EXP_MONTHS)
-export type CreditCardExpMonth = z.infer<typeof creditCardExpMonthSchema>
-
 /** One line of the medication list, as stored. */
 export const patientMedicationSchema = z.object({
   name: z.string().min(1),
@@ -357,8 +352,23 @@ const creditCardNumber = z
 /** Legacy billing-zip validator, verbatim: four to six digits. */
 const creditCardZip = z.string().trim().regex(/^\d{4,6}$/)
 
-/** A four-digit year; the form's dropdown constrains to the offered range. */
-const creditCardExpYear = z.string().trim().regex(/^\d{4}$/)
+/**
+ * The card expiration as one field, "month/year": 1 or 2 digits, a slash, 2
+ * or 4 digits ("9/30", "09/2030"). The legacy form had two dropdowns and the
+ * two columns stay; `composeBilling` splits this into them, padded month and
+ * four-digit year, and `formatCardExpiry` joins them back for display.
+ * Migrated rows hold both conventions (`1` and `01`, `25` and `2025`), so
+ * the display normalizes too.
+ */
+const CARD_EXPIRY = /^(0?[1-9]|1[0-2])\s*\/\s*(\d{2}|\d{4})$/
+const creditCardExpiry = z.string().trim().regex(CARD_EXPIRY)
+
+export function formatCardExpiry(month: string | null, year: string | null): string {
+  if (month === null && year === null) return ''
+  const mm = month === null ? '' : month.padStart(2, '0')
+  const yyyy = year === null ? '' : year.length === 2 ? `20${year}` : year
+  return `${mm}/${yyyy}`
+}
 
 /**
  * The three input sections. Requiredness and lengths follow the legacy form's
@@ -402,9 +412,23 @@ export const clinicalFields = {
 
 const billingFields = {
   creditCardNumber: blankAsAbsent(creditCardNumber),
-  creditCardExpMonth: blankAsAbsent(creditCardExpMonthSchema),
-  creditCardExpYear: blankAsAbsent(creditCardExpYear),
+  creditCardExpiry: blankAsAbsent(creditCardExpiry),
   creditCardZip: blankAsAbsent(creditCardZip),
+}
+
+/** The billing section's shape after parsing: the one expiry field split into the two stored columns. */
+export function composeBilling<Fields extends { creditCardExpiry?: string | undefined }>({
+  creditCardExpiry: expiry,
+  ...rest
+}: Fields) {
+  const match = expiry === undefined ? null : CARD_EXPIRY.exec(expiry)
+  const month = match?.[1]
+  const year = match?.[2]
+  return {
+    ...rest,
+    creditCardExpMonth: month === undefined ? undefined : month.padStart(2, '0'),
+    creditCardExpYear: year === undefined ? undefined : year.length === 2 ? `20${year}` : year,
+  }
 }
 
 /**
@@ -431,12 +455,13 @@ export function composeClinical<Fields extends { heightFeet: string; heightInche
  */
 export const patientDemographicsInput = z.object(demographicsFields)
 export const patientClinicalInput = z.object(clinicalFields).transform(composeClinical)
-export const patientBillingInput = z.object(billingFields)
+export const patientBillingInput = z.object(billingFields).transform(composeBilling)
 
 /** Create takes every section at once: the tabbed form submits as one record. */
 export const createPatientInput = z
   .object({ ...demographicsFields, ...clinicalFields, ...billingFields })
   .transform(composeClinical)
+  .transform(composeBilling)
 export type CreatePatientInput = z.infer<typeof createPatientInput>
 
 export const updatePatientDemographicsInput = z.object({ id: z.uuid(), ...demographicsFields })
@@ -447,7 +472,7 @@ export const updatePatientClinicalInput = z
   .transform(composeClinical)
 export type UpdatePatientClinicalInput = z.infer<typeof updatePatientClinicalInput>
 
-export const updatePatientBillingInput = z.object({ id: z.uuid(), ...billingFields })
+export const updatePatientBillingInput = z.object({ id: z.uuid(), ...billingFields }).transform(composeBilling)
 export type UpdatePatientBillingInput = z.infer<typeof updatePatientBillingInput>
 
 export const setPatientStatusInput = z.object({

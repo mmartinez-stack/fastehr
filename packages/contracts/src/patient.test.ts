@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { describeValidationFailure } from './errors.ts'
 import {
   createPatientInput,
+  formatCardExpiry,
   interpretPatientSearch,
   patientClinicalInput,
   patientDemographicsInput,
@@ -51,8 +52,7 @@ const SUBMITTED = {
   pcpAddress: '',
   pcpPhone: '951-555-0001',
   creditCardNumber: '4111 1111 1111 1111',
-  creditCardExpMonth: '12',
-  creditCardExpYear: '2030',
+  creditCardExpiry: '12/2030',
   creditCardZip: '90210',
 }
 
@@ -147,6 +147,30 @@ describe('createPatientInput', () => {
     expect(codesFor({ ...SUBMITTED, medications: [{ name: '', dose: '10 mg', frequency: '' }] })).toEqual({
       'medications.0.name': ['too_small'],
     })
+  })
+
+  it('splits one month/year expiry into the two stored columns, padded and four-digit', () => {
+    const parse = (creditCardExpiry: string) => {
+      const { creditCardExpMonth, creditCardExpYear } = createPatientInput.parse({ ...SUBMITTED, creditCardExpiry })
+      return [creditCardExpMonth, creditCardExpYear]
+    }
+    expect(parse('12/2030')).toEqual(['12', '2030'])
+    expect(parse('9/30')).toEqual(['09', '2030'])
+    expect(parse(' 09 / 2030 ')).toEqual(['09', '2030'])
+    expect(parse('')).toEqual([undefined, undefined])
+    expect(createPatientInput.parse(SUBMITTED)).not.toHaveProperty('creditCardExpiry')
+
+    expect(codesFor({ ...SUBMITTED, creditCardExpiry: '13/2030' })).toEqual({ creditCardExpiry: ['invalid_format'] })
+    expect(codesFor({ ...SUBMITTED, creditCardExpiry: '122030' })).toEqual({ creditCardExpiry: ['invalid_format'] })
+    expect(codesFor({ ...SUBMITTED, creditCardExpiry: '12/' })).toEqual({ creditCardExpiry: ['invalid_format'] })
+  })
+
+  it('formats the stored columns back as month/year, whichever convention they hold', () => {
+    expect(formatCardExpiry('12', '2030')).toBe('12/2030')
+    expect(formatCardExpiry('1', '25')).toBe('01/2025')
+    expect(formatCardExpiry(null, null)).toBe('')
+    // A half-stored expiry shows what there is; the input refuses it until completed.
+    expect(formatCardExpiry('05', null)).toBe('05/')
   })
 
   it('never writes the history text, and has no healthy weight', () => {

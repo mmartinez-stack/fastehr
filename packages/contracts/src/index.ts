@@ -60,8 +60,7 @@ export {
   PATIENT_OFFICES,
   PATIENT_REFERRAL_SOURCES,
   PATIENT_PROGRAM_TYPES,
-  CREDIT_CARD_EXP_MONTHS,
-  creditCardExpMonthSchema,
+  formatCardExpiry,
   REFERRED_BY_PATIENT_SOURCE,
   type Patient,
   type PatientMedication,
@@ -88,7 +87,6 @@ export {
   type PatientOffice,
   type PatientReferralSource,
   type PatientProgramType,
-  type CreditCardExpMonth,
 } from './patient.ts'
 export {
   REVIEW_SAMPLE_RATE_DEFAULT,

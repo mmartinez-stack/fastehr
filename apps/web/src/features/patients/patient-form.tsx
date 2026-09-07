@@ -8,7 +8,7 @@ import {
   patientBillingInput,
   patientClinicalInput,
   patientDemographicsInput,
-  CREDIT_CARD_EXP_MONTHS,
+  formatCardExpiry,
   PATIENT_GENDERS,
   PATIENT_LANGUAGES,
   PATIENT_OFFICES,
@@ -120,8 +120,8 @@ export interface PatientFormValues {
   pcpPhone: string
   // Billing
   creditCardNumber: string
-  creditCardExpMonth: string
-  creditCardExpYear: string
+  /** One field, "month/year"; the contract splits it into the two stored columns. */
+  creditCardExpiry: string
   creditCardZip: string
 }
 
@@ -151,8 +151,7 @@ export const EMPTY_PATIENT_FORM: PatientFormValues = {
   pcpAddress: "",
   pcpPhone: "",
   creditCardNumber: "",
-  creditCardExpMonth: "",
-  creditCardExpYear: "",
+  creditCardExpiry: "",
   creditCardZip: "",
 }
 
@@ -202,8 +201,7 @@ export function toPatientFormValues(
       ? {}
       : {
           creditCardNumber: billing.creditCardNumber ?? "",
-          creditCardExpMonth: billing.creditCardExpMonth ?? "",
-          creditCardExpYear: billing.creditCardExpYear ?? "",
+          creditCardExpiry: formatCardExpiry(billing.creditCardExpMonth, billing.creditCardExpYear),
           creditCardZip: billing.creditCardZip ?? "",
         }),
   }
@@ -245,8 +243,6 @@ export function toIntakeFormValues(submission: IntakeSubmission): PatientFormVal
   }
 }
 
-/** The legacy expiration-year range: this year and the ten after it. */
-const EXP_YEARS = Array.from({ length: 11 }, (_, i) => String(new Date().getFullYear() + i))
 const FEET = ["0", "1", "2", "3", "4", "5", "6", "7", "8"]
 
 /** The legacy system's office → at-home test, verbatim. */
@@ -289,8 +285,7 @@ const COPY: FormCopy = {
   pcpAddress: { too_big: "Address can be at most 200 characters." },
   pcpPhone: { invalid_format: "Enter a phone number with ten digits." },
   creditCardNumber: { invalid_format: "Enter the card number: 14 to 18 digits." },
-  creditCardExpMonth: { invalid_value: "Select the expiration month." },
-  creditCardExpYear: { invalid_format: "Enter a four-digit expiration year." },
+  creditCardExpiry: { invalid_format: "Enter the expiration as month/year, like 09/2030." },
   creditCardZip: { invalid_format: "Enter the billing zip: four to six digits." },
 }
 
@@ -846,16 +841,10 @@ export function PatientForm({
           and only those (no CVV, ever). */}
       <div className={GRID}>
         {textField("creditCardNumber", "Credit card number", { placeholder: "Card number" })}
-        {selectField(
-          "creditCardExpMonth",
-          "Exp month",
-          CREDIT_CARD_EXP_MONTHS.map((value) => ({ value, label: value })),
-        )}
-        {selectField(
-          "creditCardExpYear",
-          "Exp year",
-          EXP_YEARS.map((value) => ({ value, label: value })),
-        )}
+        {textField("creditCardExpiry", "Expiration (month/year)", {
+          placeholder: "09/2030",
+          description: "Month and year, like 09/2030 or 9/30.",
+        })}
         {textField("creditCardZip", "Billing zip", { placeholder: "90210" })}
       </div>
     </FieldGroup>
