@@ -28,6 +28,8 @@ interface RoleContextValue {
   roles: readonly StaffRole[]
   /** Whether this session may preview other roles' views (admins only). */
   canSwitch: boolean
+  /** The session's medical-director flag (DIA-74) — a flag, not a role, and never previewed. */
+  medicalDirector: boolean
   setRole: (r: StaffRole) => void
 }
 
@@ -35,10 +37,12 @@ const RoleContext = React.createContext<RoleContextValue | null>(null)
 
 export function RoleProvider({
   sessionRole,
+  medicalDirector = false,
   children,
 }: {
   /** The session's role from the server; `null` only for an anonymous render. */
   sessionRole: StaffRole | null
+  medicalDirector?: boolean
   children: React.ReactNode
 }) {
   // Anonymous renders (the login redirect is already in flight) get the
@@ -52,11 +56,12 @@ export function RoleProvider({
       role: canSwitch ? preview : actual,
       roles: STAFF_ROLES,
       canSwitch,
+      medicalDirector,
       setRole: (next: StaffRole) => {
         if (canSwitch) setPreview(next)
       },
     }),
-    [actual, canSwitch, preview],
+    [actual, canSwitch, medicalDirector, preview],
   )
 
   return <RoleContext.Provider value={value}>{children}</RoleContext.Provider>

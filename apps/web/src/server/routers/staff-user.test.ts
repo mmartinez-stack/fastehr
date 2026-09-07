@@ -15,6 +15,7 @@ const JUNE: ReturnType<Db['staffUsers']['list']> extends Promise<Array<infer U>>
   email: 'june@example.com',
   role: 'frontdesk',
   isActive: true,
+  medicalDirector: false,
   hasCredential: false,
   createdAt: '2020-01-15T00:00:00.000Z',
 }
@@ -65,6 +66,16 @@ function fakeDb(overrides: Partial<Db['staffUsers']> = {}): Db {
       listPending: async () => [],
       accept: async () => null,
       reject: async () => null,
+    },
+    reviews: {
+      lastRun: async () => null,
+      listEligible: async () => [],
+      recordSample: async () => {
+        throw new Error('not under test')
+      },
+      listQueue: async () => [],
+      findNote: async () => null,
+      signOff: async () => null,
     },
   }
 }

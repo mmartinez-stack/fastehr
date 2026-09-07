@@ -223,13 +223,52 @@ model Visit {
   signedByName String?
   signedAt     DateTime?
 
+  // Medical-director review (DIA-74, ADR 30). A note enters the queue when a
+  // sampling run picks it (`sampledAt`, `sampleRunId`) and leaves it when
+  // the reviewer signs off (`reviewedAt`); reviewer, comments, and timestamp
+  // stay on the note, as the legacy review co-signature did.
+  sampledAt      DateTime?
+  sampleRunId    String?
+  sampleRun      ReviewSampleRun? @relation(fields: [sampleRunId], references: [id])
+  reviewedById   String?
+  reviewedBy     User?     @relation("VisitReviews", fields: [reviewedById], references: [id], onDelete: Restrict)
+  reviewComments String?
+  reviewedAt     DateTime?
+
   legacyId  String?  @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
   @@index([patientId, dateOfService])
   @@index([signedAt])
+  // The queue: sampled and not yet reviewed.
+  @@index([sampledAt, reviewedAt])
   @@map("visits")
+}
+
+/**
+ * One run of the review sampler (DIA-74): the window of signatures it
+ * considered and what it picked. The next run's window starts where this
+ * one's ended, which is what makes "signed since the last run" exact rather
+ * than "in the last seven days" — a late or manual run never skips a note
+ * and never samples one twice.
+ */
+model ReviewSampleRun {
+  id            String   @id @default(uuid())
+  ranAt         DateTime @default(now())
+  windowStart   DateTime
+  windowEnd     DateTime
+  eligibleCount Int
+  sampledCount  Int
+  /** "1 in N": 20 is the five percent the sync asked for. */
+  rate          Int
+  /** Null for the scheduled job; the admin who pressed "run now" otherwise. */
+  triggeredById String?
+  triggeredBy   User?    @relation(fields: [triggeredById], references: [id], onDelete: SetNull)
+  visits        Visit[]
+
+  @@index([windowEnd])
+  @@map("review_sample_runs")
 }
 
 // --- Authentication (Better Auth core tables) ---
@@ -272,6 +311,11 @@ model User {
   legacyRoleRaw      String?
   isActive           Boolean   @default(true)
   mustChangePassword Boolean   @default(false)
+  // The medical-director flag (DIA-74): who may work the note review queue.
+  // Orthogonal to `role` — Dr. Penn is a provider who also reviews — and
+  // set by an admin from the Users screen. The legacy `reviewer` flag by
+  // another name.
+  medicalDirector    Boolean   @default(false)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   sessions           Session[]
@@ -279,6 +323,8 @@ model User {
   signedVisits       Visit[]   @relation("VisitSignatures")
   sentIntakes        IntakeRequest[] @relation("IntakeSenders")
   reviewedIntakes    IntakeRequest[] @relation("IntakeReviewers")
+  reviewedVisits     Visit[]   @relation("VisitReviews")
+  triggeredSamples   ReviewSampleRun[]
 
   @@map("users")
 }

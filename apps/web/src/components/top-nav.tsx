@@ -14,6 +14,7 @@ import {
   UserCog,
   LogOut,
   HeartPulse,
+  ClipboardCheck,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -42,6 +43,8 @@ const NAV: {
   href: string
   icon: typeof LayoutGrid
   surface?: keyof RoleSurfaces
+  /** An entry gated by a per-account flag rather than a role surface. */
+  flag?: "medicalDirector"
 }[] = [
   { label: "Queues", href: "/queues", icon: LayoutGrid, surface: "clinical" },
   { label: "Schedule", href: "/schedule", icon: CalendarDays },
@@ -49,6 +52,7 @@ const NAV: {
   { label: "Callbacks", href: "/callbacks", icon: PhoneCall, surface: "clerical" },
   { label: "RFI", href: "/rfi", icon: Inbox, surface: "clerical" },
   { label: "SMS", href: "/sms", icon: MessageSquareText, surface: "clerical" },
+  { label: "Medical director review", href: "/review", icon: ClipboardCheck, flag: "medicalDirector" },
   { label: "Reports", href: "/reports", icon: BarChart3, surface: "staff" },
   { label: "Settings", href: "/settings", icon: Settings },
   { label: "Users", href: "/users", icon: UserCog, surface: "staff" },
@@ -57,7 +61,7 @@ const NAV: {
 export function TopNav() {
   const pathname = usePathname()
   const { office, offices, setOffice } = useOffice()
-  const { role, roles, canSwitch, setRole } = useRole()
+  const { role, roles, canSwitch, medicalDirector, setRole } = useRole()
   const router = useRouter()
 
   async function signOut() {
@@ -68,7 +72,10 @@ export function TopNav() {
   }
 
   const surfaces = surfacesFor(role)
-  const nav = NAV.filter((item) => !item.surface || surfaces[item.surface])
+  const flags = { medicalDirector }
+  const nav = NAV.filter(
+    (item) => (!item.surface || surfaces[item.surface]) && (!item.flag || flags[item.flag]),
+  )
 
   return (
     <header className="sticky top-0 z-40 border-b border-primary/60 bg-primary text-primary-foreground shadow-sm">
@@ -163,7 +170,7 @@ export function TopNav() {
 
       {/* Mobile / tablet nav */}
       <nav className="flex items-center gap-0.5 overflow-x-auto border-t border-primary-foreground/15 px-2 py-1 lg:hidden">
-        {NAV.map((item) => {
+        {nav.map((item) => {
           const active =
             pathname === item.href || pathname.startsWith(`${item.href}/`)
           const Icon = item.icon

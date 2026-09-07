@@ -31,6 +31,8 @@ export interface Actor {
    * false.
    */
   mustChangePassword?: boolean
+  /** The medical-director flag (DIA-74). Optional so fixtures stay terse; absent means false. */
+  medicalDirector?: boolean
 }
 
 export interface Context {

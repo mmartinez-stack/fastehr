@@ -38,6 +38,19 @@ export const requireClericalRole = t.middleware(({ ctx, next }) => {
 })
 
 /**
+ * The medical-director gate (DIA-74): the review queue and sign-off. A flag,
+ * not a role — the reviewer is a provider who also reviews — so this checks
+ * the actor's flag and nothing about their role. Admins without the flag are
+ * refused too: the queue is the reviewer's, and the sampling run has its own
+ * admin gate.
+ */
+export const requireMedicalDirector = t.middleware(({ ctx, next }) => {
+  if (ctx.actor === null) throw new TRPCError({ code: 'UNAUTHORIZED' })
+  if (ctx.actor.medicalDirector !== true) throw new TRPCError({ code: 'FORBIDDEN' })
+  return next({ ctx: { ...ctx, actor: ctx.actor } })
+})
+
+/**
  * Admin gate for the account-administration procedures. The single-role
  * vocabulary from the auth foundation, applied inside the chain so the audit
  * middleware records every refusal (ADR 10). The full per-role visibility

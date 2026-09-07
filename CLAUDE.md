@@ -193,7 +193,9 @@ ADR 28, with the clinical half open to every role and demographics/billing
 clerical). The self-service intake is wired end to end (ADR 29): a texted
 single-use link, a public form at `/intake/[token]`, and a per-office Pending
 tab on the roster; text messages go to the server log until `TWILIO_*` is
-set. Visits are imported (§ visits) and drive the roster's
+set. The medical-director review queue (ADR 30) samples signed notes through
+`apps/web/scripts/sample-notes-for-review.ts` (weekly cron) or the admin's
+"run now"; the `medicalDirector` flag on a user opens `/review`. Visits are imported (§ visits) and drive the roster's
 last-visit column, order, and service-date search (ADR 27 as amended); patient `status` stays in the schema but is no
 longer exposed anywhere (DIA-50). Auth is real (Better Auth; migrated legacy credentials
 verify per ADR 26). `noUncheckedIndexedAccess` is on everywhere with no

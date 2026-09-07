@@ -14,7 +14,9 @@ the same commit.
 ## The role vocabulary
 
 Three roles, one per account (`StaffRole` in `@fastehr/contracts`; a native PG
-enum, so the database refuses anything else). The legacy `group` values map in
+enum, so the database refuses anything else), plus one per-account flag,
+`medicalDirector` (DIA-74, ADR 30), orthogonal to the role: it opens the note
+review queue and nothing else, and an admin sets it from the Users screen. The legacy `group` values map in
 per the migration (docs/legacy-data-mapping.md § users):
 
 | Role | Legacy value(s) | Who this is |
@@ -42,6 +44,9 @@ resolution re-checks `isActive` on every call.
 | Demographics and billing saves (`patient.updateDemographics/updateBilling`) | `clericalProcedure` | ✅ | ❌ | ✅ |
 | Send an intake link, review a submission, accept or reject it (`intake.send/byId/accept/reject`) | `clericalProcedure` (byId also checks the request's office against the actor's) | ✅ | ❌ | ✅ |
 | An office's pending intakes (`intake.listPending`) | `clericalOfficeScopedProcedure` | own offices only | ❌ | own offices only |
+| Review queue, note, sign-off (`review.queue/note/signOff`) | `medicalDirectorProcedure`: the `medicalDirector` flag, whatever the role | flag only | flag only | flag only |
+| Run the note sampler on demand (`review.runSample`; the weekly job runs it with no session) | `adminProcedure` | ✅ | ❌ | ❌ |
+| Set the medical-director flag (`staffUsers.create/update`) | `adminProcedure` | ✅ | ❌ | ❌ |
 | Open and submit the self-service form (`intake.open/submit`) | `publicProcedure`, the single-use token is the credential (ADR 29) | the person with the link | the person with the link | the person with the link |
 | Patient activate/deactivate (`patient.setStatus`; no screen calls it since DIA-50, the column is kept unexposed) | `protectedProcedure` | ✅ | ✅ | ✅ |
 | Staff accounts: list, search, create, edit, enable/disable (`staffUsers.*`) | `adminProcedure` | ✅ | ❌ | ❌ |
@@ -93,6 +98,7 @@ preview another role's view from the header switcher; no other role can.
 | Role vocabulary | `packages/contracts/src/staff-role.ts` |
 | Procedure kinds (`protected` / `clerical` / `admin` / `officeScoped` / `clericalOfficeScoped`) | `apps/web/src/server/procedures.ts` |
 | Intake tokens and queue | ADR 29 |
+| Review sampling and the medical-director flag | ADR 30 |
 | Record sections | ADR 28 |
 | Session + role page guards | `apps/web/src/server/guards.ts`, `apps/web/src/lib/guard-page.ts` |
 | Audit chain ordering | ADR 10 |

@@ -105,7 +105,10 @@ describe('staff-user repository', () => {
     const id = await seed('edit@example.com')
 
     const updated = await db.staffUsers.update({ id, name: 'Renamed', role: 'admin' })
-    expect(updated).toMatchObject({ name: 'Renamed', role: 'admin' })
+    expect(updated).toMatchObject({ name: 'Renamed', role: 'admin', medicalDirector: false })
+    // The medical-director flag (DIA-74) is set here and nowhere else.
+    expect((await db.staffUsers.update({ id, medicalDirector: true }))?.medicalDirector).toBe(true)
+    expect((await db.staffUsers.update({ id, name: 'Renamed again' }))?.medicalDirector).toBe(true)
     expect(await db.staffUsers.update({ id: 'ghost', name: 'X' })).toBeNull()
   })
 

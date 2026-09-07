@@ -407,6 +407,24 @@ in `All migrations have been successfully applied.` Re-running it prints
 `No pending migrations to apply.` and exits 0 — it is idempotent, and this is
 the same step every future deploy runs before rolling the web container.
 
+### Weekly note sampling (DIA-74, ADR 30)
+
+The medical-director review queue is fed by a job that samples one in twenty
+of the notes signed since its last run. Cadence is cron's; the job records
+the window it covered, so a late or repeated run skips nothing. Install it on
+the instance as a weekly line (Monday 06:00 Pacific; the instance clock is
+UTC, so 13:00 UTC in summer) running inside the web image:
+
+```bash
+sudo tee /etc/cron.d/fastehr-review-sample >/dev/null <<'EOF2'
+0 13 * * 1  root  cd /opt/fastehr && docker compose run --rm web node apps/web/scripts/sample-notes-for-review.ts >> /var/log/fastehr-review-sample.log 2>&1
+EOF2
+```
+
+`--rate <n>` changes "one in twenty"; `--since YYYY-MM-DD` catches up from an
+earlier date. An admin who holds the medical-director flag can also run it
+from the review page.
+
 ## 11. Start and verify
 
 ```bash

@@ -7,6 +7,8 @@ import type { Patient } from '@fastehr/contracts'
  * no `@prisma/client` in its manifest, so pnpm's isolated node_modules makes
  * those imports fail to resolve outright (ADR 2).
  */
+export { REVIEW_SAMPLE_RATE_DEFAULT, reviewSampleSize, sampleForReview } from './review-sampling.ts'
+
 export function patientDisplayName(patient: Pick<Patient, 'firstName' | 'lastName'>): string {
   return `${patient.lastName}, ${patient.firstName}`
 }

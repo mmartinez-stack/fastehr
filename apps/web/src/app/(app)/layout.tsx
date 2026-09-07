@@ -15,7 +15,7 @@ export default async function AppLayout({
   const identity = await sessionIdentity()
 
   return (
-    <RoleProvider sessionRole={identity?.role ?? null}>
+    <RoleProvider sessionRole={identity?.role ?? null} medicalDirector={identity?.medicalDirector ?? false}>
       <OfficeProvider offices={identity?.offices ?? []}>
         <div className="flex min-h-screen flex-col bg-background">
           <TopNav />

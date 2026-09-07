@@ -57,6 +57,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { RequiredMark } from "@/components/required-mark"
+import { Checkbox } from "@/components/ui/checkbox"
 import { ROLE_LABEL } from "@/lib/staff-role-label"
 import { toFormErrors, validationFrom, type FormCopy, type FormErrors } from "@/lib/form-errors"
 import { trpc } from "@/trpc/client"
@@ -132,12 +133,33 @@ function roleSelect(field: {
   )
 }
 
+/** The medical-director flag (DIA-74): a checkbox beside the role, for either dialog. */
+function medicalDirectorField(field: {
+  name: string
+  state: { value: boolean }
+  handleChange: (value: boolean) => void
+}) {
+  return (
+    <Field>
+      <FieldLabel htmlFor={field.name}>Medical director</FieldLabel>
+      <div className="flex h-8 items-center gap-2">
+        <Checkbox
+          id={field.name}
+          checked={field.state.value}
+          onCheckedChange={(checked) => field.handleChange(checked === true)}
+        />
+        <span className="text-sm text-muted-foreground">Reviews the sampled clinic notes</span>
+      </div>
+    </Field>
+  )
+}
+
 function CreateUserForm({ onDone }: { onDone: () => void }) {
   const utils = trpc.useUtils()
   const create = trpc.staffUsers.create.useMutation()
 
   const form = useForm({
-    defaultValues: { name: "", email: "", role: "frontdesk" },
+    defaultValues: { name: "", email: "", role: "frontdesk", medicalDirector: false },
     validators: {
       onSubmit: ({ value }) => {
         const result = createStaffUserInput.safeParse(value)
@@ -150,6 +172,7 @@ function CreateUserForm({ onDone }: { onDone: () => void }) {
           const created = await create.mutateAsync({
             ...value,
             role: value.role as StaffRole,
+            medicalDirector: value.medicalDirector,
           })
           toast.success(`${created.name} added. Issue a temporary password to enable sign-in`)
           void utils.staffUsers.invalidate()
@@ -216,6 +239,7 @@ function CreateUserForm({ onDone }: { onDone: () => void }) {
             )}
           </form.Field>
           <form.Field name="role">{roleSelect}</form.Field>
+          <form.Field name="medicalDirector">{medicalDirectorField}</form.Field>
         </div>
       </FieldGroup>
       <DialogFooter className="mt-4">
@@ -250,7 +274,7 @@ function EditUserForm({
   const update = trpc.staffUsers.update.useMutation()
 
   const form = useForm({
-    defaultValues: { name: user.name, role: user.role as string },
+    defaultValues: { name: user.name, role: user.role as string, medicalDirector: user.medicalDirector },
     validators: {
       onSubmit: ({ value }) => {
         const result = updateStaffUserInput.safeParse({ id: user.id, ...value })
@@ -264,6 +288,7 @@ function EditUserForm({
             id: user.id,
             name: value.name,
             role: value.role as StaffRole,
+            medicalDirector: value.medicalDirector,
           })
           toast.success(`${updated.name} saved`)
           void utils.staffUsers.invalidate()
@@ -308,6 +333,7 @@ function EditUserForm({
             )}
           </form.Field>
           <form.Field name="role">{roleSelect}</form.Field>
+          <form.Field name="medicalDirector">{medicalDirectorField}</form.Field>
         </div>
       </FieldGroup>
       <DialogFooter className="mt-4">
@@ -371,7 +397,7 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
         error.message === "cannot delete your own account"
           ? "You cannot delete your own account."
           : error.message === "account has signed clinical records"
-            ? "This account signed clinical records and cannot be deleted. Disable it instead."
+            ? "This account signed or reviewed clinical records and cannot be deleted. Disable it instead."
             : "The account could not be deleted. Try again.",
       )
       setDeleting(null)
@@ -501,7 +527,10 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={roleVariant[u.role]}>{ROLE_LABEL[u.role]}</Badge>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge variant={roleVariant[u.role]}>{ROLE_LABEL[u.role]}</Badge>
+                      {u.medicalDirector ? <Badge variant="outline">Medical director</Badge> : null}
+                    </div>
                   </TableCell>
                   <TableCell>
                     {u.isActive ? (

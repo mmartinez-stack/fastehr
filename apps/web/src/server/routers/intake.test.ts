@@ -161,6 +161,16 @@ function fakeDb(overrides: Partial<Db['intakes']> = {}): Db {
       reject: async () => null,
       ...overrides,
     },
+    reviews: {
+      lastRun: async () => null,
+      listEligible: async () => [],
+      recordSample: async () => {
+        throw new Error('not under test')
+      },
+      listQueue: async () => [],
+      findNote: async () => null,
+      signOff: async () => null,
+    },
   }
 }
 

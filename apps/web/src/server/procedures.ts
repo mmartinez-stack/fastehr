@@ -5,6 +5,7 @@ import {
   requireAdminRole,
   requireAuth,
   requireClericalRole,
+  requireMedicalDirector,
   requireRole,
 } from './middleware/auth.ts'
 import { publicProcedure } from './trpc.ts'
@@ -45,6 +46,9 @@ export const adminProcedure = protectedProcedure.use(requireAdminRole)
  * provider gets FORBIDDEN, and the audit trail shows the probe.
  */
 export const clericalProcedure = protectedProcedure.use(requireClericalRole)
+
+/** The note review queue and its sign-off (DIA-74): the medical-director flag, whatever the role. */
+export const medicalDirectorProcedure = protectedProcedure.use(requireMedicalDirector)
 
 /**
  * Procedures that read or write for a single clinic site.
