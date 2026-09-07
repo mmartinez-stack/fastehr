@@ -57,29 +57,33 @@ export default function NewPatientPage() {
 
   return (
     <div>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="mb-4"
-        nativeButton={false}
-        render={<Link href="/patients" onNavigate={guardLeave} />}
-      >
-        <ArrowLeft data-icon="inline-start" />
-        Back to patients
-      </Button>
+      {/* The back arrow shares the title row — a stacked back link above the
+          header spent a full row on it (the whitespace complaint). */}
+      <div className="mb-3 flex items-start gap-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Back to patients"
+          className="-ml-2"
+          nativeButton={false}
+          render={<Link href="/patients" onNavigate={guardLeave} />}
+        >
+          <ArrowLeft />
+        </Button>
+        <PageHeader
+          className="mb-0 flex-1"
+          title="New Patient"
+          description="Create a record directly, or text the person the self-service intake form."
+        />
+      </div>
 
-      <PageHeader
-        title="New Patient"
-        description="Create a record directly, or text the person the self-service intake form."
-      />
-
-      <Tabs defaultValue="new" className="mt-6">
+      <Tabs defaultValue="new">
         <TabsList>
           <TabsTrigger value="new">New patient</TabsTrigger>
           <TabsTrigger value="intake">Send intake form</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="new" className="mt-4">
+        <TabsContent value="new" className="mt-2">
           <PatientForm
             defaultValues={EMPTY_PATIENT_FORM}
             submit={async (value) => {
@@ -99,7 +103,7 @@ export default function NewPatientPage() {
           />
         </TabsContent>
 
-        <TabsContent value="intake" className="mt-4">
+        <TabsContent value="intake" className="mt-2">
           <IntakeForm />
         </TabsContent>
       </Tabs>

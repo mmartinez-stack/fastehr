@@ -2,16 +2,18 @@
 
 import * as React from "react"
 
-import { ROLES, type Role } from "@/lib/mock-data"
+import { STAFF_ROLES, type StaffRole } from "@fastehr/contracts"
 
 /**
  * Which role's view of the application is on screen.
  *
- * The Aug 7 sync split the interface in two: a provider sees the clinical
- * record, a medical assistant sees the clerical one, and an administrator sees
- * both. That split is the subject of this mockup, so the mockup has to be able
- * to show it — hence a switcher, in the header, that a stakeholder can flip
- * during a walkthrough.
+ * The vocabulary is the real one — `StaffRole` from contracts, the same enum
+ * the database enforces — so the switcher's options are exactly the roles an
+ * account can hold. The Aug 7 sync split the interface in two: a provider
+ * sees the clinical record, the front desk sees the clerical one, and an
+ * admin sees both. That split is the subject of this mockup, so the mockup
+ * has to be able to show it — hence a switcher, in the header, that a
+ * stakeholder can flip during a walkthrough.
  *
  * **This is a demonstration device, not a security boundary, and the
  * distinction is not a nuance.** The role lives in client state where the
@@ -25,19 +27,19 @@ import { ROLES, type Role } from "@/lib/mock-data"
  */
 interface RoleContextValue {
   /** The role whose view is rendered. */
-  role: Role
-  /** Every role the switcher offers — the full vocabulary, in the mockup. */
-  roles: readonly Role[]
-  setRole: (r: Role) => void
+  role: StaffRole
+  /** Every role the switcher offers — the full vocabulary. */
+  roles: readonly StaffRole[]
+  setRole: (r: StaffRole) => void
 }
 
 const RoleContext = React.createContext<RoleContextValue | null>(null)
 
 export function RoleProvider({ children }: { children: React.ReactNode }) {
-  const [role, setRole] = React.useState<Role>("Provider")
+  const [role, setRole] = React.useState<StaffRole>("provider")
 
   const value = React.useMemo(
-    () => ({ role, roles: ROLES, setRole }),
+    () => ({ role, roles: STAFF_ROLES, setRole }),
     [role],
   )
 
@@ -69,19 +71,19 @@ export interface RoleSurfaces {
   staff: boolean
 }
 
-export function surfacesFor(role: Role): RoleSurfaces {
+export function surfacesFor(role: StaffRole): RoleSurfaces {
   switch (role) {
-    case "Provider":
+    case "provider":
       return { clinical: true, clerical: false, staff: false }
-    case "Medical Assistant":
+    case "frontdesk":
       return { clinical: false, clerical: true, staff: false }
-    case "Administrator":
+    case "admin":
       return { clinical: true, clerical: true, staff: true }
   }
 }
 
 /** Convenience for screens that only need to branch, not destructure. */
-export function useSurfaces(): RoleSurfaces & { role: Role } {
+export function useSurfaces(): RoleSurfaces & { role: StaffRole } {
   const { role } = useRole()
   return { role, ...surfacesFor(role) }
 }

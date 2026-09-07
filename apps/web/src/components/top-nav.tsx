@@ -28,7 +28,8 @@ import {
 import { useOffice } from "@/components/office-provider"
 import { useRole, surfacesFor, type RoleSurfaces } from "@/components/role-provider"
 import { authClient } from "@/lib/auth-client"
-import type { Role } from "@/lib/mock-data"
+import type { StaffRole } from "@fastehr/contracts"
+import { ROLE_LABEL } from "@/lib/staff-role-label"
 
 /**
  * `surface` is the half of the application an entry belongs to; an entry
@@ -114,7 +115,7 @@ export function TopNav() {
             <span className="text-xs font-medium text-primary-foreground/75">
               Viewing as
             </span>
-            <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+            <Select value={role} onValueChange={(v) => setRole(v as StaffRole)}>
               <SelectTrigger
                 aria-label="Viewing as role"
                 className="w-[170px] border-primary-foreground/25 bg-primary-foreground/10 text-primary-foreground"
@@ -125,7 +126,7 @@ export function TopNav() {
               <SelectContent>
                 {roles.map((r) => (
                   <SelectItem key={r} value={r}>
-                    {r}
+                    {ROLE_LABEL[r]}
                   </SelectItem>
                 ))}
               </SelectContent>

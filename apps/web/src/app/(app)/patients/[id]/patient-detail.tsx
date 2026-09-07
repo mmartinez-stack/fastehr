@@ -31,6 +31,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useSurfaces } from "@/components/role-provider"
+import { ROLE_LABEL } from "@/lib/staff-role-label"
 import {
   LanguageTag,
   PatientStatusBadge,
@@ -579,7 +580,7 @@ export function PatientDetail({
 
       {!clinical && !clerical && (
         <p className="mt-6 text-sm text-muted-foreground">
-          The {role} view has no content on this screen.
+          The {ROLE_LABEL[role]} view has no content on this screen.
         </p>
       )}
     </div>

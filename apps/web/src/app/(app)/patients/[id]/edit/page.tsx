@@ -91,21 +91,25 @@ export default function EditPatientPage() {
 
   return (
     <div>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="mb-4"
-        nativeButton={false}
-        render={<Link href="/patients" onNavigate={guardLeave} />}
-      >
-        <ArrowLeft data-icon="inline-start" />
-        Back to patients
-      </Button>
-
-      <PageHeader
-        title={`${record.firstName} ${record.lastName}`}
-        description={isActive ? "Edit the patient record." : "This patient is inactive."}
-      />
+      {/* Same compact header as /patients/new: the back arrow shares the
+          title row instead of spending a row of its own. */}
+      <div className="mb-3 flex items-start gap-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Back to patients"
+          className="-ml-2"
+          nativeButton={false}
+          render={<Link href="/patients" onNavigate={guardLeave} />}
+        >
+          <ArrowLeft />
+        </Button>
+        <PageHeader
+          className="mb-0 flex-1"
+          title={`${record.firstName} ${record.lastName}`}
+          description={isActive ? "Edit the patient record." : "This patient is inactive."}
+        />
+      </div>
 
       <PatientForm
         // Remount on a fresh server copy so the form's defaults track the record.
