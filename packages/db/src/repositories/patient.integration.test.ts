@@ -116,15 +116,7 @@ describe('patient repository', () => {
     expect(await db.patients.findById('00000000-0000-4000-8000-000000000000')).toBeNull()
   })
 
-  it('orders by last name, then first', async () => {
-    await prisma.patient.createMany({ data: [ADA, GRACE] })
-
-    const patients = await db.patients.listByLastName()
-
-    expect(patients.map((patient) => patient.lastName)).toEqual(['Hopper', 'Lovelace'])
-  })
-
-  it('lists the most recently seen first, patients with no visit last', async () => {
+  it('sorts a search by most recently seen first, patients with no visit last', async () => {
     // Legacy `GET /patients` sorted by `recentVisit` descending; DIA-50 makes
     // that the roster's one order. Ada was seen most recently, Grace a year
     // before, and the third patient never.
@@ -141,15 +133,10 @@ describe('patient repository', () => {
       ],
     })
 
-    expect((await db.patients.listRecent()).map((patient) => patient.firstName)).toEqual([
-      'Ada',
-      'Grace',
-      'Katherine',
-    ])
-    // The same order for a search — the roster has one order, not two.
+    // All three share the letter "a"; the roster has one order.
     expect(
-      (await db.patients.search({ query: { kind: 'name', name: 'ada' } })).map((p) => p.lastVisitAt),
-    ).toEqual(['2026-02-01T18:00:00.000Z'])
+      (await db.patients.search({ query: { kind: 'name', name: 'a' } })).map((p) => p.firstName),
+    ).toEqual(['Ada', 'Grace', 'Katherine'])
   })
 
   it('creates a patient from the full form input and round-trips it', async () => {
@@ -243,25 +230,28 @@ describe('patient repository', () => {
     expect(referred.referredByPatientId).toBe(referrer.id)
   })
 
-  it('searches one word against either name, exact and case-insensitive', async () => {
+  it('searches one word against either name by substring, case-insensitive', async () => {
     await prisma.patient.createMany({ data: [ADA, GRACE] })
 
     expect(
       (await db.patients.search({ query: { kind: 'name', name: 'hopper' } })).map((p) => p.id),
     ).toEqual([GRACE.id])
-    // Exact match, not substring — "hop" finds nobody.
-    expect(await db.patients.search({ query: { kind: 'name', name: 'hop' } })).toEqual([])
+    // Substring, anywhere in the name (DIA-59): "pp" is inside Hopper.
+    expect(
+      (await db.patients.search({ query: { kind: 'name', name: 'PP' } })).map((p) => p.id),
+    ).toEqual([GRACE.id])
     // A first name finds the patient too — one input, either field.
     expect(
-      (await db.patients.search({ query: { kind: 'name', name: 'ada' } })).map((p) => p.id),
+      (await db.patients.search({ query: { kind: 'name', name: 'ad' } })).map((p) => p.id),
     ).toEqual([ADA.id])
+    expect(await db.patients.search({ query: { kind: 'name', name: 'zz' } })).toEqual([])
   })
 
-  it('searches a full name in both orientations', async () => {
+  it('searches a full name in both orientations, each part a substring', async () => {
     await prisma.patient.createMany({ data: [ADA, GRACE] })
 
-    const asTyped = { kind: 'fullName', firstName: 'grace', lastName: 'hopper' } as const
-    const reversed = { kind: 'fullName', firstName: 'hopper', lastName: 'grace' } as const
+    const asTyped = { kind: 'fullName', firstName: 'gr', lastName: 'hop' } as const
+    const reversed = { kind: 'fullName', firstName: 'hop', lastName: 'gr' } as const
     expect((await db.patients.search({ query: asTyped })).map((p) => p.id)).toEqual([GRACE.id])
     expect((await db.patients.search({ query: reversed })).map((p) => p.id)).toEqual([GRACE.id])
     expect(
@@ -269,6 +259,44 @@ describe('patient repository', () => {
         query: { kind: 'fullName', firstName: 'grace', lastName: 'lovelace' },
       }),
     ).toEqual([])
+  })
+
+  it('finds patients seen on a clinic calendar day, combinable with a name', async () => {
+    await prisma.patient.createMany({ data: [ADA, GRACE] })
+    // Two visits for Ada that are the same UTC day but different Los
+    // Angeles days: 06:30Z is the previous evening in the clinic's zone.
+    await prisma.visit.createMany({
+      data: [
+        { patientId: ADA.id, dateOfService: new Date('2026-09-01T06:30:00Z') }, // Aug 31, 23:30 PDT
+        { patientId: ADA.id, dateOfService: new Date('2026-09-01T18:00:00Z') }, // Sep 1, 11:00 PDT
+        { patientId: GRACE.id, dateOfService: new Date('2026-09-02T18:00:00Z') }, // Sep 2
+      ],
+    })
+
+    expect((await db.patients.search({ serviceDate: '2026-09-01' })).map((p) => p.id)).toEqual([ADA.id])
+    expect((await db.patients.search({ serviceDate: '2026-08-31' })).map((p) => p.id)).toEqual([ADA.id])
+    expect((await db.patients.search({ serviceDate: '2026-09-02' })).map((p) => p.id)).toEqual([GRACE.id])
+    expect(await db.patients.search({ serviceDate: '2026-09-03' })).toEqual([])
+    // ANDed with the query: Grace was not seen on the 1st.
+    expect(
+      await db.patients.search({ query: { kind: 'name', name: 'hop' }, serviceDate: '2026-09-01' }),
+    ).toEqual([])
+  })
+
+  it('suggests a handful of matches in roster order', async () => {
+    await prisma.patient.createMany({
+      data: Array.from({ length: 12 }, (_, i) => ({
+        id: `a1b2c3d4-0000-4000-8000-0000000001${String(i).padStart(2, '0')}`,
+        firstName: `Pat${i}`,
+        lastName: 'Penn',
+        dateOfBirth: new Date('1980-01-01T00:00:00.000Z'),
+        lastVisitAt: new Date(`2026-01-${String(i + 1).padStart(2, '0')}T18:00:00Z`),
+      })),
+    })
+
+    const suggested = await db.patients.suggest({ query: { kind: 'name', name: 'pe' } })
+    expect(suggested).toHaveLength(8)
+    expect(suggested[0]?.firstName).toBe('Pat11') // most recently seen first
   })
 
   it('searches by calendar day of birth through the separate filter', async () => {

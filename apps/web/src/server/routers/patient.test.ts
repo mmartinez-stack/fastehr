@@ -95,9 +95,8 @@ function fakeDb(overrides: Partial<Db['patients']> = {}): Db {
   return {
     patients: {
       findById: async () => null,
-      listByLastName: async () => [],
-      listRecent: async () => [],
       search: async () => [],
+      suggest: async () => [],
       searchByName: async () => [],
       create: async () => {
         throw new Error('not under test')
@@ -169,16 +168,13 @@ describe('patient router', () => {
     expect(findById).not.toHaveBeenCalled()
   })
 
-  it('lists through the repository', async () => {
-    const caller = callerWith(fakeDb({ listByLastName: async () => [ADA] }))
-
-    expect(await caller.patient.list()).toEqual([ADA])
-  })
-
-  it('lists recent through the repository', async () => {
-    const caller = callerWith(fakeDb({ listRecent: async () => [ADA] }))
-
-    expect(await caller.patient.recent()).toEqual([ADA])
+  it('has no unfiltered list — the roster is search-driven', () => {
+    // The whole-table `list` and the recent-30 default left with DIA-59;
+    // the only way to read rows is a search with a criterion.
+    const paths = Object.keys(appRouter._def.procedures)
+    expect(paths).toContain('patient.search')
+    expect(paths).not.toContain('patient.list')
+    expect(paths).not.toContain('patient.recent')
   })
 
   it('searches with the query interpreted by format', async () => {
@@ -188,6 +184,22 @@ describe('patient router', () => {
     await caller.patient.search({ query: '(951) 555-0000' })
 
     expect(search).toHaveBeenCalledWith({ query: { kind: 'phone', phone: '9515550000' } })
+  })
+
+  it('refuses an empty search before reaching the repository', async () => {
+    const search = vi.fn(async () => [ADA])
+    const caller = callerWith(fakeDb({ search }))
+
+    await expect(caller.patient.search({ query: '', dateOfBirth: '', serviceDate: '' })).rejects.toThrow()
+    expect(search).not.toHaveBeenCalled()
+  })
+
+  it('suggests through the repository with the same interpretation', async () => {
+    const suggest = vi.fn(async () => [ADA])
+    const caller = callerWith(fakeDb({ suggest }))
+
+    expect(await caller.patient.suggest({ query: 'lo' })).toEqual([ADA])
+    expect(suggest).toHaveBeenCalledWith({ query: { kind: 'name', name: 'lo' } })
   })
 
   it('rejects an uninterpretable query before reaching the repository', async () => {

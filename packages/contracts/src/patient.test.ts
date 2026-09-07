@@ -5,6 +5,7 @@ import {
   interpretPatientSearch,
   searchPatientsInput,
   sendPatientIntakeInput,
+  suggestPatientsInput,
   updatePatientInput,
 } from './patient.ts'
 
@@ -239,6 +240,23 @@ describe('interpretPatientSearch', () => {
   })
 })
 
+describe('suggestPatientsInput', () => {
+  it('interprets the query exactly as a search does', () => {
+    expect(suggestPatientsInput.parse({ query: ' Pe ' })).toEqual({
+      query: { kind: 'name', name: 'Pe' },
+    })
+    expect(suggestPatientsInput.parse({ query: 'Penn, Jo' })).toEqual({
+      query: { kind: 'fullName', firstName: 'Jo', lastName: 'Penn' },
+    })
+  })
+
+  it('refuses what a search refuses: one letter, a partial phone, a date', () => {
+    expect(suggestPatientsInput.safeParse({ query: 'P' }).success).toBe(false)
+    expect(suggestPatientsInput.safeParse({ query: '951555' }).success).toBe(false)
+    expect(suggestPatientsInput.safeParse({ query: '1985-12-10' }).success).toBe(false)
+  })
+})
+
 describe('sendPatientIntakeInput', () => {
   it('normalizes the phone and treats a blank language as absent', () => {
     expect(
@@ -263,6 +281,7 @@ describe('searchPatientsInput', () => {
     expect(searchPatientsInput.parse({ query: '(951) 555-0000', dateOfBirth: '' })).toEqual({
       query: { kind: 'phone', phone: '9515550000' },
       dateOfBirth: undefined,
+      serviceDate: undefined,
     })
   })
 
@@ -270,11 +289,29 @@ describe('searchPatientsInput', () => {
     expect(searchPatientsInput.parse({ query: '', dateOfBirth: '1985-12-10' })).toEqual({
       query: undefined,
       dateOfBirth: '1985-12-10',
+      serviceDate: undefined,
     })
     expect(searchPatientsInput.parse({ query: 'Lovelace', dateOfBirth: '1985-12-10' })).toEqual({
       query: { kind: 'name', name: 'Lovelace' },
       dateOfBirth: '1985-12-10',
+      serviceDate: undefined,
     })
+  })
+
+  it('accepts a service date alone, or combined with the others', () => {
+    expect(searchPatientsInput.parse({ serviceDate: '2026-09-01' })).toEqual({
+      query: undefined,
+      dateOfBirth: undefined,
+      serviceDate: '2026-09-01',
+    })
+    expect(
+      searchPatientsInput.parse({ query: 'pe', dateOfBirth: '1985-12-10', serviceDate: '2026-09-01' }),
+    ).toEqual({
+      query: { kind: 'name', name: 'pe' },
+      dateOfBirth: '1985-12-10',
+      serviceDate: '2026-09-01',
+    })
+    expect(searchPatientsInput.safeParse({ serviceDate: '9/1/2026' }).success).toBe(false)
   })
 
   it('has no status filter — status left the roster with DIA-50', () => {
@@ -282,14 +319,18 @@ describe('searchPatientsInput', () => {
     expect(searchPatientsInput.parse({ query: 'Lovelace', status: 'inactive' })).toEqual({
       query: { kind: 'name', name: 'Lovelace' },
       dateOfBirth: undefined,
+      serviceDate: undefined,
     })
     expect(searchPatientsInput.safeParse({ query: '', dateOfBirth: '', status: 'inactive' }).success).toBe(
       false,
     )
   })
 
-  it('refuses an entirely empty search', () => {
-    expect(searchPatientsInput.safeParse({ query: '', dateOfBirth: '' }).success).toBe(false)
+  it('refuses an entirely empty search — the roster never lists everyone', () => {
+    expect(searchPatientsInput.safeParse({ query: '', dateOfBirth: '', serviceDate: '' }).success).toBe(
+      false,
+    )
+    expect(searchPatientsInput.safeParse({}).success).toBe(false)
   })
 
   it('fails an uninterpretable query with issue code custom, no message of ours', () => {

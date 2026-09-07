@@ -141,11 +141,13 @@ place (`Patient` model, `patient.*` procedures, the shared form in
 
 - There is no patient delete, here or in legacy (its route was disabled);
   deactivation is `patient.setStatus`.
-- Per-field match semantics reproduce legacy search: names
-  exact-but-case-insensitive, DOB by calendar day, phone by its ten digits; the
-  default roster view is the most recent 30. The *input* differs deliberately:
-  one search box whose format decides between name and phone, plus a separate
-  date-of-birth field (ADR 27), replacing the legacy four-field bar.
+- Match semantics diverge from legacy on purpose since the Aug 31 sync
+  (DIA-59): names match by substring, case-insensitive (legacy anchored an
+  exact match); DOB by calendar day and phone by its ten digits are unchanged;
+  a date of service finds any patient with a visit on that clinic day. There
+  is no default list — legacy's "30 most recent" is gone, and an empty search
+  renders nothing. The *input* is one search box whose format decides between
+  name and phone, plus the two date fields (ADR 27).
 - **A row the importer writes must survive the mapper's read-back parse**, so
   every candidate is validated through the contracts entity schema before any
   write. A field the contract would reject imports as NULL with a note in the

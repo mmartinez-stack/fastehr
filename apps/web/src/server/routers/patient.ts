@@ -4,6 +4,7 @@ import {
   searchPatientsByNameInput,
   searchPatientsInput,
   setPatientStatusInput,
+  suggestPatientsInput,
   updatePatientInput,
 } from '@fastehr/contracts'
 import { protectedProcedure } from '../procedures.ts'
@@ -28,15 +29,19 @@ export const patientRouter = router({
     .input(patientSchema.pick({ id: true }))
     .query(({ ctx, input }) => ctx.db.patients.findById(input.id)),
 
-  list: protectedProcedure.query(({ ctx }) => ctx.db.patients.listByLastName()),
-
-  /** The roster's default view — the legacy queue's "30 most recent". */
-  recent: protectedProcedure.query(({ ctx }) => ctx.db.patients.listRecent()),
-
-  /** The roster search (legacy `/patients/find`, minus the raw Mongo query). */
+  /**
+   * The roster search (legacy `/patients/find`, minus the raw Mongo query).
+   * There is no unfiltered list and no "recent" default any more (DIA-59):
+   * the input refuses an empty search, so the whole table is never served.
+   */
   search: protectedProcedure
     .input(searchPatientsInput)
     .query(({ ctx, input }) => ctx.db.patients.search(input)),
+
+  /** The roster's type-ahead — a search, a few rows deep. */
+  suggest: protectedProcedure
+    .input(suggestPatientsInput)
+    .query(({ ctx, input }) => ctx.db.patients.suggest(input)),
 
   /** The referred-by-patient picker (legacy `/patients/search`). */
   searchByName: protectedProcedure

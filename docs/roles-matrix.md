@@ -34,7 +34,7 @@ resolution re-checks `isActive` on every call.
 
 | Capability | Procedure kind | admin | provider | frontdesk |
 | --- | --- | :-: | :-: | :-: |
-| Patient roster, search, detail (`patient.byId/list/recent/search/searchByName`) | `protectedProcedure` | ✅ | ✅ | ✅ |
+| Patient roster search, type-ahead, detail (`patient.byId/search/suggest/searchByName`) | `protectedProcedure` | ✅ | ✅ | ✅ |
 | Patient create / update (`patient.create/update`) | `protectedProcedure` | ✅ | ✅ | ✅ |
 | Patient activate/deactivate (`patient.setStatus`; no screen calls it since DIA-50, the column is kept unexposed) | `protectedProcedure` | ✅ | ✅ | ✅ |
 | Staff accounts: list, search, create, edit, enable/disable (`staffUsers.*`) | `adminProcedure` | ✅ | ❌ | ❌ |

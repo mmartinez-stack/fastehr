@@ -297,10 +297,12 @@ export type SendPatientIntakeInput = z.infer<typeof sendPatientIntakeInput>
  * "Last, First" convention). A date typed into the text box is refused with a
  * pointer at the date field, never guessed at.
  *
- * Match semantics per field are unchanged from the legacy queue: names exact
- * but case-insensitive, DOB by calendar day, phone by its ten digits. The
- * two-character name minimum stays — a one-letter exact match is always a
- * typo. Query and date combine as AND, so a common name narrows by birth day.
+ * Match semantics per field: names by substring, case-insensitive, anywhere
+ * in the name ("pe" finds Penn and Lopez alike — the Aug 31 sync, DIA-59,
+ * replacing the legacy queue's exact match); DOB by calendar day; phone by
+ * its ten digits, exact. The two-character name minimum stays — one letter
+ * matches too much of a 50k-row table to mean anything. Query and dates
+ * combine as AND, so a common name narrows by birth day.
  *
  * The interpreter is exported on its own so the roster form can classify as
  * the user types (to hint "needs all ten digits" before submit) with the same
@@ -375,34 +377,60 @@ export function interpretPatientSearch(
 }
 
 /**
- * The transform re-runs the interpreter server-side, so an uninterpretable
- * query fails validation (issue code `custom`, per ADR 12 — the client owns
- * the copy, keyed by the problem it already computed locally). Both filters
- * are optional individually, but an entirely empty search is refused — the
- * caller falls back to the recent list instead of asking for everyone. There
- * is no status filter: status left the roster with DIA-50.
+ * The zone a calendar day on the roster is reckoned in. Visits are stored as
+ * instants; "seen on Monday" means Monday where the clinic stands, and every
+ * clinic site is in one zone. Named here, once, rather than left to whichever
+ * server or browser happens to run the query (ADR 18's lesson, applied to
+ * a search).
+ */
+export const CLINIC_TIME_ZONE = 'America/Los_Angeles'
+
+/**
+ * The text query, interpreted. The transform re-runs the interpreter
+ * server-side, so an uninterpretable query fails validation (issue code
+ * `custom`, per ADR 12 — the client owns the copy, keyed by the problem it
+ * already computed locally).
+ */
+const interpretedQuery = z
+  .string()
+  .trim()
+  .min(2)
+  .max(150)
+  .transform((value, ctx) => {
+    const interpreted = interpretPatientSearch(value)
+    if (!interpreted.ok) {
+      ctx.addIssue({ code: 'custom', params: { problem: interpreted.problem } })
+      return z.NEVER
+    }
+    return interpreted.value
+  })
+
+/**
+ * The roster search. Three criteria, each optional, ANDed: the text query,
+ * a date of birth, and a date of service ("patients seen on Monday" — any
+ * visit on that clinic day, DIA-59). An entirely empty search is refused:
+ * the roster never lists the whole table, it renders only what a criterion
+ * selected. There is no status filter: status left the roster with DIA-50.
  */
 export const searchPatientsInput = z
   .object({
-    query: blankAsAbsent(
-      z
-        .string()
-        .trim()
-        .min(2)
-        .max(150)
-        .transform((value, ctx) => {
-          const interpreted = interpretPatientSearch(value)
-          if (!interpreted.ok) {
-            ctx.addIssue({ code: 'custom', params: { problem: interpreted.problem } })
-            return z.NEVER
-          }
-          return interpreted.value
-        }),
-    ),
+    query: blankAsAbsent(interpretedQuery),
     dateOfBirth: blankAsAbsent(z.iso.date()),
+    serviceDate: blankAsAbsent(z.iso.date()),
   })
-  .refine((value) => value.query !== undefined || value.dateOfBirth !== undefined)
+  .refine(
+    (value) =>
+      value.query !== undefined || value.dateOfBirth !== undefined || value.serviceDate !== undefined,
+  )
 export type SearchPatientsInput = z.infer<typeof searchPatientsInput>
+
+/**
+ * The type-ahead behind the roster's search box: the same interpretation as
+ * a search, a handful of rows back. The two-character minimum is the
+ * interpreter's; the debounce is the client's.
+ */
+export const suggestPatientsInput = z.object({ query: interpretedQuery })
+export type SuggestPatientsInput = z.infer<typeof suggestPatientsInput>
 
 /**
  * The referred-by-patient picker's query (legacy `/patients/search`):

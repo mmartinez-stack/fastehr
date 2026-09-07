@@ -1,18 +1,23 @@
-import type {
-  CreatePatientInput,
-  Patient,
-  SearchPatientsByNameInput,
-  SearchPatientsInput,
-  SetPatientStatusInput,
-  UpdatePatientInput,
+import {
+  CLINIC_TIME_ZONE,
+  type CreatePatientInput,
+  type Patient,
+  type PatientSearchInterpretation,
+  type SearchPatientsByNameInput,
+  type SearchPatientsInput,
+  type SetPatientStatusInput,
+  type SuggestPatientsInput,
+  type UpdatePatientInput,
 } from '@fastehr/contracts'
 import type { PrismaClient } from '../client.ts'
 import { toPatient } from '../mappers/patient.ts'
 
 /**
  * Patient reads and writes — the query set ported from the legacy patient
- * endpoints (docs/legacy-data-mapping.md § patients): list/search/save, no
- * delete (the legacy system disabled patient deletion, and so does this one).
+ * endpoints (docs/legacy-data-mapping.md § patients): search/save, no delete
+ * (the legacy system disabled patient deletion, and so does this one), and
+ * since DIA-59 no unfiltered list either: every read of more than one row
+ * goes through `search`, whose input refuses to be empty.
  *
  * The interface is declared in terms of `@fastehr/contracts` types only: no
  * `Prisma.PatientWhereInput`, no `Decimal`, no `select` objects. A consumer
@@ -22,11 +27,10 @@ import { toPatient } from '../mappers/patient.ts'
  */
 export interface PatientRepository {
   findById(id: string): Promise<Patient | null>
-  listByLastName(): Promise<Patient[]>
-  /** The default roster view — legacy `GET /patients` was the 30 most recent. */
-  listRecent(): Promise<Patient[]>
-  /** The single-input roster search (ADR 27): exact, case-insensitive, capped. */
+  /** The roster search (ADR 27, amended): substring names, exact phone, two calendar days; capped. */
   search(input: SearchPatientsInput): Promise<Patient[]>
+  /** The roster's type-ahead: the same interpretation, a few rows deep. */
+  suggest(input: SuggestPatientsInput): Promise<Patient[]>
   /** The referred-by picker — legacy `/patients/search`, substring on names. */
   searchByName(input: SearchPatientsByNameInput): Promise<Patient[]>
   create(input: CreatePatientInput): Promise<Patient>
@@ -34,9 +38,14 @@ export interface PatientRepository {
   setStatus(input: SetPatientStatusInput): Promise<Patient>
 }
 
-/** The legacy list/search caps, kept: 30 rows for lists, 100 for a search. */
-const LIST_LIMIT = 30
+/**
+ * The legacy caps, kept: 100 rows for a search, 30 for the picker. The
+ * type-ahead shows a handful — it is for jumping to a record, not reading a
+ * list.
+ */
 const SEARCH_LIMIT = 100
+const PICKER_LIMIT = 30
+const SUGGEST_LIMIT = 8
 
 /**
  * The roster's one order (DIA-50): most recently seen first, patients with no
@@ -85,66 +94,86 @@ function toWriteData(input: CreatePatientInput) {
 }
 
 /**
+ * The text query as a where clause. The contract already decided which field
+ * the query means (ADR 27); this only translates each interpretation.
+ *
+ * Names match by substring, case-insensitive, anywhere in the field (DIA-59:
+ * "pe" finds Penn). Phone stays exact — a prefix search on digits is a
+ * different feature with different index needs. A two-word query is checked
+ * in both orientations, each part a substring of its field, so "Jo Pe" and
+ * "Pe, Jo" both find Josh Penn.
+ */
+function whereForQuery(query: PatientSearchInterpretation | undefined) {
+  if (query === undefined) return {}
+  const within = (value: string) => ({ contains: value, mode: 'insensitive' as const })
+  switch (query.kind) {
+    case 'phone':
+      return { phone: query.phone }
+    case 'name':
+      // One word — the searcher didn't say which name it is.
+      return { OR: [{ firstName: within(query.name) }, { lastName: within(query.name) }] }
+    case 'fullName':
+      return {
+        OR: [
+          { firstName: within(query.firstName), lastName: within(query.lastName) },
+          { firstName: within(query.lastName), lastName: within(query.firstName) },
+        ],
+      }
+  }
+}
+
+/**
  * Takes a *getter* rather than a client so that building a `Db` stays free of
  * I/O and configuration. The client — and with it the DATABASE_URL check — is
  * resolved on the first query, not when the repository is constructed.
  */
 export function createPatientRepository(getClient: () => PrismaClient): PatientRepository {
+  /**
+   * The patients with a visit on a clinic calendar day. Visits are instants;
+   * the day boundary is the clinic's, not the server's, so the comparison
+   * happens in SQL against the named zone rather than in JS against
+   * whatever `TZ` the process runs under (ADR 18). The id list is small — a
+   * day's worth of visits — and it lets the rest of the search stay a
+   * single Prisma query.
+   */
+  async function patientIdsSeenOn(day: string): Promise<string[]> {
+    // The column is `timestamp` without zone holding UTC instants (Prisma's
+    // default), so it is first declared UTC and only then shifted into the
+    // clinic's zone — a single AT TIME ZONE on a zoneless column would read
+    // the stored value as already local and shift it the wrong way.
+    const rows = await getClient().$queryRaw<{ patientId: string }[]>`
+      SELECT DISTINCT "patientId"
+      FROM "visits"
+      WHERE (("dateOfService" AT TIME ZONE 'UTC') AT TIME ZONE ${CLINIC_TIME_ZONE})::date = ${day}::date
+    `
+    return rows.map((row) => row.patientId)
+  }
+
   return {
     async findById(id) {
       const row = await getClient().patient.findUnique({ where: { id } })
       return row === null ? null : toPatient(row)
     },
 
-    async listByLastName() {
-      const rows = await getClient().patient.findMany({
-        orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
-      })
-      return rows.map(toPatient)
-    },
-
-    async listRecent() {
-      // Legacy `GET /patients` sorted by `recentVisit` descending — the
-      // patients most recently *seen*, which `lastVisitAt` now carries.
-      const rows = await getClient().patient.findMany({
-        orderBy: ROSTER_ORDER,
-        take: LIST_LIMIT,
-      })
-      return rows.map(toPatient)
-    },
-
     async search(input) {
-      // The contract already decided which field the query means (ADR 27);
-      // this only translates each interpretation into a where clause, ANDed
-      // with the separate date-of-birth filter when present.
-      // Exact-but-case-insensitive name matching is the legacy behavior
-      // (its UI anchored `^value$` with the `i` flag) — a roster search
-      // finds "smith" for "Smith", not every name containing it.
-      const query = input.query
-      const insensitive = (value: string) => ({ equals: value, mode: 'insensitive' as const })
-      const byQuery =
-        query === undefined
-          ? {}
-          : query.kind === 'phone'
-            ? { phone: query.phone }
-            : query.kind === 'name'
-              ? // One word — the searcher didn't say which name it is.
-                { OR: [{ firstName: insensitive(query.name) }, { lastName: insensitive(query.name) }] }
-              : // Both orientations: exact matching makes the extra arm free,
-                // and "Lovelace Ada" typed without the comma still lands.
-                {
-                  OR: [
-                    { firstName: insensitive(query.firstName), lastName: insensitive(query.lastName) },
-                    { firstName: insensitive(query.lastName), lastName: insensitive(query.firstName) },
-                  ],
-                }
+      const seenOn = input.serviceDate === undefined ? undefined : await patientIdsSeenOn(input.serviceDate)
       const rows = await getClient().patient.findMany({
         where: {
-          ...byQuery,
+          ...whereForQuery(input.query),
           ...(input.dateOfBirth === undefined ? {} : { dateOfBirth: new Date(input.dateOfBirth) }),
+          ...(seenOn === undefined ? {} : { id: { in: seenOn } }),
         },
         orderBy: ROSTER_ORDER,
         take: SEARCH_LIMIT,
+      })
+      return rows.map(toPatient)
+    },
+
+    async suggest(input) {
+      const rows = await getClient().patient.findMany({
+        where: whereForQuery(input.query),
+        orderBy: ROSTER_ORDER,
+        take: SUGGEST_LIMIT,
       })
       return rows.map(toPatient)
     },
@@ -158,7 +187,7 @@ export function createPatientRepository(getClient: () => PrismaClient): PatientR
           ...(firstName === '' ? {} : { firstName: { contains: firstName, mode: 'insensitive' } }),
         },
         orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
-        take: LIST_LIMIT,
+        take: PICKER_LIMIT,
       })
       return rows.map(toPatient)
     },

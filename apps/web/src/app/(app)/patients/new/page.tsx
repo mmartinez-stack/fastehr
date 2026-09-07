@@ -41,8 +41,8 @@ export default function NewPatientPage() {
 
   const createPatient = trpc.patient.create.useMutation({
     onSuccess: (created) => {
-      void utils.patient.list.invalidate()
-      void utils.patient.recent.invalidate()
+      void utils.patient.search.invalidate()
+      void utils.patient.suggest.invalidate()
       toast.success(`${created.firstName} ${created.lastName} added`)
       router.push("/patients")
     },
