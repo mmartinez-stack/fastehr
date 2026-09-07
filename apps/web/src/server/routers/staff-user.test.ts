@@ -1,5 +1,5 @@
 import type { Db } from '@fastehr/db'
-import { StaffUserEmailTakenError } from '@fastehr/db'
+import { StaffUserEmailTakenError, StaffUserReferencedError } from '@fastehr/db'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContext, type Actor } from '../context.ts'
 import { appRouter } from './root.ts'
@@ -212,5 +212,19 @@ describe('delete', () => {
   it('surfaces an unknown id as NOT_FOUND', async () => {
     const caller = callerWith(fakeDb({ delete: async () => null }))
     await expect(caller.staffUsers.delete({ id: 'ghost' })).rejects.toThrow('NOT_FOUND')
+  })
+
+  it('surfaces an account that signed clinical records as PRECONDITION_FAILED', async () => {
+    const caller = callerWith(
+      fakeDb({
+        delete: async () => {
+          throw new StaffUserReferencedError()
+        },
+      }),
+    )
+    await expect(caller.staffUsers.delete({ id: JUNE.id })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'account has signed clinical records',
+    })
   })
 })

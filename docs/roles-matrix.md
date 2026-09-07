@@ -36,7 +36,7 @@ resolution re-checks `isActive` on every call.
 | --- | --- | :-: | :-: | :-: |
 | Patient roster, search, detail (`patient.byId/list/recent/search/searchByName`) | `protectedProcedure` | ✅ | ✅ | ✅ |
 | Patient create / update (`patient.create/update`) | `protectedProcedure` | ✅ | ✅ | ✅ |
-| Patient activate/deactivate (`patient.setStatus`) | `protectedProcedure` | ✅ | ✅ | ✅ |
+| Patient activate/deactivate (`patient.setStatus`; no screen calls it since DIA-50, the column is kept unexposed) | `protectedProcedure` | ✅ | ✅ | ✅ |
 | Staff accounts: list, search, create, edit, enable/disable (`staffUsers.*`) | `adminProcedure` | ✅ | ❌ | ❌ |
 | Staff account delete (`staffUsers.delete`; confirmed in UI, never self) | `adminProcedure` | ✅ | ❌ | ❌ |
 | Anything office-scoped (future queues etc.) | `officeScopedProcedure` | own offices only | own offices only | own offices only |
@@ -58,9 +58,10 @@ Notes that carry weight:
   deleted"). Staff accounts *can* be hard-deleted by an admin (legacy parity:
   `DELETE /users/:id` was admin-only there too), behind an explicit
   confirmation dialog; sessions and the credential go with the row. The legacy
-  lesson — 38,047 orphaned clinical signatures — means `staffUsers.delete`
-  must start refusing users referenced by clinical records the day the visits
-  domain lands (noted in the repository).
+  lesson — 38,047 orphaned clinical signatures — is closed at both layers:
+  `visits.signedById` is `ON DELETE RESTRICT`, and `staffUsers.delete` refuses
+  an account that signed any visit by name (`PRECONDITION_FAILED`), pointing
+  the admin at Disable instead.
 - An admin cannot deactivate **or delete** their own account
   (`staffUsers.setActive` and `staffUsers.delete` both refuse it), so a clinic
   cannot end up admin-less by one misclick.

@@ -370,7 +370,9 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
       toast.error(
         error.message === "cannot delete your own account"
           ? "You cannot delete your own account."
-          : "The account could not be deleted. Try again.",
+          : error.message === "account has signed clinical records"
+            ? "This account signed clinical records and cannot be deleted. Disable it instead."
+            : "The account could not be deleted. Try again.",
       )
       setDeleting(null)
     },

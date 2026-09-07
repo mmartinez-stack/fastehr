@@ -27,8 +27,9 @@ import { trpc } from "@/trpc/client"
 
 /**
  * Edit — the same shared form as /patients/new, prefilled from `patient.byId`
- * and wired to `patient.update`. Activate/deactivate is its own action beside
- * the save button, exactly as the legacy edit view kept it apart from Save.
+ * and wired to `patient.update`. The legacy Make Inactive / Make Active
+ * action is gone from here with DIA-50: status is no longer exposed anywhere,
+ * though its column and procedure remain.
  */
 export default function EditPatientPage() {
   const params = useParams<{ id: string }>()
@@ -39,28 +40,13 @@ export default function EditPatientPage() {
 
   const patient = trpc.patient.byId.useQuery({ id: params.id })
 
-  const invalidate = () => {
-    void utils.patient.list.invalidate()
-    void utils.patient.recent.invalidate()
-    void utils.patient.search.invalidate()
-    void utils.patient.byId.invalidate({ id: params.id })
-  }
-
   const updatePatient = trpc.patient.update.useMutation({
     onSuccess: (updated) => {
-      invalidate()
+      void utils.patient.list.invalidate()
+      void utils.patient.recent.invalidate()
+      void utils.patient.search.invalidate()
+      void utils.patient.byId.invalidate({ id: params.id })
       toast.success(`${updated.firstName} ${updated.lastName} saved`)
-    },
-  })
-
-  const setStatus = trpc.patient.setStatus.useMutation({
-    onSuccess: (updated) => {
-      invalidate()
-      toast.success(
-        updated.status === "active"
-          ? `${updated.firstName} ${updated.lastName} is active again`
-          : `${updated.firstName} ${updated.lastName} marked inactive`,
-      )
     },
   })
 
@@ -87,7 +73,6 @@ export default function EditPatientPage() {
   }
 
   const record = patient.data
-  const isActive = record.status === "active"
 
   return (
     <div>
@@ -107,13 +92,13 @@ export default function EditPatientPage() {
         <PageHeader
           className="mb-0 flex-1"
           title={`${record.firstName} ${record.lastName}`}
-          description={isActive ? "Edit the patient record." : "This patient is inactive."}
+          description="Edit the patient record."
         />
       </div>
 
       <PatientForm
         // Remount on a fresh server copy so the form's defaults track the record.
-        key={`${record.id}:${record.status}`}
+        key={record.id}
         defaultValues={toPatientFormValues(record)}
         submit={async (value) => {
           await updatePatient.mutateAsync({ ...value, id: record.id })
@@ -129,18 +114,6 @@ export default function EditPatientPage() {
         onDirtyChange={(dirty) => {
           dirtyRef.current = dirty
         }}
-        footerStart={
-          <Button
-            type="button"
-            variant={isActive ? "destructive" : "outline"}
-            disabled={setStatus.isPending}
-            onClick={() =>
-              setStatus.mutate({ id: record.id, status: isActive ? "inactive" : "active" })
-            }
-          >
-            {isActive ? "Make Inactive" : "Make Active"}
-          </Button>
-        }
       />
 
       <AlertDialog open={confirmingLeave} onOpenChange={setConfirmingLeave}>

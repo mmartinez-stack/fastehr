@@ -277,21 +277,19 @@ describe('searchPatientsInput', () => {
     })
   })
 
-  it('accepts the status filter alone, and combined with a query', () => {
-    expect(searchPatientsInput.parse({ query: '', dateOfBirth: '', status: 'inactive' })).toEqual({
-      query: undefined,
-      dateOfBirth: undefined,
-      status: 'inactive',
-    })
-    expect(searchPatientsInput.parse({ query: 'Lovelace', status: 'active' })).toEqual({
+  it('has no status filter — status left the roster with DIA-50', () => {
+    // A stray status key is dropped, not honoured: the wire cannot ask for it.
+    expect(searchPatientsInput.parse({ query: 'Lovelace', status: 'inactive' })).toEqual({
       query: { kind: 'name', name: 'Lovelace' },
       dateOfBirth: undefined,
-      status: 'active',
     })
+    expect(searchPatientsInput.safeParse({ query: '', dateOfBirth: '', status: 'inactive' }).success).toBe(
+      false,
+    )
   })
 
   it('refuses an entirely empty search', () => {
-    expect(searchPatientsInput.safeParse({ query: '', dateOfBirth: '', status: '' }).success).toBe(false)
+    expect(searchPatientsInput.safeParse({ query: '', dateOfBirth: '' }).success).toBe(false)
   })
 
   it('fails an uninterpretable query with issue code custom, no message of ours', () => {

@@ -95,7 +95,18 @@ model Patient {
   historyNotes String?
   programType  String?
 
+  // Kept in the schema, no longer exposed: the Aug 31 sync replaced the
+  // active/inactive badge with the last-visit date (DIA-50). Nothing renders
+  // or filters on it; the column stays so no migrated value is lost.
   status PatientStatus @default(active)
+
+  // Denormalized `max(visits.dateOfService)` — the legacy `recentVisit`,
+  // which its visit hooks maintained the same way. It is what the roster sorts
+  // by and what the over-a-year flag reads, so it is a column rather than a
+  // per-row aggregate over a 50k-row table. Written by the visits import and
+  // by every visit write; never by the patient form.
+  lastVisitAt DateTime?
+  visits      Visit[]
 
   // The provisional credit-card block (contracts § patient header comment):
   // the fields the legacy form rendered, carried for billing continuity until
@@ -113,7 +124,45 @@ model Patient {
 
   // The legacy compound index, for the roster search's exact name matches.
   @@index([lastName, firstName, dateOfBirth])
+  // The roster's default order: most recently seen first.
+  @@index([lastVisitAt])
   @@map("patients")
+}
+
+/**
+ * A clinic visit — the legacy `visits` collection, which was also the clinical
+ * note: one free-text `notes` body, signed once by a provider. The columns here
+ * are the identity, date, office, note, and signature; the legacy dispensing
+ * and billing sub-documents are not modelled (docs/legacy-data-mapping.md
+ * § visits).
+ *
+ * `dateOfService` is the legacy `created` — there was no separate visit-date
+ * field. `signedByName` snapshots the signer as the legacy signature block
+ * did, so a note stays attributed even when its signer's account never
+ * migrated (the `npdoc` accounts the user migration refused).
+ */
+model Visit {
+  id            String   @id @default(uuid())
+  patientId     String
+  patient       Patient  @relation(fields: [patientId], references: [id])
+  dateOfService DateTime
+  office        String?
+  notes         String?
+  // `Restrict`, not the default `SetNull`: the legacy system hard-deleted
+  // users and left 38,047 signatures pointing at nothing. Here the delete is
+  // refused while a signature references the account.
+  signedById   String?
+  signedBy     User?     @relation("VisitSignatures", fields: [signedById], references: [id], onDelete: Restrict)
+  signedByName String?
+  signedAt     DateTime?
+
+  legacyId  String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([patientId, dateOfService])
+  @@index([signedAt])
+  @@map("visits")
 }
 
 // --- Authentication (Better Auth core tables) ---
@@ -160,6 +209,7 @@ model User {
   updatedAt          DateTime  @updatedAt
   sessions           Session[]
   accounts           Account[]
+  signedVisits       Visit[]   @relation("VisitSignatures")
 
   @@map("users")
 }

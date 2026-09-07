@@ -2,21 +2,12 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { CircleCheck, CircleSlash, Search, UserPlus } from "lucide-react"
-import { toast } from "sonner"
+import { Search, UserPlus } from "lucide-react"
 import { interpretPatientSearch, type PatientSearchProblem } from "@fastehr/contracts"
 
 import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import {
   Table,
@@ -26,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { PageHeader } from "@/components/page-header"
 import { useSurfaces } from "@/components/role-provider"
 import { trpc } from "@/trpc/client"
@@ -35,8 +27,14 @@ import { trpc } from "@/trpc/client"
  * input for names and phone (ADR 27) — the format of what was typed decides
  * the field — plus a separate date-of-birth field; the two combine as AND.
  * The recent list stays the unfiltered default (legacy `GET /patients`, 30
- * most recent), and match semantics live server-side in `patient.search`.
- * The legacy "Visit Date" column returns with the visits domain.
+ * most recently seen), and match semantics live server-side in
+ * `patient.search`.
+ *
+ * Rows sort by last visit, most recent first (DIA-50): the date a patient was
+ * last seen is what the roster is for, and it replaced the active/inactive
+ * badge, whose column stays in the database unexposed. A visit over a year
+ * old gets a red dot — a flag to notice, not a status: those patients are
+ * still active.
  *
  * The same `interpretPatientSearch` the server parses with runs here first,
  * so an uninterpretable query becomes an inline hint instead of a request —
@@ -64,45 +62,62 @@ function formatPhone(phone: string | null): string {
   return phone.length === 10 ? `(${phone.slice(0, 3)}) ${phone.slice(3, 6)}-${phone.slice(6)}` : phone
 }
 
+/** An instant, shown as the clinic's calendar day. */
+function formatVisit(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+}
+
+const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000
+
+/**
+ * The last-visit cell: the date, with a red dot when it is over a year old.
+ * "-" is the roster's empty placeholder (the repo's convention) for a patient
+ * with no visit on record.
+ */
+function LastVisitCell({ lastVisitAt, now }: { lastVisitAt: string | null; now: number }) {
+  if (lastVisitAt === null) return <span className="text-muted-foreground">-</span>
+  const overAYear = now - new Date(lastVisitAt).getTime() > ONE_YEAR_MS
+  return (
+    <span className="inline-flex items-center gap-2">
+      {formatVisit(lastVisitAt)}
+      {overAYear ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={<span aria-label="Last visit over a year ago" className="inline-flex" />}
+          >
+            <span aria-hidden="true" className="size-2 rounded-full bg-destructive" />
+          </TooltipTrigger>
+          <TooltipContent>Last visit over a year ago</TooltipContent>
+        </Tooltip>
+      ) : null}
+    </span>
+  )
+}
+
 export default function PatientsPage() {
   const [query, setQuery] = React.useState("")
   const [dob, setDob] = React.useState("")
-  const [status, setStatus] = React.useState("any")
   // What the Search button last submitted — typing alone never queries,
   // exactly like the legacy queue's explicit Search action.
-  const [submitted, setSubmitted] = React.useState<{
-    query: string
-    dateOfBirth: string
-    status: string
-  } | null>(null)
+  const [submitted, setSubmitted] = React.useState<{ query: string; dateOfBirth: string } | null>(
+    null,
+  )
   // A problem is only shown after a submit attempt, never while typing.
   const [problem, setProblem] = React.useState<PatientSearchProblem | null>(null)
   // Contact details are clerical, on the roster as much as on the record.
   const { clerical } = useSurfaces()
-
-  const utils = trpc.useUtils()
-  // The legacy "Make Inactive"/"Make Active" pair, on the row. Deactivation is
-  // the roster's only removal: patients cannot be deleted, here or in the
-  // legacy system (its DELETE route is retired with "patients can no longer
-  // be deleted").
-  const setPatientStatus = trpc.patient.setStatus.useMutation({
-    onSuccess: (updated) => {
-      toast.success(
-        `${updated.firstName} ${updated.lastName} is now ${updated.status}`,
-      )
-      void utils.patient.invalidate()
-    },
-    onError: () => toast.error("The status could not be changed. Try again."),
-  })
+  // "Now" for the over-a-year flag, read once per mount: a render is pure,
+  // and the day boundary does not need to move under an open screen.
+  const [now] = React.useState(() => Date.now())
 
   const recent = trpc.patient.recent.useQuery(undefined, { enabled: submitted === null })
-  const search = trpc.patient.search.useQuery(
-    submitted ?? { query: "", dateOfBirth: "", status: "" },
-    { enabled: submitted !== null },
-  )
+  const search = trpc.patient.search.useQuery(submitted ?? { query: "", dateOfBirth: "" }, {
+    enabled: submitted !== null,
+  })
 
   const active = submitted === null ? recent : search
   const patients = active.data ?? []
+  const columns = clerical ? 6 : 5
 
   return (
     <div>
@@ -123,8 +138,7 @@ export default function PatientsPage() {
             onSubmit={(event) => {
               event.preventDefault()
               const trimmed = query.trim()
-              const statusFilter = status === "any" ? "" : status
-              if (trimmed === "" && dob === "" && statusFilter === "") {
+              if (trimmed === "" && dob === "") {
                 setProblem(null)
                 setSubmitted(null)
                 return
@@ -137,7 +151,7 @@ export default function PatientsPage() {
                 }
               }
               setProblem(null)
-              setSubmitted({ query: trimmed, dateOfBirth: dob, status: statusFilter })
+              setSubmitted({ query: trimmed, dateOfBirth: dob })
             }}
           >
             <Field className="flex-1">
@@ -164,22 +178,6 @@ export default function PatientsPage() {
               />
               <FieldDescription>Combines with the search.</FieldDescription>
             </Field>
-            <Field className="w-36 shrink-0">
-              <FieldLabel htmlFor="search-status">Status</FieldLabel>
-              <Select
-                value={status}
-                onValueChange={(value) => setStatus(typeof value === "string" ? value : "any")}
-              >
-                <SelectTrigger id="search-status" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="any">Any</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
             {/* Mirrors a Field's label-then-control rhythm (gap-2, leading-snug
                 label) so the h-8 buttons sit exactly on the inputs' row. */}
             <div className="flex shrink-0 flex-col gap-2">
@@ -198,7 +196,6 @@ export default function PatientsPage() {
                     onClick={() => {
                       setQuery("")
                       setDob("")
-                      setStatus("any")
                       setProblem(null)
                       setSubmitted(null)
                     }}
@@ -218,8 +215,7 @@ export default function PatientsPage() {
                 <TableHead>DOB</TableHead>
                 {clerical && <TableHead>Phone</TableHead>}
                 <TableHead>Office</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>Last visit</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -244,57 +240,25 @@ export default function PatientsPage() {
                   )}
                   <TableCell>{patient.office ?? "-"}</TableCell>
                   <TableCell>
-                    <Badge variant={patient.status === "active" ? "secondary" : "outline"}>
-                      {patient.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {/* Actions live on the row itself — no overflow menu. */}
-                    <div className="flex justify-end">
-                      {patient.status === "active" ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={setPatientStatus.isPending}
-                          onClick={() =>
-                            setPatientStatus.mutate({ id: patient.id, status: "inactive" })
-                          }
-                        >
-                          <CircleSlash data-icon="inline-start" />
-                          Deactivate
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={setPatientStatus.isPending}
-                          onClick={() =>
-                            setPatientStatus.mutate({ id: patient.id, status: "active" })
-                          }
-                        >
-                          <CircleCheck data-icon="inline-start" />
-                          Activate
-                        </Button>
-                      )}
-                    </div>
+                    <LastVisitCell lastVisitAt={patient.lastVisitAt} now={now} />
                   </TableCell>
                 </TableRow>
               ))}
               {active.isPending ? (
                 <TableRow>
-                  <TableCell colSpan={clerical ? 7 : 6} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={columns} className="py-8 text-center text-muted-foreground">
                     Loading patients…
                   </TableCell>
                 </TableRow>
               ) : active.isError ? (
                 <TableRow>
-                  <TableCell colSpan={clerical ? 7 : 6} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={columns} className="py-8 text-center text-muted-foreground">
                     The roster could not be loaded. Try again.
                   </TableCell>
                 </TableRow>
               ) : patients.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={clerical ? 7 : 6} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={columns} className="py-8 text-center text-muted-foreground">
                     {submitted === null ? "No patients yet." : "No patients match your search."}
                   </TableCell>
                 </TableRow>

@@ -48,6 +48,7 @@ export default async function SmokePage() {
     historyNotes: null,
     programType: null,
     status: 'active',
+    lastVisitAt: null,
     creditCardNumber: null,
     creditCardExpMonth: null,
     creditCardExpYear: null,

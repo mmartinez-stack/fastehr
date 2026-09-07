@@ -90,6 +90,7 @@ describe('patient repository', () => {
       historyNotes: null,
       programType: null,
       status: 'active',
+      lastVisitAt: null,
       creditCardNumber: null,
       creditCardExpMonth: null,
       creditCardExpYear: null,
@@ -123,13 +124,32 @@ describe('patient repository', () => {
     expect(patients.map((patient) => patient.lastName)).toEqual(['Hopper', 'Lovelace'])
   })
 
-  it('lists the most recently created first, capped at thirty', async () => {
-    await prisma.patient.create({ data: { ...ADA, createdAt: new Date('2026-01-01T00:00:00Z') } })
-    await prisma.patient.create({ data: { ...GRACE, createdAt: new Date('2026-02-01T00:00:00Z') } })
+  it('lists the most recently seen first, patients with no visit last', async () => {
+    // Legacy `GET /patients` sorted by `recentVisit` descending; DIA-50 makes
+    // that the roster's one order. Ada was seen most recently, Grace a year
+    // before, and the third patient never.
+    await prisma.patient.createMany({
+      data: [
+        { ...ADA, lastVisitAt: new Date('2026-02-01T18:00:00Z') },
+        { ...GRACE, lastVisitAt: new Date('2025-02-01T18:00:00Z') },
+        {
+          id: 'a1b2c3d4-0000-4000-8000-000000000003',
+          firstName: 'Katherine',
+          lastName: 'Johnson',
+          dateOfBirth: new Date('1918-08-26T00:00:00.000Z'),
+        },
+      ],
+    })
 
-    const patients = await db.patients.listRecent()
-
-    expect(patients.map((patient) => patient.firstName)).toEqual(['Grace', 'Ada'])
+    expect((await db.patients.listRecent()).map((patient) => patient.firstName)).toEqual([
+      'Ada',
+      'Grace',
+      'Katherine',
+    ])
+    // The same order for a search — the roster has one order, not two.
+    expect(
+      (await db.patients.search({ query: { kind: 'name', name: 'ada' } })).map((p) => p.lastVisitAt),
+    ).toEqual(['2026-02-01T18:00:00.000Z'])
   })
 
   it('creates a patient from the full form input and round-trips it', async () => {
@@ -259,17 +279,16 @@ describe('patient repository', () => {
     ).toEqual([ADA.id])
   })
 
-  it('filters by status, alone or combined with a query', async () => {
+  it('finds an inactive patient like any other — status is not a filter', async () => {
+    // The column stays (DIA-50 keeps the field) but nothing reads it: an
+    // inactive patient is still on the roster and still found by name.
     await prisma.patient.createMany({
       data: [ADA, { ...GRACE, status: 'inactive' as const }],
     })
 
     expect(
-      (await db.patients.search({ status: 'inactive' })).map((p) => p.id),
-    ).toEqual([GRACE.id])
-    expect(
-      await db.patients.search({ query: { kind: 'name', name: 'hopper' }, status: 'active' }),
-    ).toEqual([])
+      (await db.patients.search({ query: { kind: 'name', name: 'hopper' } })).map((p) => p.status),
+    ).toEqual(['inactive'])
   })
 
   it('combines the query and the date of birth as AND', async () => {

@@ -188,7 +188,9 @@ same reason (ADR 19).
 read `src/lib/mock-data.ts`, except the patient roster, `/patients/new`, and
 `/patients/[id]/edit`, which are wired end to end (legacy-parity form and
 search — docs/legacy-data-mapping.md § patients; the `/patients/[id]` detail
-view is still mockup). Auth is real (Better Auth; migrated legacy credentials
+view is still mockup). Visits are imported (§ visits) and drive the roster's
+last-visit column and order; patient `status` stays in the schema but is no
+longer exposed anywhere (DIA-50). Auth is real (Better Auth; migrated legacy credentials
 verify per ADR 26). `noUncheckedIndexedAccess` is on everywhere with no
 exceptions — the mockup's fixture lookups go through the checked `at()` helper
 rather than `!` (ADR 21).

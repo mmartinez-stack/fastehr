@@ -3,6 +3,7 @@ import { createPatientRepository, type PatientRepository } from './repositories/
 import {
   createStaffUserRepository,
   StaffUserEmailTakenError,
+  StaffUserReferencedError,
   type StaffUserRepository,
 } from './repositories/staff-user.ts'
 
@@ -48,5 +49,5 @@ export function createDb(getClient: () => PrismaClient = getPrismaClient): Db {
 export const db: Db = createDb()
 
 export { createAuthAdapter } from './auth-adapter.ts'
-export { StaffUserEmailTakenError }
+export { StaffUserEmailTakenError, StaffUserReferencedError }
 export type { PatientRepository, StaffUserRepository }

@@ -16,10 +16,10 @@ import { toStaffUser } from '../mappers/staff-user.ts'
  * `delete` is a hard delete, restored on request for legacy parity (the old
  * system had DELETE /users/:id, admin-only). The legacy lesson still stands:
  * that path orphaned 38,047 clinical signatures against 22 vanished accounts
- * (entity inventory §1). Today no other table references a user, and sessions
- * and credential accounts cascade at the FK — but the day the visits domain
- * lands, this method must start refusing any user a clinical record points
- * at. Deactivation remains the everyday removal.
+ * (entity inventory §1). Sessions and credential accounts cascade at the FK;
+ * a signed visit does not — `visits.signedById` is ON DELETE RESTRICT, and
+ * this method refuses first, by name, so the admin sees why. Deactivation
+ * remains the everyday removal.
  */
 export interface StaffUserRepository {
   list(): Promise<StaffUser[]>
@@ -39,7 +39,18 @@ export class StaffUserEmailTakenError extends Error {
   }
 }
 
-const CREDENTIAL_FILTER = { where: { providerId: 'credential' }, select: { id: true } } as const
+/**
+ * The account has signed clinical records, so it cannot be deleted — only
+ * deactivated. Named so the screen can say exactly that.
+ */
+export class StaffUserReferencedError extends Error {
+  constructor() {
+    super('account has signed clinical records')
+    this.name = 'StaffUserReferencedError'
+  }
+}
+
+const CREDENTIAL_FILTER ={ where: { providerId: 'credential' }, select: { id: true } } as const
 
 function isUniqueViolation(error: unknown): boolean {
   return (
@@ -138,6 +149,12 @@ export function createStaffUserRepository(getClient: () => PrismaClient): StaffU
         include: { accounts: CREDENTIAL_FILTER },
       })
       if (existing === null) return null
+
+      // A signature is a clinical record's attribution, and it outlives the
+      // account. The FK would refuse the delete anyway (RESTRICT); checking
+      // first turns a constraint violation into a named refusal.
+      const signed = await client.visit.count({ where: { signedById: input.id } })
+      if (signed > 0) throw new StaffUserReferencedError()
 
       // Sessions and credential accounts go with the row — the FK is
       // ON DELETE CASCADE — so a deleted user cannot keep a live session.

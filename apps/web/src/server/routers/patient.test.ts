@@ -36,6 +36,7 @@ const ADA = {
   historyNotes: null,
   programType: null,
   status: 'active' as const,
+  lastVisitAt: null,
   creditCardNumber: null,
   creditCardExpMonth: null,
   creditCardExpYear: null,

@@ -24,6 +24,7 @@ const row: PatientRow = {
   historyNotes: null,
   programType: null,
   status: 'active',
+  lastVisitAt: null,
   creditCardNumber: null,
   creditCardExpMonth: null,
   creditCardExpYear: null,
@@ -57,6 +58,7 @@ describe('toPatient', () => {
       historyNotes: null,
       programType: null,
       status: 'active',
+      lastVisitAt: null,
       creditCardNumber: null,
       creditCardExpMonth: null,
       creditCardExpYear: null,
@@ -83,6 +85,14 @@ describe('toPatient', () => {
     expect(mapped.language).toBe('english')
     expect(mapped.office).toBe('Sylmar')
     expect(mapped.status).toBe('inactive')
+  })
+
+  it('carries the last visit as an ISO instant, not a calendar day', () => {
+    // Unlike the date of birth, this is a timestamp: the roster compares it
+    // against "a year ago", so the time of day and the zone travel with it.
+    const seen = new Date('2025-08-14T22:30:00.000Z')
+    expect(toPatient({ ...row, lastVisitAt: seen }).lastVisitAt).toBe('2025-08-14T22:30:00.000Z')
+    expect(toPatient(row).lastVisitAt).toBeNull()
   })
 
   it('keeps an imported vocabulary value the pick-lists no longer offer', () => {

@@ -42,6 +42,9 @@ export function toPatient(row: PatientRow): Patient {
     historyNotes: row.historyNotes,
     programType: row.programType,
     status: row.status,
+    // A timestamp, not a calendar date: the roster's over-a-year flag and
+    // sort read it as an instant, so the ISO form goes across whole.
+    lastVisitAt: row.lastVisitAt === null ? null : row.lastVisitAt.toISOString(),
     creditCardNumber: row.creditCardNumber,
     creditCardExpMonth: row.creditCardExpMonth,
     creditCardExpYear: row.creditCardExpYear,

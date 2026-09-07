@@ -39,6 +39,16 @@ const LIST_LIMIT = 30
 const SEARCH_LIMIT = 100
 
 /**
+ * The roster's one order (DIA-50): most recently seen first, patients with no
+ * visit on record last, names breaking ties so the no-visit tail is stable.
+ */
+const ROSTER_ORDER = [
+  { lastVisitAt: { sort: 'desc' as const, nulls: 'last' as const } },
+  { lastName: 'asc' as const },
+  { firstName: 'asc' as const },
+]
+
+/**
  * One definition of "what the form said" → "what the row stores", shared by
  * create and update so the two writes cannot drift. Absent optional fields
  * store NULL — an update that clears a field really clears it.
@@ -94,8 +104,10 @@ export function createPatientRepository(getClient: () => PrismaClient): PatientR
     },
 
     async listRecent() {
+      // Legacy `GET /patients` sorted by `recentVisit` descending — the
+      // patients most recently *seen*, which `lastVisitAt` now carries.
       const rows = await getClient().patient.findMany({
-        orderBy: { createdAt: 'desc' },
+        orderBy: ROSTER_ORDER,
         take: LIST_LIMIT,
       })
       return rows.map(toPatient)
@@ -130,9 +142,8 @@ export function createPatientRepository(getClient: () => PrismaClient): PatientR
         where: {
           ...byQuery,
           ...(input.dateOfBirth === undefined ? {} : { dateOfBirth: new Date(input.dateOfBirth) }),
-          ...(input.status === undefined ? {} : { status: input.status }),
         },
-        orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+        orderBy: ROSTER_ORDER,
         take: SEARCH_LIMIT,
       })
       return rows.map(toPatient)
@@ -165,7 +176,8 @@ export function createPatientRepository(getClient: () => PrismaClient): PatientR
 
     async setStatus(input) {
       // Deliberately its own write, not a variant of `update`: the legacy UI's
-      // activate/deactivate action changed status and nothing else.
+      // activate/deactivate action changed status and nothing else. No screen
+      // calls it since DIA-50; it stays because the column does.
       const row = await getClient().patient.update({
         where: { id: input.id },
         data: { status: input.status },

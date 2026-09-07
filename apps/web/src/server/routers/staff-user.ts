@@ -5,7 +5,7 @@ import {
   setStaffUserActiveInput,
   updateStaffUserInput,
 } from '@fastehr/contracts'
-import { StaffUserEmailTakenError } from '@fastehr/db'
+import { StaffUserEmailTakenError, StaffUserReferencedError } from '@fastehr/db'
 import { TRPCError } from '@trpc/server'
 import { adminProcedure } from '../procedures.ts'
 import { router } from '../trpc.ts'
@@ -19,8 +19,8 @@ import { router } from '../trpc.ts'
  * that cannot sign in until an admin issues a temporary password through the
  * runbook path. `delete` is a hard delete behind an explicit confirmation in
  * the UI (legacy parity: DELETE /users/:id, admin-only); deactivation remains
- * the everyday removal, and the repository documents why delete must tighten
- * when clinical records arrive.
+ * the everyday removal, and an account that signed clinical records cannot be
+ * deleted at all (PRECONDITION_FAILED, from the repository's named refusal).
  */
 export const staffUserRouter = router({
   list: adminProcedure.query(({ ctx }) => ctx.db.staffUsers.list()),
@@ -64,8 +64,17 @@ export const staffUserRouter = router({
       // not be able to remove themself, and the clinic must keep an admin.
       throw new TRPCError({ code: 'FORBIDDEN', message: 'cannot delete your own account' })
     }
-    const deleted = await ctx.db.staffUsers.delete(input)
-    if (deleted === null) throw new TRPCError({ code: 'NOT_FOUND' })
-    return deleted
+    try {
+      const deleted = await ctx.db.staffUsers.delete(input)
+      if (deleted === null) throw new TRPCError({ code: 'NOT_FOUND' })
+      return deleted
+    } catch (error) {
+      if (error instanceof StaffUserReferencedError) {
+        // The account signed clinical records; the attribution outlives it.
+        // Deactivation is the removal that remains available.
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'account has signed clinical records' })
+      }
+      throw error
+    }
   }),
 })

@@ -126,7 +126,18 @@ export const patientSchema = z.object({
   /** Legacy `hx` — current medications and pertinent history, free text. */
   historyNotes: z.string().nullable(),
   programType: z.string().nullable(),
+  /**
+   * Still on the entity, no longer on any screen: the Aug 31 sync replaced
+   * the badge with the last-visit date (DIA-50). It stays so the stored value
+   * keeps reading back; nothing filters or sorts on it.
+   */
   status: patientStatusSchema,
+  /**
+   * When the patient was last seen — `max(visits.dateOfService)`, the legacy
+   * `recentVisit`. Null for a patient with no visit on record. An instant
+   * (ISO datetime), because the roster compares it against "a year ago".
+   */
+  lastVisitAt: z.iso.datetime().nullable(),
   // The provisional credit-card block (see the header comment). Plain strings
   // like the other vocabulary fields — historical values import as they are;
   // the inputs carry the legacy form's validators.
@@ -368,7 +379,8 @@ export function interpretPatientSearch(
  * query fails validation (issue code `custom`, per ADR 12 — the client owns
  * the copy, keyed by the problem it already computed locally). Both filters
  * are optional individually, but an entirely empty search is refused — the
- * caller falls back to the recent list instead of asking for everyone.
+ * caller falls back to the recent list instead of asking for everyone. There
+ * is no status filter: status left the roster with DIA-50.
  */
 export const searchPatientsInput = z
   .object({
@@ -388,12 +400,8 @@ export const searchPatientsInput = z
         }),
     ),
     dateOfBirth: blankAsAbsent(z.iso.date()),
-    status: blankAsAbsent(patientStatusSchema),
   })
-  .refine(
-    (value) =>
-      value.query !== undefined || value.dateOfBirth !== undefined || value.status !== undefined,
-  )
+  .refine((value) => value.query !== undefined || value.dateOfBirth !== undefined)
 export type SearchPatientsInput = z.infer<typeof searchPatientsInput>
 
 /**

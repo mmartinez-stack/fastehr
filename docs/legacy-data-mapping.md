@@ -169,10 +169,72 @@ place (`Patient` model, `patient.*` procedures, the shared form in
 | ------------ | ------------- |
 | `creditCardCVV` | Never stored, period — PCI DSS 3.2 forbids retaining a CVV after authorization, and the legacy form never rendered the control anyway (a dead field in its form group). |
 | `walletId`, `preferredPaymentId`, `last4Digits` | Payment-processor bookkeeping for an integration this system does not have; `last4Digits` is derivable. |
-| `visits`, `recentVisit`, `recentText`, `callLog`, `callAfter` | Visit/outreach domain — migrates with its own collections. |
+| `visits`, `recentText`, `callLog`, `callAfter` | Visit/outreach domain — migrates with its own collections (`visits` has, § visits). |
+| `recentVisit` | Recomputed, not copied: `patients.lastVisitAt` is backfilled by the visits importer as `max(visits.dateOfService)`, which is how the legacy visit hooks maintained it. |
 | `referrals[]` (credit bookkeeping), `lastVideoSent`, `videoOneSent` | Campaign features, not patient identity. |
 | consent blobs (`treatmentConsent*`, `liposhotConsent*`, `ozempicWaiver*`, `testimonialConsent`) | Consent management is its own module with signature handling; a free-string signature column is not it. |
 | `isAtHome` | Derived from `office` (`… Home` suffix) — derived data is computed, not stored twice. |
 | `preferredContactTime`, `cutoffDate`, `programPrice`, `weight` | Defined in the legacy form group but never rendered to users (dead fields), or programmatically patched only. |
 | `dob` | Derived from `dobStr` (see above). |
 
+
+---
+
+## `visits`
+
+Importer: `packages/db/scripts/migrate-visits.ts` (dry-run by default;
+`--apply` to write; JSON report per run — legacy ids, field names, and reasons
+only, never a note body or a name). Runs **after** `migrate-patients` and
+`migrate-users`: both references resolve through those tables' `legacyId`.
+
+The legacy `visits` collection was also the clinical note: one free-text
+`notes` body per visit, signed once by a provider (a second "review" signature
+existed for accounts flagged `reviewer`; it maps to the medical-director
+review columns when that ticket lands, DIA-74). What is modelled here is the
+identity, date, office, note, and signature. The dispensing block (a fixed
+object of product price/amount pairs), the per-visit billing fields, vitals
+(`weight`, `bmi`, `bloodPressure`), photos and attachments are **not**
+modelled yet; they migrate with the modules that read them.
+
+### Source collection → target table
+
+| Source | Target |
+| ------ | ------ |
+| `fastehr.visits` | `Visit` (`visits`) |
+
+### Field mapping
+
+| Source field | Target column | Type | Notes |
+| ------------ | ------------- | ---- | ----- |
+| `_id` | `legacyId` | `String? @unique` | Also the source of `createdAt` — the date of service is the only creation instant the export carries. |
+| `patient` | `patientId` | FK → `patients` | Resolved through `patients.legacyId`. A visit whose patient never migrated is skipped, reported. |
+| `created` | `dateOfService` | `DateTime` | The legacy schema had no separate visit-date field. Missing or invalid → skip. |
+| `office` | `office` | `String?` | Free string, as on the patient. |
+| `notes` | `notes` | `String?` | The note body, verbatim. |
+| `signature.user` | `signedById` | FK → `users`, `ON DELETE RESTRICT` | Resolved through `users.legacyId`. An `npdoc` signer (refused by the user migration) resolves to NULL, noted; the name snapshot below keeps the attribution. |
+| `signature.firstName` + `lastName` | `signedByName` | `String?` | The legacy signature block's own snapshot. |
+| `signature.signed` | `signedAt` | `DateTime?` | NULL means unsigned. |
+| (derived) | `patients.lastVisitAt` | `DateTime?` | `max(dateOfService)` per patient, recomputed for the whole table in one statement after every run. |
+
+### Discarded fields
+
+| Source field | Why discarded |
+| ------------ | ------------- |
+| `seen` | Implied by `signedAt` in the legacy code path (`sign()` set it); no independent meaning. |
+| `digitalSignature`, `reviewDigitalSignature` | JWTs signed with the legacy server's secret — verifiable only by that server. |
+| `reviewSignature`, `addenda[]` | Review co-signatures and addenda return with DIA-74 (the review columns) and the charting module respectively. |
+| `medications.*`, `productId`, `rxNumber` | Dispensing — its own module. |
+| `subtotal`, `discount`, `coupon`, `fee`, `programFee`, `total`, `paid*`, `paymentMethod`, `split*` | Per-visit billing — its own module. |
+| `weight`, `bmi`, `bloodPressure`, `phoneVisit*`, `noShow`, `reported`, photos, `trackingNumber`, `welcomePackage`, `additionalFiles[]` | Visit charting detail; migrates when the charting screen reads it. |
+
+### Transform decisions
+
+- **The delete guard the legacy system lacked.** Legacy hard-deleted users and
+  left 38,047 signatures pointing at nothing. Here `signedById` is `ON DELETE
+  RESTRICT` and `staffUsers.delete` refuses by name first; the row keeps the
+  name snapshot regardless.
+- **`lastVisitAt` is derived, never copied.** Copying `recentVisit` would
+  trust a denormalization the legacy hooks only maintained on update and
+  remove, not on create. Recomputing from the rows is exact.
+- Idempotent on `legacyId`: new rows insert in bulk, existing rows refresh
+  field by field, and a re-run converges.
