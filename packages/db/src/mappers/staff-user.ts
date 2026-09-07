@@ -15,7 +15,6 @@ export function toStaffUser(row: UserRow, hasCredential: boolean): StaffUser {
     email: row.email,
     role: row.role,
     isActive: row.isActive,
-    medicalDirector: row.medicalDirector,
     hasCredential,
     createdAt: row.createdAt.toISOString(),
   })

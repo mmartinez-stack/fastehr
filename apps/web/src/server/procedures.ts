@@ -47,7 +47,7 @@ export const adminProcedure = protectedProcedure.use(requireAdminRole)
  */
 export const clericalProcedure = protectedProcedure.use(requireClericalRole)
 
-/** The note review queue and its sign-off (DIA-74): the medical-director flag, whatever the role. */
+/** The note review queue and its sign-off (DIA-74, ADR 31): the medical director role. */
 export const medicalDirectorProcedure = protectedProcedure.use(requireMedicalDirector)
 
 /**

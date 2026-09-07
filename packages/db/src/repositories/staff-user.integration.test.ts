@@ -105,10 +105,10 @@ describe('staff-user repository', () => {
     const id = await seed('edit@example.com')
 
     const updated = await db.staffUsers.update({ id, name: 'Renamed', role: 'admin' })
-    expect(updated).toMatchObject({ name: 'Renamed', role: 'admin', medicalDirector: false })
-    // The medical-director flag (DIA-74) is set here and nowhere else.
-    expect((await db.staffUsers.update({ id, medicalDirector: true }))?.medicalDirector).toBe(true)
-    expect((await db.staffUsers.update({ id, name: 'Renamed again' }))?.medicalDirector).toBe(true)
+    expect(updated).toMatchObject({ name: 'Renamed', role: 'admin' })
+    // The medical director is a role like any other (ADR 31), assigned here.
+    expect((await db.staffUsers.update({ id, role: 'medical_director' }))?.role).toBe('medical_director')
+    expect((await db.staffUsers.update({ id, name: 'Renamed again' }))?.role).toBe('medical_director')
     expect(await db.staffUsers.update({ id: 'ghost', name: 'X' })).toBeNull()
   })
 

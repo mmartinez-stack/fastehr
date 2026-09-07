@@ -146,6 +146,7 @@ const NORMALIZED = {
 const PROVIDER: Actor = { id: 'user-1', roles: ['provider'], offices: ['Sylmar'] }
 const FRONTDESK: Actor = { id: 'user-2', roles: ['frontdesk'], offices: ['Sylmar'] }
 const ADMIN: Actor = { id: 'user-3', roles: ['admin'], offices: ['Sylmar'] }
+const MEDICAL_DIRECTOR: Actor = { id: 'user-4', roles: ['medical_director'], offices: ['Sylmar'] }
 
 function fakeDb(overrides: Partial<Db['patients']> = {}): Db {
   return {
@@ -233,18 +234,42 @@ describe('patient router: reads by section (ADR 28)', () => {
     }
   })
 
-  it('serves every tab to an admin, each from its own procedure', async () => {
+  it('serves every tab to an admin and to the medical director, each from its own procedure', async () => {
     const db = fakeDb({ findById: async () => ADA })
-    const caller = callerWith(db, ADMIN)
 
-    expect(await caller.patient.byId({ id: ADA.id })).toEqual(ADA_CHART)
-    expect(await caller.patient.demographics({ id: ADA.id })).toMatchObject({ phone: '9515550000' })
-    expect(await caller.patient.billing({ id: ADA.id })).toEqual({
-      creditCardNumber: '4111111111111111',
-      creditCardExpMonth: '12',
-      creditCardExpYear: '2030',
-      creditCardZip: '90210',
-    })
+    for (const actor of [ADMIN, MEDICAL_DIRECTOR]) {
+      const caller = callerWith(db, actor)
+      expect(await caller.patient.byId({ id: ADA.id })).toEqual(ADA_CHART)
+      expect(await caller.patient.demographics({ id: ADA.id })).toMatchObject({ phone: '9515550000' })
+      expect(await caller.patient.billing({ id: ADA.id })).toEqual({
+        creditCardNumber: '4111111111111111',
+        creditCardExpMonth: '12',
+        creditCardExpYear: '2030',
+        creditCardZip: '90210',
+      })
+    }
+  })
+
+  it('opening a chart is a read: nothing is written, for the medical director as for a provider', async () => {
+    // DIA-42 / DIA-50: a chart view must never move queue state. There is no
+    // queue write to trip yet, so the test pins the property directly — the
+    // read touches `findById` and no mutating repository function at all.
+    const findById = vi.fn(async () => ADA)
+    const writes = {
+      create: vi.fn(),
+      updateDemographics: vi.fn(),
+      updateClinical: vi.fn(),
+      updateBilling: vi.fn(),
+      setStatus: vi.fn(),
+    }
+    const db = fakeDb({ findById, ...writes })
+
+    for (const actor of [MEDICAL_DIRECTOR, PROVIDER]) {
+      await callerWith(db, actor).patient.byId({ id: ADA.id })
+    }
+
+    expect(findById).toHaveBeenCalledTimes(2)
+    for (const write of Object.values(writes)) expect(write).not.toHaveBeenCalled()
   })
 
   it('passes the requested id through', async () => {

@@ -39,7 +39,8 @@ first and produced a bug that type-checked.
 | [27](027-single-input-roster-search.md) | One roster search input; the format decides the field | `packages/contracts` · `packages/db` · `apps/web` |
 | [28](028-patient-record-sections.md) | The patient record is served and written by section (amended: three tabs, Medical / Patient Info / Billing) | `packages/contracts` · `packages/db` · `apps/web/src/server` · `apps/web/src/features/patients` |
 | [29](029-self-service-intake-tokens.md) | Self-service intake: a single-use token bound to a request, not a patient | `packages/contracts` · `packages/db` · `apps/web/src/server` · `apps/web/src/app/intake` |
-| [30](030-medical-director-review-sampling.md) | Medical-director review: a recorded sampling window, a flag, and the review on the note | `packages/core` · `packages/contracts` · `packages/db` · `apps/web/src/server` · `apps/web/scripts` |
+| [30](030-medical-director-review-sampling.md) | Medical-director review: a recorded sampling window, a flag (superseded by 31), and the review on the note | `packages/core` · `packages/contracts` · `packages/db` · `apps/web/src/server` · `apps/web/scripts` |
+| [31](031-medical-director-role.md) | The medical director is a role with the administrator's access, and the queue lives on the Queues page | `packages/contracts` · `packages/db` · `apps/web/src/server` · `apps/web/src/components` · `apps/web/src/features/review` |
 
 ## Adding one
 

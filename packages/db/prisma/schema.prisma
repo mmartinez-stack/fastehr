@@ -296,6 +296,9 @@ enum StaffRole {
   admin
   provider
   frontdesk
+  // The administrator's access plus the note review queue (ADR 31). A role,
+  // not a flag: an account has exactly one role.
+  medical_director
 
   @@map("staff_role")
 }
@@ -311,11 +314,6 @@ model User {
   legacyRoleRaw      String?
   isActive           Boolean   @default(true)
   mustChangePassword Boolean   @default(false)
-  // The medical-director flag (DIA-74): who may work the note review queue.
-  // Orthogonal to `role` — Dr. Penn is a provider who also reviews — and
-  // set by an admin from the Users screen. The legacy `reviewer` flag by
-  // another name.
-  medicalDirector    Boolean   @default(false)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   sessions           Session[]

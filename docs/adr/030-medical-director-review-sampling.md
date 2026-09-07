@@ -1,6 +1,6 @@
 # ADR 30 — Medical-director review: a recorded sampling window, a flag, and the review on the note
 
-**Status:** accepted  
+**Status:** accepted; the flag decision is superseded by ADR 31 (the medical director is a role)  
 **Applies to:** `packages/core/src/review-sampling.ts` · `packages/contracts/src/review.ts` · `packages/db/src/repositories/review.ts` · `apps/web/src/server/review-sampling.ts` · `apps/web/src/server/routers/review.ts` · `apps/web/scripts/sample-notes-for-review.ts`
 
 The Aug 31 sync (DIA-74) asked for a scheduled job that puts a random five

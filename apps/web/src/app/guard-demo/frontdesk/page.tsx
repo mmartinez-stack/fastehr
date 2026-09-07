@@ -1,13 +1,13 @@
 import { guardPage } from '@/lib/guard-page'
 
 /**
- * Guard demonstration only — proves `requireRole('frontdesk')` end to end.
+ * Guard demonstration only — proves `requireSurface('clerical')` end to end.
  * Not a real screen; the visibility work replaces these.
  */
 export const dynamic = 'force-dynamic'
 
 export default async function FrontdeskGuardDemoPage() {
-  const gate = await guardPage('frontdesk')
+  const gate = await guardPage('clerical')
 
   if (gate.status === 'forbidden') {
     return (

@@ -15,7 +15,6 @@ const JUNE: ReturnType<Db['staffUsers']['list']> extends Promise<Array<infer U>>
   email: 'june@example.com',
   role: 'frontdesk',
   isActive: true,
-  medicalDirector: false,
   hasCredential: false,
   createdAt: '2020-01-15T00:00:00.000Z',
 }

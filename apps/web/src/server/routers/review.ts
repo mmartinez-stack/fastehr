@@ -5,9 +5,10 @@ import { runReviewSample } from '../review-sampling.ts'
 import { router } from '../trpc.ts'
 
 /**
- * Medical-director review (DIA-74, ADR 30). The queue, the note, and the
- * sign-off belong to the flag holder; the sampling run belongs to an admin
- * (the scheduled job runs it too, outside any session).
+ * Medical-director review (DIA-74, ADR 30, ADR 31). The queue, the note, and
+ * the sign-off belong to the medical director role; the sampling run belongs
+ * to the staff surface, admin and medical director alike (the scheduled job
+ * runs it too, outside any session).
  */
 export const reviewRouter = router({
   /** Sampled notes awaiting sign-off, oldest pick first. */

@@ -7,9 +7,10 @@ import { appRouter } from './root.ts'
 
 /**
  * The review procedures and the sampling run, with fake repositories. What
- * is pinned: the flag gate (a role is not enough, an admin is not enough),
- * the run's window arithmetic (starts where the last run ended, never
- * re-samples), and the "five percent, minimum one" through the real sampler.
+ * is pinned: the role gate (the queue is the medical director's; an admin,
+ * a provider, and the front desk are refused), the run's window arithmetic
+ * (starts where the last run ended, never re-samples), and the "five
+ * percent, minimum one" through the real sampler.
  */
 
 const ITEM: ReviewQueueItem = {
@@ -41,10 +42,10 @@ const RUN: ReviewSampleRun = {
   rate: 20,
 }
 
-const DIRECTOR: Actor = { id: 'dr-penn', roles: ['provider'], offices: ['Sylmar'], medicalDirector: true }
+const DIRECTOR: Actor = { id: 'dr-penn', roles: ['medical_director'], offices: ['Sylmar'] }
 const PROVIDER: Actor = { id: 'dr-other', roles: ['provider'], offices: ['Sylmar'] }
+const FRONTDESK: Actor = { id: 'desk-1', roles: ['frontdesk'], offices: ['Sylmar'] }
 const ADMIN: Actor = { id: 'admin-1', roles: ['admin'], offices: ['Sylmar'] }
-const ADMIN_DIRECTOR: Actor = { ...ADMIN, medicalDirector: true }
 
 function fakeDb(overrides: Partial<Db['reviews']> = {}): Db {
   return {
@@ -116,21 +117,24 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('the review queue is the flag holder’s', () => {
-  it('serves the queue and a note to the medical director, whatever their role', async () => {
+describe('the review queue is the medical director’s', () => {
+  it('serves the queue and a note to the medical director role', async () => {
     const db = fakeDb({ listQueue: async () => [ITEM], findNote: async () => NOTE })
 
     expect(await callerWith(db, DIRECTOR).review.queue()).toEqual([ITEM])
-    expect(await callerWith(db, ADMIN_DIRECTOR).review.queue()).toEqual([ITEM])
     expect(await callerWith(db, DIRECTOR).review.note({ visitId: ITEM.visitId })).toEqual(NOTE)
   })
 
-  it('refuses a provider and an admin without the flag, before the repository', async () => {
+  it('refuses admin, provider, and front desk with FORBIDDEN, before the repository', async () => {
     const listQueue = vi.fn(async () => [ITEM])
     const db = fakeDb({ listQueue })
 
-    await expect(callerWith(db, PROVIDER).review.queue()).rejects.toThrow('FORBIDDEN')
-    await expect(callerWith(db, ADMIN).review.queue()).rejects.toThrow('FORBIDDEN')
+    for (const actor of [ADMIN, PROVIDER, FRONTDESK]) {
+      await expect(callerWith(db, actor).review.queue()).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      await expect(callerWith(db, actor).review.note({ visitId: ITEM.visitId })).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      })
+    }
     await expect(callerWith(db, null).review.queue()).rejects.toThrow('UNAUTHORIZED')
     expect(listQueue).not.toHaveBeenCalled()
   })
@@ -211,7 +215,7 @@ describe('the sampling run', () => {
     expect(run.sampledCount).toBe(0)
   })
 
-  it('is an admin’s to run on demand, with the rate and window overridable', async () => {
+  it('runs on demand for the staff surface, with the rate and window overridable', async () => {
     const recordSample = vi.fn<Db['reviews']['recordSample']>(async (input) => ({
       ...RUN,
       rate: input.rate,
@@ -227,6 +231,8 @@ describe('the sampling run', () => {
     expect(recordSample.mock.calls[0]?.[0]?.windowStart).toEqual(new Date('2026-08-01'))
     expect(recordSample.mock.calls[0]?.[0]?.triggeredById).toBe(ADMIN.id)
 
-    await expect(callerWith(db, DIRECTOR).review.runSample({})).rejects.toThrow('FORBIDDEN')
+    // The medical director has the administrator's access, so the run too.
+    await expect(callerWith(db, DIRECTOR).review.runSample({})).resolves.toBeDefined()
+    await expect(callerWith(db, PROVIDER).review.runSample({})).rejects.toThrow('FORBIDDEN')
   })
 })

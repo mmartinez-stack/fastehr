@@ -154,7 +154,6 @@ export function createAuthOptions(env: { secret: string; baseURL: string }): Bet
         legacyRoleRaw: { type: 'string', required: false, input: false },
         isActive: { type: 'boolean', required: false, defaultValue: true, input: false },
         mustChangePassword: { type: 'boolean', required: false, defaultValue: false, input: false },
-        medicalDirector: { type: 'boolean', required: false, defaultValue: false, input: false },
       },
     },
   }
@@ -212,6 +211,5 @@ export async function actorFromHeaders(headers: Headers): Promise<Actor | null> 
     roles: [role.data],
     offices: officeSchema.options,
     mustChangePassword: user.mustChangePassword === true,
-    medicalDirector: user.medicalDirector === true,
   }
 }

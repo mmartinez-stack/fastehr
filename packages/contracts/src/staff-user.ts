@@ -15,11 +15,6 @@ export const staffUserSchema = z.object({
   role: staffRoleSchema,
   isActive: z.boolean(),
   /**
-   * The medical-director flag (DIA-74): may work the note review queue.
-   * Orthogonal to the role — set by an admin, held by whoever reviews.
-   */
-  medicalDirector: z.boolean(),
-  /**
    * Whether a sign-in credential exists. Surfaced so an admin can see who
    * still needs a temporary password issued — credentials are never created
    * from this screen (runbook: issue-temp-password).
@@ -41,7 +36,6 @@ export const createStaffUserInput = z.object({
   name: z.string().trim().min(1),
   email: normalizedEmail,
   role: staffRoleSchema,
-  medicalDirector: z.boolean().optional(),
 })
 
 export type CreateStaffUserInput = z.infer<typeof createStaffUserInput>
@@ -50,7 +44,6 @@ export const updateStaffUserInput = z.object({
   id: z.string().min(1),
   name: z.string().trim().min(1).optional(),
   role: staffRoleSchema.optional(),
-  medicalDirector: z.boolean().optional(),
 })
 
 export type UpdateStaffUserInput = z.infer<typeof updateStaffUserInput>

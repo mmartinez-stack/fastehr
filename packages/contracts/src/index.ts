@@ -7,7 +7,15 @@ export {
   type ServerEnv,
   type SmsEnv,
 } from './env.ts'
-export { staffRoleSchema, STAFF_ROLES, type StaffRole } from './staff-role.ts'
+export {
+  staffRoleSchema,
+  STAFF_ROLES,
+  ROLE_SURFACES,
+  ROLE_ACCESS,
+  roleHasAccess,
+  type StaffRole,
+  type RoleSurface,
+} from './staff-role.ts'
 export {
   staffUserSchema,
   createStaffUserInput,

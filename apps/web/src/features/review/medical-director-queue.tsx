@@ -6,9 +6,9 @@ import { ClipboardCheck, Play } from "lucide-react"
 import { toast } from "sonner"
 import { REVIEW_SAMPLE_RATE_DEFAULT } from "@fastehr/contracts"
 
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
@@ -19,18 +19,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { PageHeader } from "@/components/page-header"
-import { useRole, useSurfaces } from "@/components/role-provider"
+import { useSessionSurfaces, useSurfaces } from "@/components/role-provider"
 import { trpc } from "@/trpc/client"
 
 /**
- * The medical-director review queue (DIA-74, ADR 30): the sampled notes not
- * yet signed off, oldest pick first. Visible only with the medical-director
- * flag — a flag, not a role, so the page reads the session's flag and the
- * procedures behind it refuse anyone else.
- *
- * An admin who also holds the flag gets the sampling run on demand here,
- * for catch-ups and for a demo that cannot wait for the weekly job.
+ * The Medical Director Review Queue (DIA-74, ADR 30, ADR 31): the random one
+ * in twenty of signed clinic notes routed for review, oldest pick first, as
+ * one card on the Queues page beside the clinic queues. Renders only for the
+ * medical director role — the previewed role must have the review surface
+ * and so must the session, since the procedures behind it refuse anyone
+ * else — and carries the sampling run for catch-ups and demos that cannot
+ * wait for the weekly job.
  */
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -51,7 +50,7 @@ function daysAgo(days: number): string {
   return date.toLocaleDateString("en-CA")
 }
 
-function RunSampleCard() {
+function RunSampleForm() {
   const utils = trpc.useUtils()
   const [rate, setRate] = React.useState(String(REVIEW_SAMPLE_RATE_DEFAULT))
   const [since, setSince] = React.useState("")
@@ -66,82 +65,79 @@ function RunSampleCard() {
   })
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Run sampling now</CardTitle>
-        <CardDescription>
+    <form
+      className="flex flex-wrap items-end gap-4 border-t border-border pt-4"
+      onSubmit={(event) => {
+        event.preventDefault()
+        const parsedRate = Number(rate)
+        if (!Number.isInteger(parsedRate) || parsedRate < 1) {
+          toast.error("Enter a whole number of 1 or more for the rate.")
+          return
+        }
+        run.mutate({ rate: parsedRate, ...(since === "" ? {} : { windowStart: since }) })
+      }}
+    >
+      <div className="flex w-full flex-col gap-1">
+        <span className="text-sm font-medium">Run sampling now</span>
+        <span className="text-sm text-muted-foreground">
           The weekly job picks a random one in {REVIEW_SAMPLE_RATE_DEFAULT} of the notes signed
           since its last run. Run it early here, or catch up from an earlier date.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form
-          className="flex flex-wrap items-end gap-4"
-          onSubmit={(event) => {
-            event.preventDefault()
-            const parsedRate = Number(rate)
-            if (!Number.isInteger(parsedRate) || parsedRate < 1) {
-              toast.error("Enter a whole number of 1 or more for the rate.")
-              return
-            }
-            run.mutate({ rate: parsedRate, ...(since === "" ? {} : { windowStart: since }) })
-          }}
-        >
-          <Field className="w-32">
-            <FieldLabel htmlFor="sample-rate">One in</FieldLabel>
-            <Input id="sample-rate" inputMode="numeric" value={rate} onChange={(e) => setRate(e.target.value)} />
-            <FieldDescription>20 is five percent.</FieldDescription>
-          </Field>
-          <Field className="w-52">
-            <FieldLabel htmlFor="sample-since">Signed since</FieldLabel>
-            <Input
-              id="sample-since"
-              type="date"
-              value={since}
-              onChange={(e) => setSince(e.target.value)}
-              placeholder={daysAgo(7)}
-            />
-            <FieldDescription>Blank continues from the last run.</FieldDescription>
-          </Field>
-          <Button type="submit" disabled={run.isPending}>
-            <Play data-icon="inline-start" />
-            {run.isPending ? "Sampling…" : "Run sampling"}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+        </span>
+      </div>
+      <Field className="w-32">
+        <FieldLabel htmlFor="sample-rate">One in</FieldLabel>
+        <Input id="sample-rate" inputMode="numeric" value={rate} onChange={(e) => setRate(e.target.value)} />
+        <FieldDescription>20 is five percent.</FieldDescription>
+      </Field>
+      <Field className="w-52">
+        <FieldLabel htmlFor="sample-since">Signed since</FieldLabel>
+        <Input
+          id="sample-since"
+          type="date"
+          value={since}
+          onChange={(e) => setSince(e.target.value)}
+          placeholder={daysAgo(7)}
+        />
+        <FieldDescription>Blank continues from the last run.</FieldDescription>
+      </Field>
+      <Button type="submit" disabled={run.isPending}>
+        <Play data-icon="inline-start" />
+        {run.isPending ? "Sampling…" : "Run sampling"}
+      </Button>
+    </form>
   )
 }
 
-export default function ReviewQueuePage() {
-  const { medicalDirector } = useRole()
-  const { staff } = useSurfaces()
-  const queue = trpc.review.queue.useQuery(undefined, { enabled: medicalDirector })
+export function MedicalDirectorQueue({ className }: { className?: string }) {
+  const { review } = useSurfaces()
+  const session = useSessionSurfaces()
+  const enabled = review && session.review
+  const queue = trpc.review.queue.useQuery(undefined, { enabled })
   const rows = queue.data ?? []
 
-  if (!medicalDirector) {
-    return (
-      <Empty>
-        <EmptyTitle>Medical director only</EmptyTitle>
-        <EmptyDescription>
-          The review queue is for accounts with the medical director flag.{" "}
-          <Link href="/patients" className="underline">Back to patients</Link>
-        </EmptyDescription>
-      </Empty>
-    )
-  }
+  if (!enabled) return null
 
   return (
-    <div className="flex flex-col gap-4">
-      <PageHeader
-        title="Medical director review"
-        description="A random sample of signed clinic notes, awaiting your review and sign-off."
-      />
-
-      {staff ? <RunSampleCard /> : null}
-
-      <Card>
-        <CardContent>
+    <Card className={className}>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-1">
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardCheck className="size-4 text-primary" />
+              Medical Director Review Queue
+            </CardTitle>
+            <CardDescription>
+              A random 1 in {REVIEW_SAMPLE_RATE_DEFAULT} sample of signed clinic notes, routed here for
+              review and sign-off.
+            </CardDescription>
+          </div>
+          <Badge variant="ghost" className="bg-primary/10 text-primary">
+            {rows.length}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -174,7 +170,7 @@ export default function ReviewQueuePage() {
                         render={<Link href={`/review/${item.visitId}`} />}
                       >
                         <ClipboardCheck data-icon="inline-start" />
-                        Open
+                        Review
                       </Button>
                     </div>
                   </TableCell>
@@ -201,8 +197,9 @@ export default function ReviewQueuePage() {
               ) : null}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+        <RunSampleForm />
+      </CardContent>
+    </Card>
   )
 }

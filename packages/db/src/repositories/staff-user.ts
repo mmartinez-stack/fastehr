@@ -97,7 +97,6 @@ export function createStaffUserRepository(getClient: () => PrismaClient): StaffU
             name: input.name,
             email: input.email,
             role: input.role,
-            medicalDirector: input.medicalDirector ?? false,
             // No credential is created here — issuance is the runbook's
             // explicit, out-of-band step, and the screen shows who is waiting.
           },
@@ -119,7 +118,6 @@ export function createStaffUserRepository(getClient: () => PrismaClient): StaffU
         data: {
           ...(input.name === undefined ? {} : { name: input.name }),
           ...(input.role === undefined ? {} : { role: input.role }),
-          ...(input.medicalDirector === undefined ? {} : { medicalDirector: input.medicalDirector }),
         },
         include: { accounts: CREDENTIAL_FILTER },
       })

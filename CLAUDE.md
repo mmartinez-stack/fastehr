@@ -196,8 +196,10 @@ beneath it, and allergies are out of scope). The self-service intake is wired en
 single-use link, a public form at `/intake/[token]`, and a per-office Pending
 tab on the roster; text messages go to the server log until `TWILIO_*` is
 set. The medical-director review queue (ADR 30) samples signed notes through
-`apps/web/scripts/sample-notes-for-review.ts` (weekly cron) or the admin's
-"run now"; the `medicalDirector` flag on a user opens `/review`. Visits are imported (§ visits) and drive the roster's
+`apps/web/scripts/sample-notes-for-review.ts` (weekly cron) or "run now";
+the `medical_director` role (ADR 31: an admin's access plus the queue, one
+access matrix `ROLE_ACCESS` in contracts read by server and client) sees the
+queue as a card on `/queues` and signs off at `/review/[visitId]`. Visits are imported (§ visits) and drive the roster's
 last-visit column, order, and service-date search (ADR 27 as amended); patient `status` stays in the schema but is no
 longer exposed anywhere (DIA-50). Auth is real (Better Auth; migrated legacy credentials
 verify per ADR 26). `noUncheckedIndexedAccess` is on everywhere with no

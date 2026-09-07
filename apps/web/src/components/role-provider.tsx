@@ -2,7 +2,7 @@
 
 import * as React from "react"
 
-import { STAFF_ROLES, type StaffRole } from "@fastehr/contracts"
+import { ROLE_ACCESS, STAFF_ROLES, type RoleSurface, type StaffRole } from "@fastehr/contracts"
 
 /**
  * Which role's view of the application is on screen.
@@ -15,21 +15,23 @@ import { STAFF_ROLES, type StaffRole } from "@fastehr/contracts"
  * the refusal audited. Nothing downstream should treat this context as
  * having decided anything.
  *
- * One demonstration device survives from the mockup: an **admin** may switch
- * the view to preview what a provider or the front desk sees. Only an admin,
- * because an admin is entitled to every section server-side, so a preview
- * can never run into a FORBIDDEN it would not otherwise get. For any other
- * role the switcher does not render and `setRole` is inert.
+ * One demonstration device survives from the mockup: an account with the
+ * `staff` surface (admin, medical director) may switch the view to preview
+ * what another role sees. Only those, because they are entitled to every
+ * section server-side, so a preview can never run into a FORBIDDEN it would
+ * not otherwise get — with one exception, the review queue, which is why
+ * `useSessionSurfaces` exists. For any other role the switcher does not
+ * render and `setRole` is inert.
  */
 interface RoleContextValue {
-  /** The role whose view is rendered. */
+  /** The role whose view is rendered: the session's, or an admin's preview. */
   role: StaffRole
+  /** The session's own role; `null` only for an anonymous render. */
+  sessionRole: StaffRole | null
   /** Every role the switcher offers — the full vocabulary. */
   roles: readonly StaffRole[]
-  /** Whether this session may preview other roles' views (admins only). */
+  /** Whether this session may preview other roles' views. */
   canSwitch: boolean
-  /** The session's medical-director flag (DIA-74) — a flag, not a role, and never previewed. */
-  medicalDirector: boolean
   setRole: (r: StaffRole) => void
 }
 
@@ -37,31 +39,29 @@ const RoleContext = React.createContext<RoleContextValue | null>(null)
 
 export function RoleProvider({
   sessionRole,
-  medicalDirector = false,
   children,
 }: {
   /** The session's role from the server; `null` only for an anonymous render. */
   sessionRole: StaffRole | null
-  medicalDirector?: boolean
   children: React.ReactNode
 }) {
   // Anonymous renders (the login redirect is already in flight) get the
   // least-exposing view rather than a guess at a wider one.
   const actual = sessionRole ?? "provider"
-  const canSwitch = sessionRole === "admin"
+  const canSwitch = sessionRole !== null && ROLE_ACCESS[sessionRole].staff
   const [preview, setPreview] = React.useState<StaffRole>(actual)
 
   const value = React.useMemo(
     () => ({
       role: canSwitch ? preview : actual,
+      sessionRole,
       roles: STAFF_ROLES,
       canSwitch,
-      medicalDirector,
       setRole: (next: StaffRole) => {
         if (canSwitch) setPreview(next)
       },
     }),
-    [actual, canSwitch, medicalDirector, preview],
+    [actual, canSwitch, preview, sessionRole],
   )
 
   return <RoleContext.Provider value={value}>{children}</RoleContext.Provider>
@@ -74,37 +74,34 @@ export function useRole() {
 }
 
 /**
- * What a role's view is made of.
- *
- * Three surfaces rather than a permission per screen: the sync described one
- * division — clinical record against clerical record — and a matrix of
- * per-screen flags would encode more structure than the decision behind it
- * contains. `staff` is the third only because clinic-wide reporting and staff
- * accounts sit in neither half. The server-enforced matrix is
- * docs/roles-matrix.md; this stays coarse to match it.
+ * What a role's view is made of: the four surfaces of the access matrix in
+ * `@fastehr/contracts` (ADR 31), read here so the client and the server
+ * answer from the same table. `clinical` is charting and the Medical tab;
+ * `clerical` is contact details, consent, scheduling, billing, outreach;
+ * `staff` is staff accounts and clinic-wide reporting; `review` is the
+ * medical director's queue.
  */
-export interface RoleSurfaces {
-  /** Charting, visit records, weight history, prescribing. */
-  clinical: boolean
-  /** Contact details, consent forms, scheduling, billing, outreach. */
-  clerical: boolean
-  /** Staff accounts and clinic-wide reporting. */
-  staff: boolean
-}
+export type RoleSurfaces = Readonly<Record<RoleSurface, boolean>>
 
 export function surfacesFor(role: StaffRole): RoleSurfaces {
-  switch (role) {
-    case "provider":
-      return { clinical: true, clerical: false, staff: false }
-    case "frontdesk":
-      return { clinical: false, clerical: true, staff: false }
-    case "admin":
-      return { clinical: true, clerical: true, staff: true }
-  }
+  return ROLE_ACCESS[role]
 }
 
 /** Convenience for screens that only need to branch, not destructure. */
 export function useSurfaces(): RoleSurfaces & { role: StaffRole } {
   const { role } = useRole()
   return { role, ...surfacesFor(role) }
+}
+
+const NO_ACCESS: RoleSurfaces = { clinical: false, clerical: false, staff: false, review: false }
+
+/**
+ * The session's own surfaces, never a preview's. For the one thing a preview
+ * cannot fake: a call the server would refuse the real session, such as the
+ * review queue. A screen renders such a thing only when both the previewed
+ * role and the session have it.
+ */
+export function useSessionSurfaces(): RoleSurfaces {
+  const { sessionRole } = useRole()
+  return sessionRole === null ? NO_ACCESS : ROLE_ACCESS[sessionRole]
 }

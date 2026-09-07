@@ -19,8 +19,6 @@ export interface SessionIdentity {
   role: StaffRole
   /** The clinic sites the user may view (ADR 22). */
   offices: readonly Office[]
-  /** The medical-director flag (DIA-74): shows the review entry in the nav. */
-  medicalDirector: boolean
 }
 
 /**
@@ -39,5 +37,5 @@ export async function sessionIdentity(): Promise<SessionIdentity | null> {
   const role = staffRoleSchema.safeParse(actor.roles[0])
   if (!role.success) return null
 
-  return { role: role.data, offices: actor.offices, medicalDirector: actor.medicalDirector === true }
+  return { role: role.data, offices: actor.offices }
 }

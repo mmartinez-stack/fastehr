@@ -29,8 +29,7 @@ beforeEach(async () => {
       id: 'dr-penn',
       name: 'Dr Penn',
       email: 'penn@example.com',
-      role: 'provider',
-      medicalDirector: true,
+      role: 'medical_director',
       updatedAt: new Date(),
     },
   })

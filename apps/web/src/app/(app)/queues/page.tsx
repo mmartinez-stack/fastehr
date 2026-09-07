@@ -31,6 +31,7 @@ import {
 import { PageHeader } from "@/components/page-header"
 import { LanguageTag } from "@/components/status-badges"
 import { useOffice } from "@/components/office-provider"
+import { MedicalDirectorQueue } from "@/features/review/medical-director-queue"
 import {
   unsignedQueue,
   signedQueue,
@@ -99,6 +100,11 @@ export default function QueuesPage() {
         and the work.
       */}
       <div className="grid gap-4 lg:grid-cols-2 3xl:grid-cols-4">
+        {/* The medical director's queue (ADR 31), full width, first: real
+            data beside the mockup's clinic queues, for the one role that
+            has it. Renders nothing for everyone else. */}
+        <MedicalDirectorQueue className="lg:col-span-2 3xl:col-span-4" />
+
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">

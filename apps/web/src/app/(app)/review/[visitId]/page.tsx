@@ -13,7 +13,7 @@ import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Textarea } from "@/components/ui/textarea"
 import { PageHeader } from "@/components/page-header"
-import { useRole } from "@/components/role-provider"
+import { useSessionSurfaces } from "@/components/role-provider"
 import { trpc } from "@/trpc/client"
 
 /**
@@ -45,16 +45,16 @@ export default function ReviewNotePage() {
   const params = useParams<{ visitId: string }>()
   const router = useRouter()
   const utils = trpc.useUtils()
-  const { medicalDirector } = useRole()
+  const { review } = useSessionSurfaces()
   const [comments, setComments] = React.useState("")
 
-  const note = trpc.review.note.useQuery({ visitId: params.visitId }, { enabled: medicalDirector, retry: false })
+  const note = trpc.review.note.useQuery({ visitId: params.visitId }, { enabled: review, retry: false })
   const signOff = trpc.review.signOff.useMutation({
     onSuccess: (reviewed) => {
       void utils.review.queue.invalidate()
       void utils.review.note.invalidate({ visitId: params.visitId })
       toast.success(`Signed off the note for ${reviewed.patient.firstName} ${reviewed.patient.lastName}`)
-      router.push("/review")
+      router.push("/queues")
     },
     onError: (error) =>
       toast.error(
@@ -64,12 +64,12 @@ export default function ReviewNotePage() {
       ),
   })
 
-  if (!medicalDirector) {
+  if (!review) {
     return (
       <Empty>
         <EmptyTitle>Medical director only</EmptyTitle>
         <EmptyDescription>
-          Notes under review are for accounts with the medical director flag.{" "}
+          Notes under review are for the medical director.{" "}
           <Link href="/patients" className="underline">Back to patients</Link>
         </EmptyDescription>
       </Empty>
@@ -86,7 +86,7 @@ export default function ReviewNotePage() {
         <EmptyTitle>Note not found</EmptyTitle>
         <EmptyDescription>
           This note is not in the review queue.{" "}
-          <Link href="/review" className="underline">Back to the queue</Link>
+          <Link href="/queues" className="underline">Back to the queues</Link>
         </EmptyDescription>
       </Empty>
     )
@@ -104,7 +104,7 @@ export default function ReviewNotePage() {
           aria-label="Back to the review queue"
           className="-ml-2"
           nativeButton={false}
-          render={<Link href="/review" />}
+          render={<Link href="/queues" />}
         >
           <ArrowLeft />
         </Button>

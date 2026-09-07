@@ -13,19 +13,26 @@ the same commit.
 
 ## The role vocabulary
 
-Three roles, one per account (`StaffRole` in `@fastehr/contracts`; a native PG
-enum, so the database refuses anything else), plus one per-account flag,
-`medicalDirector` (DIA-74, ADR 30), orthogonal to the role: it opens the note
-review queue and nothing else, and an admin sets it from the Users screen. The legacy `group` values map in
-per the migration (docs/legacy-data-mapping.md § users):
+Four roles, one per account (`StaffRole` in `@fastehr/contracts`; a native PG
+enum, so the database refuses anything else). The legacy `group` values map
+in per the migration (docs/legacy-data-mapping.md § users); the fourth role
+is assigned by hand (ADR 31):
 
 | Role | Legacy value(s) | Who this is |
 | --- | --- | --- |
 | `admin` | `admin` | Practice administration: staff accounts, full clinical and clerical access. |
 | `provider` | `doc` | Clinicians: the clinical record, charting, prescribing. |
 | `frontdesk` | `clerk`, `csr` | Front desk and call center: scheduling, contact details, outreach. (`clerk`/`csr` merged deliberately; splitting them later is a schema migration, not taken yet.) |
+| `medical_director` | none (assigned by an admin) | The administrator's access plus the sampled-note review queue. Dr. Penn. |
 
 `npdoc` legacy accounts were refused by the migration rather than defaulted.
+
+**The matrix is one table**, `ROLE_ACCESS` in `packages/contracts/src/staff-role.ts`,
+over four surfaces: `clinical`, `clerical`, `staff`, `review`. The server
+middleware (`requireSurface`), the page guard (`guardPage(surface)`), and
+the client (`surfacesFor`) all read it; nothing compares role names, and an
+unmapped role or surface is denied. `apps/web/src/server/access-matrix.test.ts`
+calls every role against every surface and checks the answer against the table.
 
 ## Server-enforced matrix (the security boundary)
 
@@ -34,26 +41,25 @@ Every PHI procedure runs the chain **audit → authenticate → authorize**
 is not pending; deactivation kills live sessions immediately and session
 resolution re-checks `isActive` on every call.
 
-| Capability | Procedure kind | admin | provider | frontdesk |
-| --- | --- | :-: | :-: | :-: |
-| Patient roster: recent, search, type-ahead, referred-by picker (`patient.recent/search/suggest/searchByName`; the phone column is nulled server-side for a provider) | `protectedProcedure` | ✅ | ✅ (no phone) | ✅ |
-| Patient record, **Medical** tab: header plus vitals, medications, primary care doctor, the history checklist, and the read-only legacy history text (`patient.byId`) | `protectedProcedure` | ✅ | ✅ | ✅ |
-| Patient record, **Patient Info** tab (`patient.demographics`) and **Billing** tab (`patient.billing`) reads | `clericalProcedure` | ✅ | ❌ | ✅ |
-| Patient create (`patient.create`) | `clericalProcedure` | ✅ | ❌ | ✅ |
-| Medical tab save: vitals, medications, checklist, primary care doctor; never the legacy history text (`patient.updateClinical`) | `protectedProcedure` | ✅ | ✅ | ✅ |
-| Patient Info and Billing tab saves (`patient.updateDemographics/updateBilling`) | `clericalProcedure` | ✅ | ❌ | ✅ |
-| Send an intake link, review a submission, accept or reject it (`intake.send/byId/accept/reject`) | `clericalProcedure` (byId also checks the request's office against the actor's) | ✅ | ❌ | ✅ |
-| An office's pending intakes (`intake.listPending`) | `clericalOfficeScopedProcedure` | own offices only | ❌ | own offices only |
-| Review queue, note, sign-off (`review.queue/note/signOff`) | `medicalDirectorProcedure`: the `medicalDirector` flag, whatever the role | flag only | flag only | flag only |
-| Run the note sampler on demand (`review.runSample`; the weekly job runs it with no session) | `adminProcedure` | ✅ | ❌ | ❌ |
-| Set the medical-director flag (`staffUsers.create/update`) | `adminProcedure` | ✅ | ❌ | ❌ |
-| Open and submit the self-service form (`intake.open/submit`) | `publicProcedure`, the single-use token is the credential (ADR 29) | the person with the link | the person with the link | the person with the link |
-| Patient activate/deactivate (`patient.setStatus`; no screen calls it since DIA-50, the column is kept unexposed) | `protectedProcedure` | ✅ | ✅ | ✅ |
-| Staff accounts: list, search, create, edit, enable/disable (`staffUsers.*`) | `adminProcedure` | ✅ | ❌ | ❌ |
-| Staff account delete (`staffUsers.delete`; confirmed in UI, never self) | `adminProcedure` | ✅ | ❌ | ❌ |
-| Anything office-scoped (future queues etc.) | `officeScopedProcedure` | own offices only | own offices only | own offices only |
-| `/users` page render | `guardPage('admin')` | ✅ | ❌ | ❌ |
-| Issue a temporary password | not a procedure — the `issue-temp-password` runbook, CLI-only | operator with DB access | ❌ | ❌ |
+| Capability | Procedure kind (surface) | admin | medical_director | provider | frontdesk |
+| --- | --- | :-: | :-: | :-: | :-: |
+| Patient roster: recent, search, type-ahead, referred-by picker (`patient.recent/search/suggest/searchByName`; the phone column is nulled server-side for a provider) | `protectedProcedure` | ✅ | ✅ | ✅ (no phone) | ✅ |
+| Patient record, **Medical** tab: header plus vitals, medications, primary care doctor, the history checklist, and the read-only legacy history text (`patient.byId`) | `protectedProcedure` | ✅ | ✅ | ✅ | ✅ |
+| Patient record, **Patient Info** tab (`patient.demographics`) and **Billing** tab (`patient.billing`) reads | `clericalProcedure` (`clerical`) | ✅ | ✅ | ❌ | ✅ |
+| Patient create (`patient.create`) | `clericalProcedure` (`clerical`) | ✅ | ✅ | ❌ | ✅ |
+| Medical tab save: vitals, medications, checklist, primary care doctor; never the legacy history text (`patient.updateClinical`) | `protectedProcedure` | ✅ | ✅ | ✅ | ✅ |
+| Patient Info and Billing tab saves (`patient.updateDemographics/updateBilling`) | `clericalProcedure` (`clerical`) | ✅ | ✅ | ❌ | ✅ |
+| Send an intake link, review a submission, accept or reject it (`intake.send/byId/accept/reject`) | `clericalProcedure` (`clerical`; byId also checks the request's office against the actor's) | ✅ | ✅ | ❌ | ✅ |
+| An office's pending intakes (`intake.listPending`) | `clericalOfficeScopedProcedure` | own offices only | own offices only | ❌ | own offices only |
+| Review queue, note, sign-off (`review.queue/note/signOff`) | `medicalDirectorProcedure` (`review`) | ❌ | ✅ | ❌ | ❌ |
+| Run the note sampler on demand (`review.runSample`; the weekly job runs it with no session) | `adminProcedure` (`staff`) | ✅ | ✅ | ❌ | ❌ |
+| Open and submit the self-service form (`intake.open/submit`) | `publicProcedure`, the single-use token is the credential (ADR 29) | the person with the link | the person with the link | the person with the link | the person with the link |
+| Patient activate/deactivate (`patient.setStatus`; no screen calls it since DIA-50, the column is kept unexposed) | `protectedProcedure` | ✅ | ✅ | ✅ | ✅ |
+| Staff accounts: list, search, create, edit, enable/disable, assign any role including `medical_director` (`staffUsers.*`) | `adminProcedure` (`staff`) | ✅ | ✅ | ❌ | ❌ |
+| Staff account delete (`staffUsers.delete`; confirmed in UI, never self) | `adminProcedure` (`staff`) | ✅ | ✅ | ❌ | ❌ |
+| Anything office-scoped (future queues etc.) | `officeScopedProcedure` | own offices only | own offices only | own offices only | own offices only |
+| `/users` page render | `guardPage('staff')` | ✅ | ✅ | ❌ | ❌ |
+| Issue a temporary password | not a procedure — the `issue-temp-password` runbook, CLI-only | operator with DB access | operator with DB access | ❌ | ❌ |
 
 Notes that carry weight:
 
@@ -86,25 +92,30 @@ Notes that carry weight:
 ## Client surfaces (presentation, not enforcement)
 
 `role-provider.tsx` renders from the **session's** role, supplied by the app
-layout from the server (ADR 28), through three coarse surfaces. Admins may
-preview another role's view from the header switcher; no other role can.
+layout from the server (ADR 28), through the same four surfaces of
+`ROLE_ACCESS`. Roles with `staff` (admin, medical director) may preview
+another role's view from the header switcher; no other role can. The review
+queue card additionally checks the session's own role, so a preview never
+triggers a refused call.
 
-| Surface | What it shows | admin | provider | frontdesk |
-| --- | --- | :-: | :-: | :-: |
-| `clinical` | Charting, visit records, weight history, prescribing | ✅ | ✅ | ❌ |
-| `clerical` | Contact details, consent, scheduling, billing, outreach (incl. the roster's phone column) | ✅ | ❌ | ✅ |
-| `staff` | Staff accounts, clinic-wide reporting | ✅ | ❌ | ❌ |
+| Surface | What it shows | admin | medical_director | provider | frontdesk |
+| --- | --- | :-: | :-: | :-: | :-: |
+| `clinical` | Charting, the Queues page, the Medical tab | ✅ | ✅ | ✅ | ❌ |
+| `clerical` | Contact details, consent, scheduling, billing, outreach (incl. the roster's phone column) | ✅ | ✅ | ❌ | ✅ |
+| `staff` | Staff accounts, clinic-wide reporting, the sampling run | ✅ | ✅ | ❌ | ❌ |
+| `review` | The Medical Director Review Queue card on `/queues`, the note sign-off | ❌ | ✅ | ❌ | ❌ |
 
 ## Where the pieces live
 
 | Concern | File |
 | --- | --- |
-| Role vocabulary | `packages/contracts/src/staff-role.ts` |
+| Role vocabulary and the access matrix (`ROLE_ACCESS`) | `packages/contracts/src/staff-role.ts`, ADR 31 |
 | Procedure kinds (`protected` / `clerical` / `admin` / `officeScoped` / `clericalOfficeScoped`) | `apps/web/src/server/procedures.ts` |
 | Intake tokens and queue | ADR 29 |
-| Review sampling and the medical-director flag | ADR 30 |
+| Review sampling | ADR 30 |
+| The medical director role and the queue card | ADR 31, `apps/web/src/features/review/medical-director-queue.tsx` |
 | Record sections and tabs | ADR 28, `apps/web/src/features/patients/patient-tabs.ts` |
-| Session + role page guards | `apps/web/src/server/guards.ts`, `apps/web/src/lib/guard-page.ts` |
+| Session + surface page guards | `apps/web/src/server/guards.ts`, `apps/web/src/lib/guard-page.ts` |
 | Audit chain ordering | ADR 10 |
 | Office scoping | ADR 22 |
 | Mockup surfaces | `apps/web/src/components/role-provider.tsx` |

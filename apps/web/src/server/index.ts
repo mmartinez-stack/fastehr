@@ -22,5 +22,5 @@ export { adminProcedure, protectedProcedure, publicProcedure } from './procedure
 export type { SmsTransport } from './sms.ts'
 export { runReviewSample } from './review-sampling.ts'
 export { getAuth, actorFromHeaders } from './auth.ts'
-export { requireSession, requireRole, GuardDenied, type GuardDenialCode } from './guards.ts'
+export { requireSession, requireSurface, requireRole, GuardDenied, type GuardDenialCode } from './guards.ts'
 export { router } from './trpc.ts'

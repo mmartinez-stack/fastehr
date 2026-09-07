@@ -4,7 +4,7 @@ import { betterAuth } from 'better-auth'
 import { APIError } from 'better-auth/api'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { actorFromHeaders, createAuthOptions, getAuth } from './auth.ts'
-import { GuardDenied, requireRole, requireSession } from './guards.ts'
+import { GuardDenied, requireRole, requireSession, requireSurface } from './guards.ts'
 
 /**
  * The auth flows against real PostgreSQL, through the real Better Auth
@@ -24,7 +24,7 @@ type SeededUser = { id: string; email: string }
 
 async function seedUser(
   label: string,
-  role: 'admin' | 'provider' | 'frontdesk',
+  role: 'admin' | 'provider' | 'frontdesk' | 'medical_director',
   overrides: { isActive?: boolean; mustChangePassword?: boolean } = {},
 ): Promise<SeededUser> {
   const ctx = await getAuth().$context
@@ -70,11 +70,13 @@ function headersWithCookie(cookie: string): Headers {
 let admin: SeededUser
 let provider: SeededUser
 let frontdesk: SeededUser
+let director: SeededUser
 
 beforeAll(async () => {
   admin = await seedUser('admin', 'admin')
   provider = await seedUser('provider', 'provider')
   frontdesk = await seedUser('frontdesk', 'frontdesk')
+  director = await seedUser('director', 'medical_director')
 })
 
 describe('sign-in', () => {
@@ -199,6 +201,16 @@ describe('guards', () => {
     await expect(requireRole(adminHeaders, 'admin')).resolves.toMatchObject({ id: admin.id })
     await expect(requireRole(providerHeaders, 'admin')).rejects.toMatchObject({ code: 'FORBIDDEN' })
     await expect(requireRole(frontdeskHeaders, 'admin')).rejects.toMatchObject({ code: 'FORBIDDEN' })
+  })
+
+  it('requireSurface asks the matrix: the medical director has staff access, the admin has no review', async () => {
+    const adminHeaders = headersWithCookie(await signInCookie(admin.email))
+    const directorHeaders = headersWithCookie(await signInCookie(director.email))
+
+    await expect(requireSurface(directorHeaders, 'staff')).resolves.toMatchObject({ id: director.id })
+    await expect(requireSurface(directorHeaders, 'review')).resolves.toMatchObject({ id: director.id })
+    await expect(requireSurface(adminHeaders, 'staff')).resolves.toMatchObject({ id: admin.id })
+    await expect(requireSurface(adminHeaders, 'review')).rejects.toMatchObject({ code: 'FORBIDDEN' })
   })
 
   it('fails closed on missing and on malformed sessions', async () => {

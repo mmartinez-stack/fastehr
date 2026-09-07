@@ -1,9 +1,9 @@
+import { roleHasAccess, type RoleSurface } from '@fastehr/contracts'
 import { TRPCError } from '@trpc/server'
 import { t } from '../trpc.ts'
 
 /**
  * Authentication. Narrows `actor` to non-null for everything downstream.
- * Placeholder: real session verification lands with the auth ticket.
  */
 export const requireAuth = t.middleware(({ ctx, next }) => {
   if (ctx.actor === null) throw new TRPCError({ code: 'UNAUTHORIZED' })
@@ -11,8 +11,8 @@ export const requireAuth = t.middleware(({ ctx, next }) => {
 })
 
 /**
- * Role check (RBAC). Placeholder: currently asserts only that the actor carries
- * at least one role. Real permission matrix lands with the RBAC ticket.
+ * Role check (RBAC), coarsest form: the actor carries at least one role. The
+ * per-surface checks below are the real matrix.
  */
 export const requireRole = t.middleware(({ ctx, next }) => {
   if (ctx.actor === null) throw new TRPCError({ code: 'UNAUTHORIZED' })
@@ -21,44 +21,37 @@ export const requireRole = t.middleware(({ ctx, next }) => {
 })
 
 /**
- * The clerical half of the patient record (ADR 28): demographics, contact
- * details, billing, and creating a record at all. Admins and the front desk;
- * a provider is refused — the refusal is audited like any other (ADR 10).
+ * Whether an actor reaches a surface. The one matrix is `ROLE_ACCESS` in
+ * `@fastehr/contracts` (ADR 31): this asks it, and so do the page guards and
+ * the client's navigation, so no router or component compares role names.
  */
-export const CLERICAL_ROLES: readonly string[] = ['admin', 'frontdesk']
-
-export function isClerical(actor: { roles: readonly string[] }): boolean {
-  return actor.roles.some((role) => CLERICAL_ROLES.includes(role))
+export function hasSurface(actor: { roles: readonly string[] }, surface: RoleSurface): boolean {
+  return actor.roles.some((role) => roleHasAccess(role, surface))
 }
 
-export const requireClericalRole = t.middleware(({ ctx, next }) => {
-  if (ctx.actor === null) throw new TRPCError({ code: 'UNAUTHORIZED' })
-  if (!isClerical(ctx.actor)) throw new TRPCError({ code: 'FORBIDDEN' })
-  return next({ ctx: { ...ctx, actor: ctx.actor } })
-})
+/** The clerical half of the patient record (ADR 28): Patient Info, Billing, and creating a record. */
+export function isClerical(actor: { roles: readonly string[] }): boolean {
+  return hasSurface(actor, 'clerical')
+}
 
 /**
- * The medical-director gate (DIA-74): the review queue and sign-off. A flag,
- * not a role — the reviewer is a provider who also reviews — so this checks
- * the actor's flag and nothing about their role. Admins without the flag are
- * refused too: the queue is the reviewer's, and the sampling run has its own
- * admin gate.
+ * The authorization step of the chain, per surface. A refusal is FORBIDDEN,
+ * and because the audit middleware sits outside this one, every refusal is
+ * recorded (ADR 10).
  */
-export const requireMedicalDirector = t.middleware(({ ctx, next }) => {
-  if (ctx.actor === null) throw new TRPCError({ code: 'UNAUTHORIZED' })
-  if (ctx.actor.medicalDirector !== true) throw new TRPCError({ code: 'FORBIDDEN' })
-  return next({ ctx: { ...ctx, actor: ctx.actor } })
-})
+export function requireSurface(surface: RoleSurface) {
+  return t.middleware(({ ctx, next }) => {
+    if (ctx.actor === null) throw new TRPCError({ code: 'UNAUTHORIZED' })
+    if (!hasSurface(ctx.actor, surface)) throw new TRPCError({ code: 'FORBIDDEN' })
+    return next({ ctx: { ...ctx, actor: ctx.actor } })
+  })
+}
 
-/**
- * Admin gate for the account-administration procedures. The single-role
- * vocabulary from the auth foundation, applied inside the chain so the audit
- * middleware records every refusal (ADR 10). The full per-role visibility
- * matrix is the RBAC ticket; this exists now because user administration
- * cannot ship without it.
- */
-export const requireAdminRole = t.middleware(({ ctx, next }) => {
-  if (ctx.actor === null) throw new TRPCError({ code: 'UNAUTHORIZED' })
-  if (!ctx.actor.roles.includes('admin')) throw new TRPCError({ code: 'FORBIDDEN' })
-  return next({ ctx: { ...ctx, actor: ctx.actor } })
-})
+/** Patient Info and Billing reads and writes, patient create, the intake queue: admin, front desk, medical director. */
+export const requireClericalRole = requireSurface('clerical')
+
+/** Staff accounts and the sampling run: admin and medical director. */
+export const requireAdminRole = requireSurface('staff')
+
+/** The note review queue and its sign-off (DIA-74, ADR 31): the medical director role alone. */
+export const requireMedicalDirector = requireSurface('review')
