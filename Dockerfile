@@ -97,3 +97,32 @@ EXPOSE 3000
 # races every other replica and turns a rollout into a schema change; run
 # `prisma migrate deploy` as its own step in the deployment (ADR 14).
 CMD ["node", "apps/web/server.js"]
+
+# ---------------------------------------------------------------------------
+# migrator — applies committed migrations. NOT part of the runtime image.
+#
+# The runner stage deliberately contains only the standalone server, which
+# traces @prisma/client but not the `prisma` CLI (a devDependency). Migrations
+# are their own deployment step (ADR 23), so they need their own artifact.
+# Run as a one-shot container that must exit 0 before the web container rolls:
+#
+#   docker run --rm -e DATABASE_URL=postgresql://… fastehr-migrator
+#
+# See docs/runbooks/deploy-development-ec2.md and docs/deployment-development.md.
+# ---------------------------------------------------------------------------
+FROM base AS migrator
+WORKDIR /repo
+
+COPY --from=deps --chown=node:node /repo/node_modules ./node_modules
+COPY --from=deps --chown=node:node /repo/packages/db/node_modules ./packages/db/node_modules
+COPY --chown=node:node package.json pnpm-workspace.yaml ./
+COPY --chown=node:node packages/db ./packages/db
+
+USER node
+WORKDIR /repo/packages/db
+
+# The prisma binary directly, NOT `pnpm exec`: pnpm 11 runs a deps-status check
+# before exec that attempts an install and writes into the repo root, and
+# corepack would re-download pnpm over the network at deploy time. Neither
+# belongs in a deployment step.
+CMD ["./node_modules/.bin/prisma", "migrate", "deploy"]

@@ -1,7 +1,17 @@
 # Development environment: CI/CD to EC2
 
-**Status:** proposal, not decided. Becomes ADR 25 if accepted.
+**Status:** proposal, not decided. Becomes an ADR if accepted.
 **Scope:** the **development** environment only. No staging, no production.
+
+> **Amended 2026-08-31:** two decisions below are superseded by
+> `docs/runbooks/deploy-development-ec2.md`, which builds the environment by
+> hand. (1) The database is **RDS**, not a Postgres container on the instance —
+> the legacy patient import puts real records in this environment, which
+> deserves managed backups and encryption at rest; the compose file in §6 loses
+> its `postgres` service and `DATABASE_URL` points at the RDS endpoint.
+> (2) The `migrator` stage in §4 is no longer a gap: it is in the `Dockerfile`
+> as written. The CI/CD design itself (OIDC, ECR, SSM Run Command) is
+> unchanged and still pending.
 
 Merging a PR into `development` builds an image, pushes it to ECR, runs
 migrations, and rolls the container on a single EC2 instance — with no SSH keys,
