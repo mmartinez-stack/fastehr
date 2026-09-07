@@ -1,5 +1,7 @@
 import type { Office } from '@fastehr/contracts'
 import { db, type Db } from '@fastehr/db'
+import { getAppBaseUrl } from './auth.ts'
+import { smsTransportFromEnv, type SmsTransport } from './sms.ts'
 
 /**
  * Request-scoped context: who is asking, and what they can ask of.
@@ -39,6 +41,14 @@ export interface Context {
    * data — there is no `ctx.prisma` to reach past it with.
    */
   db: Db
+  /**
+   * Outbound text messages (the intake link). On the context for the same
+   * reason `db` is: a test hands in a fake and asserts what was sent, and
+   * the real transport is chosen from the environment at first use.
+   */
+  sms: SmsTransport
+  /** The origin public links are built on — resolved lazily, like the auth env. */
+  appBaseUrl: () => string
 }
 
 /**
@@ -57,9 +67,13 @@ export interface Context {
 export function createContext({
   actor,
   db: repositories = db,
+  sms = smsTransportFromEnv(),
+  appBaseUrl = getAppBaseUrl,
 }: {
   actor: Actor | null
   db?: Db
+  sms?: SmsTransport
+  appBaseUrl?: () => string
 }): Context {
-  return { actor, db: repositories }
+  return { actor, db: repositories, sms, appBaseUrl }
 }

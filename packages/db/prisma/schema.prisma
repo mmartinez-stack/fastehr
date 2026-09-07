@@ -123,6 +123,7 @@ model Patient {
   // by every visit write; never by the patient form.
   lastVisitAt DateTime?
   visits      Visit[]
+  intakes     IntakeRequest[]
 
   // The provisional credit-card block (contracts § patient header comment):
   // the fields the legacy form rendered, carried for billing continuity until
@@ -276,6 +277,8 @@ model User {
   sessions           Session[]
   accounts           Account[]
   signedVisits       Visit[]   @relation("VisitSignatures")
+  sentIntakes        IntakeRequest[] @relation("IntakeSenders")
+  reviewedIntakes    IntakeRequest[] @relation("IntakeReviewers")
 
   @@map("users")
 }
@@ -326,4 +329,55 @@ model Verification {
 
   @@index([identifier])
   @@map("verifications")
+}
+
+// --- Self-service intake (DIA-72, ADR 29) ---
+
+enum IntakeStatus {
+  sent
+  submitted
+  accepted
+  rejected
+
+  @@map("intake_status")
+}
+
+/**
+ * One texted intake link and what came back through it. The front desk
+ * creates the request (name, phone, language) and the person is texted a
+ * link carrying a single-use token; only the token's hash is stored, so a
+ * database read cannot mint a working link. The submission lands here as
+ * JSON — the parsed, normalized form (contracts `intakeSubmissionSchema`) —
+ * and becomes a patient row only when the front desk accepts it. The office
+ * is the person's own choice at submission and is the queue the request
+ * appears in.
+ */
+model IntakeRequest {
+  id        String           @id @default(uuid())
+  firstName String
+  lastName  String
+  phone     String
+  language  PatientLanguage?
+  tokenHash String           @unique
+  expiresAt DateTime
+  status    IntakeStatus     @default(sent)
+
+  office      String?
+  submission  Json?
+  submittedAt DateTime?
+
+  patientId String?
+  patient   Patient? @relation(fields: [patientId], references: [id])
+
+  createdById  String?
+  createdBy    User?     @relation("IntakeSenders", fields: [createdById], references: [id], onDelete: SetNull)
+  reviewedById String?
+  reviewedBy   User?     @relation("IntakeReviewers", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([status, office])
+  @@map("intake_requests")
 }

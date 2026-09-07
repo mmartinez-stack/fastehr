@@ -3,7 +3,9 @@ export {
   betterAuthSecretSchema,
   betterAuthUrlSchema,
   serverEnvSchema,
+  smsEnvSchema,
   type ServerEnv,
+  type SmsEnv,
 } from './env.ts'
 export { staffRoleSchema, STAFF_ROLES, type StaffRole } from './staff-role.ts'
 export {
@@ -95,6 +97,26 @@ export {
   type PatientProgramType,
   type CreditCardExpMonth,
 } from './patient.ts'
+export {
+  INTAKE_STATUSES,
+  intakeStatusSchema,
+  INTAKE_LINK_TTL_DAYS,
+  intakeSubmissionSchema,
+  intakeRequestSchema,
+  intakeInviteSchema,
+  openIntakeInput,
+  submitIntakeInput,
+  acceptIntakeInput,
+  intakeByIdInput,
+  type IntakeStatus,
+  type IntakeSubmission,
+  type IntakeRequest,
+  type IntakeInvite,
+  type OpenIntakeInput,
+  type SubmitIntakeInput,
+  type AcceptIntakeInput,
+  type IntakeByIdInput,
+} from './intake.ts'
 export {
   LEGACY_CREDENTIAL_PREFIX,
   legacyCredentialSchema,

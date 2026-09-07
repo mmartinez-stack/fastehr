@@ -38,6 +38,11 @@ function requireAuthEnv(name: 'BETTER_AUTH_SECRET' | 'BETTER_AUTH_URL'): string 
   return parsed.data
 }
 
+/** The application's public origin — what a texted link is built on. */
+export function getAppBaseUrl(): string {
+  return requireAuthEnv('BETTER_AUTH_URL')
+}
+
 let instance: ReturnType<typeof betterAuth> | undefined
 
 /**

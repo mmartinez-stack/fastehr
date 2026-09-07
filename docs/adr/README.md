@@ -38,6 +38,7 @@ first and produced a bug that type-checked.
 | [26](026-legacy-credentials-verify-in-place.md) | Legacy credentials verify in place, and retire on first sign-in | `apps/web/src/server` · `packages/contracts` · `packages/db/scripts` |
 | [27](027-single-input-roster-search.md) | One roster search input; the format decides the field | `packages/contracts` · `packages/db` · `apps/web` |
 | [28](028-patient-record-sections.md) | The patient record is served and written by section | `packages/contracts` · `packages/db` · `apps/web/src/server` · `apps/web/src/features/patients` |
+| [29](029-self-service-intake-tokens.md) | Self-service intake: a single-use token bound to a request, not a patient | `packages/contracts` · `packages/db` · `apps/web/src/server` · `apps/web/src/app/intake` |
 
 ## Adding one
 

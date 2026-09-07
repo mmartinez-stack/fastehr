@@ -2,6 +2,7 @@ import { patientSchema } from '@fastehr/contracts'
 import { patientDisplayName } from '@fastehr/core'
 import { protectedProcedure, publicProcedure } from '../procedures.ts'
 import { router } from '../trpc.ts'
+import { intakeRouter } from './intake.ts'
 import { patientRouter } from './patient.ts'
 import { staffUserRouter } from './staff-user.ts'
 
@@ -18,6 +19,8 @@ export const appRouter = router({
   health: publicProcedure.query(() => ({ status: 'ok' as const })),
 
   patient: patientRouter,
+
+  intake: intakeRouter,
 
   staffUsers: staffUserRouter,
 

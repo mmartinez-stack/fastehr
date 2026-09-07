@@ -3,10 +3,11 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Search, UserPlus } from "lucide-react"
+import { ClipboardList, Search, UserPlus } from "lucide-react"
 import { interpretPatientSearch, type PatientSearchProblem } from "@fastehr/contracts"
 
 import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -18,8 +19,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { PageHeader } from "@/components/page-header"
+import { useOffice } from "@/components/office-provider"
 import { useSurfaces } from "@/components/role-provider"
 import { trpc } from "@/trpc/client"
 
@@ -45,6 +48,12 @@ import { trpc } from "@/trpc/client"
  * The same `interpretPatientSearch` the server parses with runs here first,
  * so an uninterpretable query becomes an inline hint instead of a request —
  * the docs/forms.md rule, applied to a search.
+ *
+ * For the clerical roles the page has a second tab, **Pending intakes**: the
+ * self-service submissions waiting for review in the office currently
+ * selected in the header (DIA-72). A provider sees the roster alone — the
+ * tab is not rendered for them, and the procedure behind it would refuse
+ * them anyway.
  */
 
 /** The copy table for interpreter problems — codes travel, the client owns the words (ADR 12). */
@@ -115,6 +124,91 @@ function useDebounced<T>(value: T, delayMs: number): T {
   return debounced
 }
 
+/** An instant → "Sep 4, 2026, 3:12 PM" in the viewer's zone. */
+function formatSubmitted(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+
+/** The office's queue of submitted intakes, each opening the review screen. */
+function PendingIntakes() {
+  const { office } = useOffice()
+  const pending = trpc.intake.listPending.useQuery({ office })
+  const rows = pending.data ?? []
+
+  return (
+    <Card>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>First name</TableHead>
+              <TableHead>Last name</TableHead>
+              <TableHead>Phone</TableHead>
+              <TableHead>Language</TableHead>
+              <TableHead>Submitted</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((request) => (
+              <TableRow key={request.id}>
+                <TableCell className="font-medium">{request.firstName}</TableCell>
+                <TableCell>{request.lastName}</TableCell>
+                <TableCell className="text-muted-foreground">{formatPhone(request.phone)}</TableCell>
+                <TableCell>
+                  {request.language === null ? "-" : request.language === "english" ? "English" : "Spanish"}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {request.submittedAt === null ? "-" : formatSubmitted(request.submittedAt)}
+                </TableCell>
+                <TableCell>
+                  {/* Actions live on the row itself — no overflow menu. */}
+                  <div className="flex justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      nativeButton={false}
+                      render={<Link href={`/patients/intakes/${request.id}`} />}
+                    >
+                      <ClipboardList data-icon="inline-start" />
+                      Review
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+            {pending.isPending ? (
+              <TableRow>
+                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                  Loading intakes…
+                </TableCell>
+              </TableRow>
+            ) : pending.isError ? (
+              <TableRow>
+                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                  The queue could not be loaded. Try again.
+                </TableCell>
+              </TableRow>
+            ) : rows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                  No intakes are waiting for review at {office}.
+                </TableCell>
+              </TableRow>
+            ) : null}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  )
+}
+
 interface Criteria {
   query: string
   dateOfBirth: string
@@ -135,6 +229,9 @@ export default function PatientsPage() {
   const [suggesting, setSuggesting] = React.useState(false)
   // Contact details are clerical, on the roster as much as on the record.
   const { clerical } = useSurfaces()
+  const { office } = useOffice()
+  // The tab's count: fetched only for the roles that can see the tab.
+  const pendingCount = trpc.intake.listPending.useQuery({ office }, { enabled: clerical })
   // "Now" for the over-a-year flag, read once per mount: a render is pure,
   // and the day boundary does not need to move under an open screen.
   const [now] = React.useState(() => Date.now())
@@ -189,6 +286,205 @@ export default function PatientsPage() {
         </Button>
       </PageHeader>
 
+      {clerical ? (
+        <Tabs defaultValue="roster">
+          <TabsList>
+            <TabsTrigger value="roster">Roster</TabsTrigger>
+            <TabsTrigger value="pending">
+              Pending intakes
+              {pendingCount.data !== undefined && pendingCount.data.length > 0 ? (
+                <Badge variant="secondary" className="ml-1.5">{pendingCount.data.length}</Badge>
+              ) : null}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="roster" className="mt-2">
+          <Card>
+            <CardContent className="flex flex-col gap-4">
+              <form
+                className="flex items-start gap-4"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  runSearch()
+                }}
+              >
+                <Field className="relative flex-1">
+                  <FieldLabel htmlFor="search-query">Search</FieldLabel>
+                  <Input
+                    id="search-query"
+                    value={query}
+                    onChange={(event) => {
+                      setQuery(event.target.value)
+                      setSuggesting(true)
+                    }}
+                    onFocus={() => setSuggesting(true)}
+                    onBlur={() => setSuggesting(false)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") setSuggesting(false)
+                    }}
+                    placeholder="Name, “Last, First”, or phone"
+                    autoComplete="off"
+                    role="combobox"
+                    aria-expanded={suggestions.length > 0}
+                    aria-controls="search-suggestions"
+                    aria-autocomplete="list"
+                  />
+                  <FieldDescription>
+                    {problem !== null
+                      ? PROBLEM_COPY[problem]
+                      : "Any part of a name, or a phone number. Suggestions appear as you type."}
+                  </FieldDescription>
+                  {suggestions.length > 0 ? (
+                    <ul
+                      id="search-suggestions"
+                      role="listbox"
+                      aria-label="Matching patients"
+                      className="absolute top-full left-0 z-30 mt-1 w-full overflow-hidden rounded-lg border border-input bg-popover text-sm shadow-md"
+                    >
+                      {suggestions.map((patient) => (
+                        <li key={patient.id} role="option" aria-selected={false}>
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between gap-4 px-2.5 py-1.5 text-left hover:bg-accent"
+                            // The input blurs before a click lands; keep the list
+                            // open for the click by refusing focus here.
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => {
+                              setSuggesting(false)
+                              router.push(`/patients/${patient.id}/edit`)
+                            }}
+                          >
+                            <span className="font-medium">
+                              {patient.lastName}, {patient.firstName}
+                            </span>
+                            <span className="text-muted-foreground">{formatDob(patient.dateOfBirth)}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </Field>
+                <Field className="w-52 shrink-0">
+                  <FieldLabel htmlFor="search-dob">Date of birth</FieldLabel>
+                  <Input
+                    id="search-dob"
+                    type="date"
+                    value={dob}
+                    onChange={(event) => setDob(event.target.value)}
+                  />
+                  <FieldDescription>Combines with the search.</FieldDescription>
+                </Field>
+                <Field className="w-52 shrink-0">
+                  <FieldLabel htmlFor="search-service-date">Seen on</FieldLabel>
+                  <Input
+                    id="search-service-date"
+                    type="date"
+                    value={serviceDate}
+                    onChange={(event) => setServiceDate(event.target.value)}
+                  />
+                  <FieldDescription>Patients with a visit that day.</FieldDescription>
+                </Field>
+                {/* Mirrors a Field's label-then-control rhythm (gap-2, leading-snug
+                    label) so the h-8 buttons sit exactly on the inputs' row. */}
+                <div className="flex shrink-0 flex-col gap-2">
+                  <span aria-hidden="true" className="invisible text-sm leading-snug font-medium">
+                    Search
+                  </span>
+                  <div className="flex gap-2">
+                    <Button type="submit">
+                      <Search data-icon="inline-start" />
+                      Search
+                    </Button>
+                    {submitted !== null ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setQuery("")
+                          setDob("")
+                          setServiceDate("")
+                          setProblem(null)
+                          setSubmitted(null)
+                        }}
+                      >
+                        Clear
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </form>
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>First name</TableHead>
+                    <TableHead>Last name</TableHead>
+                    <TableHead>DOB</TableHead>
+                    {clerical && <TableHead>Phone</TableHead>}
+                    <TableHead>Office</TableHead>
+                    <TableHead>Last visit</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {patients.map((patient) => (
+                    <TableRow key={patient.id}>
+                      <TableCell>
+                        <Link
+                          href={`/patients/${patient.id}/edit`}
+                          className="font-medium text-primary hover:underline"
+                        >
+                          {patient.firstName}
+                        </Link>
+                      </TableCell>
+                      <TableCell>{patient.lastName}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDob(patient.dateOfBirth)}
+                      </TableCell>
+                      {clerical && (
+                        <TableCell className="text-muted-foreground">
+                          {formatPhone(patient.phone)}
+                        </TableCell>
+                      )}
+                      <TableCell>{patient.office ?? "-"}</TableCell>
+                      <TableCell>
+                        <LastVisitCell lastVisitAt={patient.lastVisitAt} now={now} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {active.isPending ? (
+                    <TableRow>
+                      <TableCell colSpan={columns} className="py-8 text-center text-muted-foreground">
+                        Loading patients…
+                      </TableCell>
+                    </TableRow>
+                  ) : active.isError ? (
+                    <TableRow>
+                      <TableCell colSpan={columns} className="py-8 text-center text-muted-foreground">
+                        The roster could not be loaded. Try again.
+                      </TableCell>
+                    </TableRow>
+                  ) : patients.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={columns} className="py-8 text-center text-muted-foreground">
+                        {submitted === null ? "No patients yet." : "No patients match your search."}
+                      </TableCell>
+                    </TableRow>
+                  ) : submitted !== null && patients.length >= SEARCH_CAP ? (
+                    <TableRow>
+                      <TableCell colSpan={columns} className="py-4 text-center text-muted-foreground">
+                        Showing the first {SEARCH_CAP} matches. Narrow the search to see the rest.
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+          </TabsContent>
+          <TabsContent value="pending" className="mt-2">
+            <PendingIntakes />
+          </TabsContent>
+        </Tabs>
+      ) : (
       <Card>
         <CardContent className="flex flex-col gap-4">
           <form
@@ -370,6 +666,7 @@ export default function PatientsPage() {
           </Table>
         </CardContent>
       </Card>
+      )}
     </div>
   )
 }

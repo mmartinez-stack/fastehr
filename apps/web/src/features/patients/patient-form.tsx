@@ -20,6 +20,7 @@ import {
   type PatientCondition,
   type PatientDemographics,
   type PatientGender,
+  type IntakeSubmission,
   type ValidationFailure,
 } from "@fastehr/contracts"
 
@@ -311,6 +312,58 @@ export function toPatientFormValues(
   }
 }
 
+/**
+ * A stored intake submission → the form (the review screen, and nothing
+ * else: the submission is the normalized shape `createPatientInput` emits,
+ * with absent fields undefined rather than null).
+ */
+export function toIntakeFormValues(submission: IntakeSubmission): PatientFormValues {
+  const present = new Map(submission.conditions.map((row) => [row.condition, row]))
+  return {
+    ...EMPTY_PATIENT_FORM,
+    firstName: submission.firstName,
+    lastName: submission.lastName,
+    gender: submission.gender,
+    dateOfBirth: submission.dateOfBirth,
+    language: submission.language ?? "",
+    office: submission.office,
+    email: submission.email ?? "",
+    addressStreet: submission.addressStreet,
+    addressCity: submission.addressCity,
+    addressState: submission.addressState,
+    addressZip: submission.addressZip,
+    phone: submission.phone,
+    phoneFollowUpAllowed: submission.phoneFollowUpAllowed,
+    referralSource: submission.referralSource ?? "",
+    referredByPatientId: submission.referredByPatientId ?? "",
+    programType: submission.programType ?? "",
+    ...splitHeight(submission.heightInches),
+    medications: submission.medications.map((row) => ({
+      name: row.name,
+      dose: row.dose ?? "",
+      frequency: row.frequency ?? "",
+    })),
+    conditions: PATIENT_CONDITIONS.map((condition) => {
+      const stored = present.get(condition)
+      return stored === undefined
+        ? { condition, present: false, onset: "", treatedBy: "", medicated: false, medications: "" }
+        : {
+            condition,
+            present: true,
+            onset: stored.onset ?? "",
+            treatedBy: stored.treatedBy ?? "",
+            medicated: stored.medicated,
+            medications: stored.medications ?? "",
+          }
+    }),
+    historyOther: submission.historyOther ?? "",
+    allergies: submission.allergies.map((row) => ({ name: row.name, reaction: row.reaction ?? "" })),
+    pcpName: submission.pcpName ?? "",
+    pcpAddress: submission.pcpAddress ?? "",
+    pcpPhone: submission.pcpPhone ?? "",
+  }
+}
+
 /** The legacy expiration-year range: this year and the ten after it. */
 const EXP_YEARS = Array.from({ length: 11 }, (_, i) => String(new Date().getFullYear() + i))
 const FEET = ["0", "1", "2", "3", "4", "5", "6", "7", "8"]
@@ -335,7 +388,7 @@ const COPY: FormCopy = {
     custom: "Date of birth must be a past date.",
   },
   language: { invalid_value: "Select a language from the list." },
-  office: { invalid_value: "Select an office from the list." },
+  office: { invalid_value: "Select an office from the list.", invalid_type: "Select the office you will visit." },
   email: { invalid_format: "Enter a valid email address, like name@example.com." },
   addressStreet: { too_small: "Enter the street address.", too_big: "Street can be at most 200 characters." },
   addressCity: { too_small: "Enter the city.", too_big: "City can be at most 100 characters." },
@@ -518,8 +571,11 @@ export function PatientForm({
   submittingLabel,
   saved,
   onDirtyChange,
+  footerStart,
   /** Off for the self-service intake, which has no picker to search with. */
   allowReferralPicker = true,
+  /** On for the intake, where the office decides the queue. */
+  officeRequired = false,
 }: {
   title?: string
   /** The tabs to render — decided by the page from the session's role. */
@@ -533,7 +589,10 @@ export function PatientForm({
   saved: boolean
   /** Lets the page guard its own back-navigation with the form's dirty state. */
   onDirtyChange?: (dirty: boolean) => void
+  /** Rendered at the card footer's left edge (the review screen's Reject). */
+  footerStart?: React.ReactNode
   allowReferralPicker?: boolean
+  officeRequired?: boolean
 }) {
   const [tab, setTab] = React.useState<PatientSection>(sections[0] ?? "demographics")
   // Tabs holding an error after the last submit — shown as a count on the
@@ -706,7 +765,10 @@ export function PatientForm({
             label: value === "english" ? "English" : "Spanish",
           })),
         )}
-        {selectField("office", "Office", asItems(PATIENT_OFFICES))}
+        {selectField("office", "Office", asItems(PATIENT_OFFICES), {
+          required: officeRequired,
+          ...(officeRequired ? { description: "The office or program you will visit." } : {}),
+        })}
 
         {textField("email", "Email", {
           type: "email",
@@ -1074,7 +1136,8 @@ export function PatientForm({
             ))}
           </Tabs>
         </CardContent>
-        <CardFooter className="justify-end">
+        <CardFooter className={footerStart === undefined ? "justify-end" : "justify-between"}>
+          {footerStart}
           <form.Subscribe selector={(state) => state.isSubmitting}>
             {(isSubmitting) => (
               <Button type="submit" disabled={isSubmitting}>

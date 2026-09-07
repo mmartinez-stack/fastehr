@@ -190,7 +190,10 @@ read `src/lib/mock-data.ts`, except the patient roster, `/patients/new`, and
 search — docs/legacy-data-mapping.md § patients; the `/patients/[id]` detail
 view is still mockup; the record itself is tabbed and served by section per
 ADR 28, with the clinical half open to every role and demographics/billing
-clerical). Visits are imported (§ visits) and drive the roster's
+clerical). The self-service intake is wired end to end (ADR 29): a texted
+single-use link, a public form at `/intake/[token]`, and a per-office Pending
+tab on the roster; text messages go to the server log until `TWILIO_*` is
+set. Visits are imported (§ visits) and drive the roster's
 last-visit column, order, and service-date search (ADR 27 as amended); patient `status` stays in the schema but is no
 longer exposed anywhere (DIA-50). Auth is real (Better Auth; migrated legacy credentials
 verify per ADR 26). `noUncheckedIndexedAccess` is on everywhere with no

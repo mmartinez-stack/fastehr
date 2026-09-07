@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useForm } from "@tanstack/react-form"
 import { MessageSquareText } from "lucide-react"
+import { toast } from "sonner"
 import {
   describeValidationFailure,
   PATIENT_LANGUAGES,
@@ -28,18 +29,20 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { RequiredMark } from "@/components/required-mark"
-import { toFormErrors, type FormCopy } from "@/lib/form-errors"
+import { toFormErrors, validationFrom, type FormCopy } from "@/lib/form-errors"
+import { trpc } from "@/trpc/client"
 
 /**
  * The legacy "Send Intake Form" panel: text a person a link to the
  * self-service intake page, before any patient record exists — they enter
- * their own details from their phone, in the language chosen here.
+ * their own details from their phone, in the language chosen here (DIA-72,
+ * ADR 29). The link is single-use and expires; what comes back waits in the
+ * Pending tab of the office the person picks.
  *
- * The form validates through `sendPatientIntakeInput` (ADR 25) today; the
- * send itself belongs to the messaging domain, which is not wired yet, so a
- * valid submit says exactly that instead of pretending a text went out. When
- * the messaging procedure lands, the submit handler is the only thing that
- * changes.
+ * Validates through `sendPatientIntakeInput` (ADR 25) and submits to
+ * `intake.send`. Without Twilio credentials the server prints the text to
+ * its log instead of sending it — the alert below says so, so nobody waits
+ * for a phone to buzz in development.
  */
 
 const COPY: FormCopy = {
@@ -49,21 +52,38 @@ const COPY: FormCopy = {
   language: { invalid_value: "Select a language from the list." },
 }
 
+const SEND_FAILED = "The link could not be sent. Check your connection and try again."
+
+/** Display formatting only — storage stays ten bare digits. */
+function formatPhone(phone: string): string {
+  return phone.length === 10 ? `(${phone.slice(0, 3)}) ${phone.slice(3, 6)}-${phone.slice(6)}` : phone
+}
+
 export function IntakeForm() {
-  const [readyToSend, setReadyToSend] = React.useState(false)
+  const [sentTo, setSentTo] = React.useState<string | null>(null)
+  const send = trpc.intake.send.useMutation()
 
   const form = useForm({
     defaultValues: { firstName: "", lastName: "", phone: "", language: "" },
     validators: {
       onSubmit: ({ value }) => {
-        setReadyToSend(false)
         const result = sendPatientIntakeInput.safeParse(value)
-        if (result.success) {
-          setReadyToSend(true)
-          return undefined
-        }
+        if (result.success) return undefined
         const failure = describeValidationFailure(result.error)
         return failure === null ? undefined : toFormErrors(failure, COPY)
+      },
+      onSubmitAsync: async ({ value, formApi }) => {
+        try {
+          const request = await send.mutateAsync(value)
+          setSentTo(request.phone)
+          toast.success(`Intake link sent to ${request.firstName} ${request.lastName}`)
+          formApi.reset()
+          return undefined
+        } catch (error) {
+          const failure = validationFrom(error)
+          if (failure !== null) return toFormErrors(failure, COPY)
+          return { form: SEND_FAILED, fields: {} }
+        }
       },
     },
   })
@@ -114,8 +134,21 @@ export function IntakeForm() {
           <FieldGroup>
             <p className="text-sm text-muted-foreground">
               Texts the person a link to the self-service intake page. They fill in their own
-              details from their phone, and no record is created here first.
+              details from their phone and pick the office they will visit; the submission then
+              waits in that office&apos;s Pending tab for review. The link works once and expires
+              after seven days.
             </p>
+
+            <form.Subscribe selector={(state) => state.errorMap.onSubmit}>
+              {(formError) =>
+                typeof formError === "string" ? (
+                  <Alert variant="destructive">
+                    <AlertTitle>The link was not sent</AlertTitle>
+                    <AlertDescription>{formError}</AlertDescription>
+                  </Alert>
+                ) : null
+              }
+            </form.Subscribe>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 3xl:grid-cols-8">
               {textField("firstName", "First name", { placeholder: "First name", required: true })}
@@ -158,23 +191,28 @@ export function IntakeForm() {
               </form.Field>
             </div>
 
-            {readyToSend ? (
+            {sentTo !== null ? (
               <Alert>
                 <MessageSquareText />
-                <AlertTitle>Nothing was sent</AlertTitle>
+                <AlertTitle>Link sent to {formatPhone(sentTo)}</AlertTitle>
                 <AlertDescription>
-                  The details are valid, but text messaging is not connected yet. This form will
-                  send the intake link once the messaging integration lands.
+                  The submission will appear in the Pending tab of the office the person picks.
+                  In an environment without text messaging configured, the link is printed to the
+                  server log instead of being sent.
                 </AlertDescription>
               </Alert>
             ) : null}
           </FieldGroup>
         </CardContent>
         <CardFooter className="justify-end">
-          <Button type="submit">
-            <MessageSquareText data-icon="inline-start" />
-            Send Intake Form
-          </Button>
+          <form.Subscribe selector={(state) => state.isSubmitting}>
+            {(isSubmitting) => (
+              <Button type="submit" disabled={isSubmitting}>
+                <MessageSquareText data-icon="inline-start" />
+                {isSubmitting ? "Sending…" : "Send Intake Form"}
+              </Button>
+            )}
+          </form.Subscribe>
         </CardFooter>
       </Card>
     </form>

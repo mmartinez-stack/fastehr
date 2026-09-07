@@ -189,6 +189,17 @@ function fakeDb(overrides: Partial<Db['patients']> = {}): Db {
       setActive: async () => null,
       delete: async () => null,
     },
+    intakes: {
+      create: async () => {
+        throw new Error('not under test')
+      },
+      findById: async () => null,
+      findByTokenHash: async () => null,
+      submit: async () => null,
+      listPending: async () => [],
+      accept: async () => null,
+      reject: async () => null,
+    },
   }
 }
 

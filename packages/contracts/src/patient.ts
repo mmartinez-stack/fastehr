@@ -429,7 +429,8 @@ const creditCardExpYear = z.string().trim().regex(/^\d{4}$/)
  * `status` is not an input — a record is created active and changes state
  * only through `setPatientStatusInput`.
  */
-const demographicsFields = {
+/** Exported for the intake contract (intake.ts), which reuses the sections. */
+export const demographicsFields = {
   firstName: z.string().trim().min(1).max(50),
   lastName: z.string().trim().min(1).max(100),
   gender: patientGenderSchema,
@@ -448,7 +449,7 @@ const demographicsFields = {
   programType: blankAsAbsent(patientProgramTypeSchema),
 }
 
-const clinicalFields = {
+export const clinicalFields = {
   heightFeet,
   heightInchesPart,
   medications: droppingBlankRows(medicationRow, 50),
@@ -474,7 +475,7 @@ const billingFields = {
  * The clinical section's shape after parsing: feet and inches composed into
  * the stored total, the checklist reduced to the items answered "Yes".
  */
-function composeClinical<
+export function composeClinical<
   Fields extends {
     heightFeet: string
     heightInchesPart: string
@@ -530,10 +531,8 @@ export type SetPatientStatusInput = z.infer<typeof setPatientStatusInput>
  * intake page, and the person enters their own details from their phone. The
  * language picks which translation the text arrives in.
  *
- * Requiredness and lengths are the legacy panel's validators. The *send*
- * itself belongs to the messaging domain (not yet wired); this input is the
- * contract the form validates through today and the procedure will accept
- * when that domain lands.
+ * Requiredness and lengths are the legacy panel's validators. The request
+ * this creates, and what comes back through the link, are in intake.ts.
  */
 export const sendPatientIntakeInput = z.object({
   firstName: z.string().trim().min(1).max(50),

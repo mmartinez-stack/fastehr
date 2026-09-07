@@ -79,3 +79,6 @@ export const officeScopedProcedure = protectedProcedure
     }
     return next()
   })
+
+/** A site's clerical queue (the pending intakes): office-scoped *and* clerical. */
+export const clericalOfficeScopedProcedure = officeScopedProcedure.use(requireClericalRole)

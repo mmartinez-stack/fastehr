@@ -40,6 +40,9 @@ resolution re-checks `isActive` on every call.
 | Patient create (`patient.create`) | `clericalProcedure` | ✅ | ❌ | ✅ |
 | Clinical section save: vitals, medications, history, allergies, primary care doctor (`patient.updateClinical`) | `protectedProcedure` | ✅ | ✅ | ✅ |
 | Demographics and billing saves (`patient.updateDemographics/updateBilling`) | `clericalProcedure` | ✅ | ❌ | ✅ |
+| Send an intake link, review a submission, accept or reject it (`intake.send/byId/accept/reject`) | `clericalProcedure` (byId also checks the request's office against the actor's) | ✅ | ❌ | ✅ |
+| An office's pending intakes (`intake.listPending`) | `clericalOfficeScopedProcedure` | own offices only | ❌ | own offices only |
+| Open and submit the self-service form (`intake.open/submit`) | `publicProcedure`, the single-use token is the credential (ADR 29) | the person with the link | the person with the link | the person with the link |
 | Patient activate/deactivate (`patient.setStatus`; no screen calls it since DIA-50, the column is kept unexposed) | `protectedProcedure` | ✅ | ✅ | ✅ |
 | Staff accounts: list, search, create, edit, enable/disable (`staffUsers.*`) | `adminProcedure` | ✅ | ❌ | ❌ |
 | Staff account delete (`staffUsers.delete`; confirmed in UI, never self) | `adminProcedure` | ✅ | ❌ | ❌ |
@@ -88,7 +91,8 @@ preview another role's view from the header switcher; no other role can.
 | Concern | File |
 | --- | --- |
 | Role vocabulary | `packages/contracts/src/staff-role.ts` |
-| Procedure kinds (`protected` / `clerical` / `admin` / `officeScoped`) | `apps/web/src/server/procedures.ts` |
+| Procedure kinds (`protected` / `clerical` / `admin` / `officeScoped` / `clericalOfficeScoped`) | `apps/web/src/server/procedures.ts` |
+| Intake tokens and queue | ADR 29 |
 | Record sections | ADR 28 |
 | Session + role page guards | `apps/web/src/server/guards.ts`, `apps/web/src/lib/guard-page.ts` |
 | Audit chain ordering | ADR 10 |

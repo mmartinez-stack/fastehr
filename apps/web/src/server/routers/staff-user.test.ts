@@ -55,6 +55,17 @@ function fakeDb(overrides: Partial<Db['staffUsers']> = {}): Db {
       delete: async () => JUNE,
       ...overrides,
     },
+    intakes: {
+      create: async () => {
+        throw new Error('not under test')
+      },
+      findById: async () => null,
+      findByTokenHash: async () => null,
+      submit: async () => null,
+      listPending: async () => [],
+      accept: async () => null,
+      reject: async () => null,
+    },
   }
 }
 
