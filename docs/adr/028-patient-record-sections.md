@@ -1,6 +1,6 @@
 # ADR 28 — The patient record is served and written by section
 
-**Status:** accepted, amended 2026-09-07 (three tabs; history and allergies out of scope)  
+**Status:** accepted, amended 2026-09-07 (three tabs; allergies out of scope)  
 **Applies to:** `packages/contracts/src/patient.ts` · `packages/db/src/repositories/patient.ts` · `apps/web/src/server/routers/patient.ts` · `apps/web/src/server/procedures.ts` · `apps/web/src/features/patients/patient-form.tsx` · `apps/web/src/features/patients/patient-tabs.ts`
 
 The Aug 31 stakeholder sync (DIA-52) split the patient record into tabs and
@@ -11,7 +11,8 @@ asked for that to be enforced server-side, not only by hiding tabs.
 **Amendment, 2026-09-07.** The record has exactly three tabs, the same on
 the create, edit, and intake screens and for every role, in one fixed order:
 **Medical** (first and default: vitals as feet plus inches, the medication
-line items, the primary care doctor), **Patient Info** (the demographics and
+line items, the primary care doctor, the medical-history checklist),
+**Patient Info** (the demographics and
 contact fields), **Billing** (the card block with its banner). A role decides
 only which of the three render — `patientTabsFor` in
 `apps/web/src/features/patients/patient-tabs.ts`, derived from the same
@@ -19,14 +20,17 @@ surfaces the navigation uses — never the layout; a role with one tab still
 gets a tab list. No field of one tab renders inside another; the chart
 header carries the patient's name and date of birth and nothing else.
 
-Medical history and allergies are **out of scope**. The Medical tab ends in a
-labelled placeholder that shows the legacy "medications and pertinent
-history" text (`historyOther`) read-only; no input writes that column, so a
-save of the Medical tab cannot touch it. The checklist and allergy list an
-earlier cut built are removed from the contract, the mapper, the repository,
-and the form. Their tables (`patient_conditions`, `patient_allergies`) stay
-in the schema, dormant: dropping them is a migration this amendment does not
-need, and the migration history stays additive.
+Medical history is a **checklist** of fourteen conditions, every item "No"
+until answered, a "Yes" opening when, who treats it, and whether it is
+medicated and with what. The clinic gave no list, so `PATIENT_CONDITIONS` is
+a working one; the stored key is a plain string, so changing the list is a
+contracts change, not a migration. Beneath the checklist the legacy
+"medications and pertinent history" text (`historyOther`) shows read-only;
+no input writes that column, so a save of the Medical tab cannot touch it.
+Allergies are **out of scope**: the allergy list an earlier cut built is
+removed from the contract, the mapper, the repository, and the form, and its
+table (`patient_allergies`) stays in the schema, dormant, since dropping it is
+a migration this amendment does not need.
 
 ## Decision
 
@@ -86,7 +90,6 @@ amendment they are exactly the three tabs.
 - Creating a patient is a front-desk task. A provider's new-patient page says
   so; a provider's `patient.create` is refused and audited.
 - The old combined "current medications and pertinent history" text stays
-  in `historyOther` (a column rename, no data moved), shown read-only in the
-  Medical tab's history placeholder until that section is built. Healthy
-  weight is gone: the column was dropped, and no schema, input, screen, or
-  report reads it.
+  in `historyOther` (a column rename, no data moved), shown read-only under
+  the Medical tab's checklist. Healthy weight is gone: the column was
+  dropped, and no schema, input, screen, or report reads it.

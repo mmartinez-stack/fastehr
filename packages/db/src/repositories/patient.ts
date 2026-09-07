@@ -48,9 +48,9 @@ export interface PatientRepository {
   create(input: CreatePatientInput): Promise<Patient>
   updateDemographics(input: UpdatePatientDemographicsInput): Promise<Patient | null>
   /**
-   * Replaces the medication list wholesale — the form submits the whole
-   * section. `historyOther` is not an input: it is read-only until the
-   * history section is built, and this write leaves it as it is.
+   * Replaces the medication list and the checklist wholesale — the form
+   * submits the whole section. `historyOther` is not an input: it is the
+   * legacy text, read-only, and this write leaves it as it is.
    */
   updateClinical(input: UpdatePatientClinicalInput): Promise<Patient | null>
   updateBilling(input: UpdatePatientBillingInput): Promise<Patient | null>
@@ -77,9 +77,10 @@ const ROSTER_ORDER = [
   { firstName: 'asc' as const },
 ]
 
-/** The medication list, in the order it was entered. */
+/** The child lists: medications in the order entered, the checklist by key. */
 const RECORD_INCLUDE = {
   medications: { orderBy: { position: 'asc' as const } },
+  conditions: { orderBy: { condition: 'asc' as const } },
 }
 
 /**
@@ -120,14 +121,23 @@ function clinicalScalars(input: Omit<UpdatePatientClinicalInput, 'id'>) {
   }
 }
 
-/** The medication list as nested creates; `position` is the order the form had them in. */
-function medicationRows(input: Omit<UpdatePatientClinicalInput, 'id'>) {
-  return input.medications.map((row, position) => ({
-    name: row.name,
-    dose: row.dose ?? null,
-    frequency: row.frequency ?? null,
-    position,
-  }))
+/** The child lists as nested creates; `position` is the order the form had the medications in. */
+function clinicalLists(input: Omit<UpdatePatientClinicalInput, 'id'>) {
+  return {
+    medications: input.medications.map((row, position) => ({
+      name: row.name,
+      dose: row.dose ?? null,
+      frequency: row.frequency ?? null,
+      position,
+    })),
+    conditions: input.conditions.map((row) => ({
+      condition: row.condition,
+      onset: row.onset ?? null,
+      treatedBy: row.treatedBy ?? null,
+      medicated: row.medicated,
+      medications: row.medications ?? null,
+    })),
+  }
 }
 
 function billingData(input: Omit<UpdatePatientBillingInput, 'id'>) {
@@ -253,12 +263,14 @@ export function createPatientRepository(getClient: () => PrismaClient): PatientR
     },
 
     async create(input) {
+      const lists = clinicalLists(input)
       const row = await getClient().patient.create({
         data: {
           ...demographicsData(input),
           ...clinicalScalars(input),
           ...billingData(input),
-          medications: { create: medicationRows(input) },
+          medications: { create: lists.medications },
+          conditions: { create: lists.conditions },
         },
         include: RECORD_INCLUDE,
       })
@@ -279,14 +291,16 @@ export function createPatientRepository(getClient: () => PrismaClient): PatientR
     async updateClinical(input) {
       const { id, ...rest } = input
       if (!(await exists(id))) return null
-      // One statement: the scalars and a delete-then-create of the list,
+      const lists = clinicalLists(rest)
+      // One statement: the scalars and a delete-then-create of each list,
       // atomic under Prisma's nested write. A partially replaced medication
       // list is exactly the kind of record that cannot be allowed to exist.
       const row = await getClient().patient.update({
         where: { id },
         data: {
           ...clinicalScalars(rest),
-          medications: { deleteMany: {}, create: medicationRows(rest) },
+          medications: { deleteMany: {}, create: lists.medications },
+          conditions: { deleteMany: {}, create: lists.conditions },
         },
         include: RECORD_INCLUDE,
       })

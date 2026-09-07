@@ -34,6 +34,7 @@ const row: PatientRecordRow = {
   createdAt: new Date('2026-01-02T09:30:00.000Z'),
   updatedAt: new Date('2026-01-02T09:30:00.000Z'),
   medications: [],
+  conditions: [],
 }
 
 const EXPECTED = {
@@ -56,6 +57,7 @@ const EXPECTED = {
   programType: null,
   heightInches: null,
   medications: [],
+  conditions: [],
   historyOther: null,
   pcpName: null,
   pcpAddress: null,
@@ -94,12 +96,23 @@ describe('toPatient', () => {
     expect(mapped.status).toBe('inactive')
   })
 
-  it('maps the medication list in the order it arrives, without its bookkeeping', () => {
+  it('maps the child lists in the order they arrive, without their bookkeeping', () => {
     const mapped = toPatient({
       ...row,
       medications: [
         { id: 'm2', patientId: row.id, name: 'Lisinopril', dose: '10 mg', frequency: 'daily', position: 1 },
         { id: 'm1', patientId: row.id, name: 'Metformin', dose: null, frequency: null, position: 0 },
+      ],
+      conditions: [
+        {
+          id: 'c1',
+          patientId: row.id,
+          condition: 'diabetes',
+          onset: '2019',
+          treatedBy: null,
+          medicated: true,
+          medications: 'Metformin',
+        },
       ],
     })
 
@@ -108,8 +121,12 @@ describe('toPatient', () => {
       { name: 'Lisinopril', dose: '10 mg', frequency: 'daily' },
       { name: 'Metformin', dose: null, frequency: null },
     ])
+    expect(mapped.conditions).toEqual([
+      { condition: 'diabetes', onset: '2019', treatedBy: null, medicated: true, medications: 'Metformin' },
+    ])
     expect(mapped.medications[0]).not.toHaveProperty('position')
     expect(mapped.medications[0]).not.toHaveProperty('patientId')
+    expect(mapped.conditions[0]).not.toHaveProperty('patientId')
   })
 
   it('carries the legacy history text through, read-only', () => {
@@ -128,6 +145,15 @@ describe('toPatient', () => {
     // Entity-side `office` is a plain string on purpose — a historical office
     // must read back rather than fail the parse (see contracts/patient.ts).
     expect(toPatient({ ...row, office: 'Van Nuys (closed)' }).office).toBe('Van Nuys (closed)')
+    // Likewise a checklist key from an older list.
+    expect(
+      toPatient({
+        ...row,
+        conditions: [
+          { id: 'c9', patientId: row.id, condition: 'gout', onset: null, treatedBy: null, medicated: false, medications: null },
+        ],
+      }).conditions[0]?.condition,
+    ).toBe('gout')
   })
 
   it('drops bookkeeping columns the contract does not declare', () => {
@@ -156,7 +182,7 @@ describe('toPatient', () => {
 
 describe('toPatientSummary', () => {
   it('maps a bare row to the roster shape — identity, office, last visit, phone', () => {
-    const { medications: _m, ...bare } = row
+    const { medications: _m, conditions: _c, ...bare } = row
     expect(toPatientSummary({ ...bare, phone: '9515550000', office: 'Sylmar' })).toEqual({
       id: row.id,
       firstName: 'Ada',
@@ -169,7 +195,7 @@ describe('toPatientSummary', () => {
   })
 
   it('never carries the clinical or card columns', () => {
-    const { medications: _m, ...bare } = row
+    const { medications: _m, conditions: _c, ...bare } = row
     const summary = toPatientSummary({ ...bare, creditCardNumber: '4111111111111111', historyOther: 'x' })
     expect(summary).not.toHaveProperty('creditCardNumber')
     expect(summary).not.toHaveProperty('historyOther')

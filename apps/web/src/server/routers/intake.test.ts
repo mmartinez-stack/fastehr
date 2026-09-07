@@ -29,6 +29,7 @@ const SUBMISSION: IntakeSubmission = {
   phoneFollowUpAllowed: true,
   heightInches: 64,
   medications: [],
+  conditions: [],
 }
 
 const REQUEST: IntakeRequest = {
@@ -74,6 +75,7 @@ const PATIENT: Patient = {
   programType: null,
   heightInches: 64,
   medications: [],
+  conditions: [],
   historyOther: null,
   pcpName: null,
   pcpAddress: null,
@@ -107,6 +109,7 @@ const FORM = {
   heightFeet: '5',
   heightInchesPart: '4',
   medications: [],
+  conditions: [],
   pcpName: '',
   pcpAddress: '',
   pcpPhone: '',

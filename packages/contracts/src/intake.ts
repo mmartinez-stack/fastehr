@@ -43,7 +43,7 @@ const optionalText = z.string().optional()
  * are absent, not null — this is JSON written from a parsed input, and the
  * patient create takes the same shape back. A Zod object strips what it does
  * not declare, so a submission stored under an earlier cut of the form (with
- * a history checklist) still reads back.
+ * an allergy list) still reads back.
  */
 export const intakeSubmissionSchema = z.object({
   firstName: z.string().min(1),
@@ -64,6 +64,18 @@ export const intakeSubmissionSchema = z.object({
   programType: optionalText,
   heightInches: z.number(),
   medications: z.array(z.object({ name: z.string(), dose: optionalText, frequency: optionalText })),
+  // Defaulted: a submission stored before the checklist returned reads back as all "No".
+  conditions: z
+    .array(
+      z.object({
+        condition: z.string(),
+        onset: optionalText,
+        treatedBy: optionalText,
+        medicated: z.boolean(),
+        medications: optionalText,
+      }),
+    )
+    .default([]),
   pcpName: optionalText,
   pcpAddress: optionalText,
   pcpPhone: optionalText,

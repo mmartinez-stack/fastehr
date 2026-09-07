@@ -23,6 +23,10 @@ const FORM = {
   heightFeet: '5',
   heightInchesPart: '4',
   medications: [{ name: 'Metformin', dose: '', frequency: '' }],
+  conditions: [
+    { condition: 'diabetes', present: true, onset: '2019', treatedBy: '', medicated: false, medications: '' },
+    { condition: 'thyroid', present: false, onset: '', treatedBy: '', medicated: false, medications: '' },
+  ],
   pcpName: '',
   pcpAddress: '',
   pcpPhone: '',
@@ -40,6 +44,7 @@ describe('submitIntakeInput', () => {
       phone: '9515550000',
       heightInches: 64,
       medications: [{ name: 'Metformin' }],
+      conditions: [{ condition: 'diabetes', onset: '2019', medicated: false }],
     })
     expect(submission).not.toHaveProperty('heightFeet')
     expect(submission).not.toHaveProperty('creditCardNumber')
@@ -67,10 +72,14 @@ describe('intakeSubmissionSchema', () => {
     expect(intakeSubmissionSchema.safeParse({ firstName: 'Ada' }).success).toBe(false)
   })
 
-  it('still reads a submission stored with the earlier history checklist, dropping it', () => {
+  it('still reads a submission stored under an earlier cut of the form', () => {
     const { token: _token, ...submission } = submitIntakeInput.parse(FORM)
-    const older = { ...submission, conditions: [{ condition: 'diabetes', medicated: false }], allergies: [], historyOther: 'x' }
-    expect(intakeSubmissionSchema.parse(older)).toEqual(submission)
+    // With an allergy list and history text: stripped.
+    const withAllergies = { ...submission, allergies: [], historyOther: 'x' }
+    expect(intakeSubmissionSchema.parse(withAllergies)).toEqual(submission)
+    // Without the checklist: every item "No".
+    const { conditions: _conditions, ...withoutChecklist } = submission
+    expect(intakeSubmissionSchema.parse(withoutChecklist)).toEqual({ ...submission, conditions: [] })
   })
 })
 

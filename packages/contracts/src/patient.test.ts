@@ -48,6 +48,11 @@ const SUBMITTED = {
     // The blank line the form adds to type into — not a row.
     { name: '', dose: '', frequency: '' },
   ],
+  conditions: [
+    { condition: 'diabetes', present: true, onset: '2019', treatedBy: 'Dr. Smith', medicated: true, medications: 'Metformin' },
+    // Answered "No", with stale detail text a hidden field kept in state.
+    { condition: 'thyroid', present: false, onset: 'stale', treatedBy: '', medicated: false, medications: '' },
+  ],
   pcpName: 'Dr. Jones',
   pcpAddress: '',
   pcpPhone: '951-555-0001',
@@ -75,6 +80,7 @@ const VALID = {
   programType: undefined,
   heightInches: 64.5,
   medications: [{ name: 'Metformin', dose: '500 mg', frequency: 'twice daily' }],
+  conditions: [{ condition: 'diabetes', onset: '2019', treatedBy: 'Dr. Smith', medicated: true, medications: 'Metformin' }],
   pcpName: 'Dr. Jones',
   pcpAddress: undefined,
   pcpPhone: '9515550001',
@@ -171,6 +177,25 @@ describe('createPatientInput', () => {
     expect(formatCardExpiry(null, null)).toBe('')
     // A half-stored expiry shows what there is; the input refuses it until completed.
     expect(formatCardExpiry('05', null)).toBe('05/')
+  })
+
+  it('stores only the checklist items answered Yes, without the hidden details of a No', () => {
+    expect(createPatientInput.parse(SUBMITTED).conditions).toEqual([
+      { condition: 'diabetes', onset: '2019', treatedBy: 'Dr. Smith', medicated: true, medications: 'Metformin' },
+    ])
+    // Every item "No" (the form's starting point) stores nothing.
+    expect(
+      createPatientInput.parse({ ...SUBMITTED, conditions: SUBMITTED.conditions.map((row) => ({ ...row, present: false })) })
+        .conditions,
+    ).toEqual([])
+    expect(codesFor({ ...SUBMITTED, conditions: [{ ...SUBMITTED.conditions[0], condition: 'hangnail' }] })).toEqual({
+      'conditions.0.condition': ['invalid_value'],
+    })
+    // The same item twice cannot be stored (unique per patient).
+    expect(
+      createPatientInput.safeParse({ ...SUBMITTED, conditions: [SUBMITTED.conditions[0], SUBMITTED.conditions[0]] })
+        .success,
+    ).toBe(false)
   })
 
   it('never writes the history text, and has no healthy weight', () => {

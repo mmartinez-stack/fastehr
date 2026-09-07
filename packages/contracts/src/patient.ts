@@ -20,10 +20,10 @@ import { officeSchema } from './office.ts'
  * three read sections are the three tabs; `demographics` is the Patient Info
  * tab's data, named for what it holds rather than for the tab.
  *
- * Medical history and allergies are out of scope for now: the legacy
- * combined "medications and pertinent history" text is kept on the entity as
- * `historyOther`, read-only, and no input writes it. The `patient_conditions`
- * and `patient_allergies` tables exist from an earlier cut and are dormant.
+ * Medical history is a checklist (`conditions`). Allergies are out of scope
+ * for now, and the legacy combined "medications and pertinent history" text
+ * is kept on the entity as `historyOther`, read-only, with no input writing
+ * it. The `patient_allergies` table exists from an earlier cut and is dormant.
  *
  * `createPatientInput` is deliberately not `patientSchema.omit(…)`: an input
  * schema normalizes (trims names, lowercases email, strips phone formatting)
@@ -109,6 +109,33 @@ export const PATIENT_PROGRAM_TYPES = [
 export const patientProgramTypeSchema = z.enum(PATIENT_PROGRAM_TYPES)
 export type PatientProgramType = z.infer<typeof patientProgramTypeSchema>
 
+/**
+ * The medical-history checklist: every item is asked, defaulting to "No",
+ * and a "Yes" opens when, who treats it, and whether it is medicated. The
+ * clinic gave no list of its own, so this is a working one — the common
+ * conditions a weight-management intake asks about — and the column stores
+ * the key as a plain string, so replacing an item is a change here, not a
+ * migration, and rows answered under an older list keep reading back.
+ */
+export const PATIENT_CONDITIONS = [
+  'hypertension',
+  'heart_disease',
+  'stroke',
+  'high_cholesterol',
+  'diabetes',
+  'thyroid',
+  'kidney_disease',
+  'liver_disease',
+  'sleep_apnea',
+  'asthma',
+  'seizures',
+  'glaucoma',
+  'depression_or_anxiety',
+  'pregnancy_or_breastfeeding',
+] as const
+export const patientConditionSchema = z.enum(PATIENT_CONDITIONS)
+export type PatientCondition = z.infer<typeof patientConditionSchema>
+
 /** One line of the medication list, as stored. */
 export const patientMedicationSchema = z.object({
   name: z.string().min(1),
@@ -116,6 +143,20 @@ export const patientMedicationSchema = z.object({
   frequency: z.string().nullable(),
 })
 export type PatientMedication = z.infer<typeof patientMedicationSchema>
+
+/**
+ * One checklist item the patient answered "Yes" to, as stored. Absence is
+ * "No". The key is a plain string on the entity (a row answered under an
+ * older list still reads back); the input constrains it to the list.
+ */
+export const patientConditionEntrySchema = z.object({
+  condition: z.string().min(1),
+  onset: z.string().nullable(),
+  treatedBy: z.string().nullable(),
+  medicated: z.boolean(),
+  medications: z.string().nullable(),
+})
+export type PatientConditionEntry = z.infer<typeof patientConditionEntrySchema>
 
 export const patientSchema = z.object({
   id: z.uuid(),
@@ -141,6 +182,7 @@ export const patientSchema = z.object({
   /** Total inches, as the legacy form captured it; the form shows feet and inches. */
   heightInches: z.number().nullable(),
   medications: z.array(patientMedicationSchema),
+  conditions: z.array(patientConditionEntrySchema),
   /**
    * The legacy `hx` ("current medications and pertinent history"), verbatim
    * for migrated records. Read-only: shown in the Medical tab's history
@@ -209,6 +251,7 @@ export type PatientDemographics = z.infer<typeof patientDemographicsSchema>
 export const patientClinicalSchema = patientSchema.pick({
   heightInches: true,
   medications: true,
+  conditions: true,
   historyOther: true,
   pcpName: true,
   pcpAddress: true,
@@ -334,6 +377,21 @@ const medicationRow = z.object({
   frequency: optionalText(50),
 })
 
+/**
+ * One checklist item as the form submits it: every item, with `present`
+ * false by default. Only the present ones are stored, and the details are
+ * dropped for an item answered "No" — a form that hides them keeps stale text
+ * in state, and that text must not be written.
+ */
+const conditionRow = z.object({
+  condition: patientConditionSchema,
+  present: z.boolean(),
+  onset: optionalText(100),
+  treatedBy: optionalText(100),
+  medicated: z.boolean(),
+  medications: optionalText(200),
+})
+
 /** Two-letter state/territory code, as the legacy state dropdown stored it. */
 const stateCode = z.string().trim().toUpperCase().pipe(z.string().regex(/^[A-Z]{2}$/))
 
@@ -375,8 +433,8 @@ export function formatCardExpiry(month: string | null, year: string | null): str
  * reactive validators where the field existed there: names, gender, height,
  * the full address, and phone are required; email, language, office,
  * referral provenance, and program are optional. The new sections
- * (medications, primary care doctor) are optional throughout — a patient
- * with nothing to list has an empty list.
+ * (medications, checklist, primary care doctor) are optional throughout — a
+ * patient with nothing to list has an empty list, a checklist all "No".
  *
  * `status` is not an input — a record is created active and changes state
  * only through `setPatientStatusInput`.
@@ -405,6 +463,10 @@ export const clinicalFields = {
   heightFeet,
   heightInchesPart,
   medications: droppingBlankRows(medicationRow, 50),
+  conditions: z
+    .array(conditionRow)
+    .max(PATIENT_CONDITIONS.length)
+    .refine((rows) => new Set(rows.map((row) => row.condition)).size === rows.length),
   pcpName: optionalText(100),
   pcpAddress: optionalText(200),
   pcpPhone: blankAsAbsent(normalizedPhone),
@@ -433,18 +495,23 @@ export function composeBilling<Fields extends { creditCardExpiry?: string | unde
 
 /**
  * The clinical section's shape after parsing: feet and inches composed into
- * the stored total.
+ * the stored total, the checklist reduced to the items answered "Yes".
  */
-export function composeClinical<Fields extends { heightFeet: string; heightInchesPart: string }>({
-  heightFeet,
-  heightInchesPart,
-  ...rest
-}: Fields) {
+export function composeClinical<
+  Fields extends {
+    heightFeet: string
+    heightInchesPart: string
+    conditions: z.infer<typeof conditionRow>[]
+  },
+>({ heightFeet, heightInchesPart, conditions, ...rest }: Fields) {
   return {
     ...rest,
     // Two decimals at most survive the regex, so the sum is exact enough;
     // rounding keeps 5 ft 4.1 in from storing as 64.10000000000001.
     heightInches: Math.round((Number(heightFeet) * 12 + Number(heightInchesPart)) * 100) / 100,
+    conditions: conditions
+      .filter((row) => row.present)
+      .map(({ present: _present, ...row }) => row),
   }
 }
 

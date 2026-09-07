@@ -16,6 +16,7 @@ describe("height round trip", () => {
       heightFeet: "5",
       heightInchesPart: "4",
       medications: [],
+      conditions: [],
       pcpName: "",
       pcpAddress: "",
       pcpPhone: "",

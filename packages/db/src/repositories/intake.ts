@@ -47,6 +47,7 @@ export interface IntakeRepository {
 
 const RECORD_INCLUDE = {
   medications: { orderBy: { position: 'asc' as const } },
+  conditions: { orderBy: { condition: 'asc' as const } },
 }
 
 export function createIntakeRepository(getClient: () => PrismaClient): IntakeRepository {
@@ -109,7 +110,7 @@ export function createIntakeRepository(getClient: () => PrismaClient): IntakeRep
       class NotPending extends Error {}
       try {
         return await client.$transaction(async (tx) => {
-          const { medications, ...scalars } = input.patient
+          const { medications, conditions, ...scalars } = input.patient
           const patientRow = await tx.patient.create({
             data: {
               firstName: scalars.firstName,
@@ -142,6 +143,15 @@ export function createIntakeRepository(getClient: () => PrismaClient): IntakeRep
                   dose: row.dose ?? null,
                   frequency: row.frequency ?? null,
                   position,
+                })),
+              },
+              conditions: {
+                create: conditions.map((row) => ({
+                  condition: row.condition,
+                  onset: row.onset ?? null,
+                  treatedBy: row.treatedBy ?? null,
+                  medicated: row.medicated,
+                  medications: row.medications ?? null,
                 })),
               },
             },

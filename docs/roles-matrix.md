@@ -37,10 +37,10 @@ resolution re-checks `isActive` on every call.
 | Capability | Procedure kind | admin | provider | frontdesk |
 | --- | --- | :-: | :-: | :-: |
 | Patient roster: recent, search, type-ahead, referred-by picker (`patient.recent/search/suggest/searchByName`; the phone column is nulled server-side for a provider) | `protectedProcedure` | ✅ | ✅ (no phone) | ✅ |
-| Patient record, **Medical** tab: header plus vitals, medications, primary care doctor, and the read-only history text (`patient.byId`) | `protectedProcedure` | ✅ | ✅ | ✅ |
+| Patient record, **Medical** tab: header plus vitals, medications, primary care doctor, the history checklist, and the read-only legacy history text (`patient.byId`) | `protectedProcedure` | ✅ | ✅ | ✅ |
 | Patient record, **Patient Info** tab (`patient.demographics`) and **Billing** tab (`patient.billing`) reads | `clericalProcedure` | ✅ | ❌ | ✅ |
 | Patient create (`patient.create`) | `clericalProcedure` | ✅ | ❌ | ✅ |
-| Medical tab save: vitals, medications, primary care doctor; never the history text (`patient.updateClinical`) | `protectedProcedure` | ✅ | ✅ | ✅ |
+| Medical tab save: vitals, medications, checklist, primary care doctor; never the legacy history text (`patient.updateClinical`) | `protectedProcedure` | ✅ | ✅ | ✅ |
 | Patient Info and Billing tab saves (`patient.updateDemographics/updateBilling`) | `clericalProcedure` | ✅ | ❌ | ✅ |
 | Send an intake link, review a submission, accept or reject it (`intake.send/byId/accept/reject`) | `clericalProcedure` (byId also checks the request's office against the actor's) | ✅ | ❌ | ✅ |
 | An office's pending intakes (`intake.listPending`) | `clericalOfficeScopedProcedure` | own offices only | ❌ | own offices only |

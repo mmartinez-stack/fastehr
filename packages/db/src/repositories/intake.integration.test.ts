@@ -25,6 +25,7 @@ const SUBMISSION: IntakeSubmission = {
   phoneFollowUpAllowed: true,
   heightInches: 64,
   medications: [{ name: 'Metformin', dose: '500 mg' }],
+  conditions: [{ condition: 'diabetes', onset: '2019', medicated: true, medications: 'Metformin' }],
 }
 
 const PATIENT_INPUT: CreatePatientInput = {
@@ -35,6 +36,7 @@ const PATIENT_INPUT: CreatePatientInput = {
   referredByPatientId: undefined,
   programType: undefined,
   medications: [{ name: 'Metformin', dose: '500 mg', frequency: undefined }],
+  conditions: [{ condition: 'diabetes', onset: '2019', treatedBy: undefined, medicated: true, medications: 'Metformin' }],
   pcpName: undefined,
   pcpAddress: undefined,
   pcpPhone: undefined,
@@ -115,6 +117,7 @@ describe('intake repository', () => {
       office: 'PennProgram',
       heightInches: 64,
       medications: [{ name: 'Metformin', dose: '500 mg', frequency: null }],
+      conditions: [{ condition: 'diabetes', onset: '2019', treatedBy: null, medicated: true, medications: 'Metformin' }],
       historyOther: null,
       creditCardNumber: null,
     })

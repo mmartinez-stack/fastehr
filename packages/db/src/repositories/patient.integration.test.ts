@@ -55,6 +55,10 @@ const GRACE_INPUT: CreatePatientInput = {
     { name: 'Metformin', dose: '500 mg', frequency: 'twice daily' },
     { name: 'Lisinopril', dose: undefined, frequency: undefined },
   ],
+  conditions: [
+    { condition: 'diabetes', onset: '2019', treatedBy: 'Dr. Smith', medicated: true, medications: 'Metformin' },
+    { condition: 'hypertension', onset: undefined, treatedBy: undefined, medicated: false, medications: undefined },
+  ],
   pcpName: 'Dr. Jones',
   pcpAddress: undefined,
   pcpPhone: '9515550001',
@@ -94,6 +98,7 @@ describe('patient repository', () => {
       programType: null,
       heightInches: null,
       medications: [],
+      conditions: [],
       historyOther: null,
       pcpName: null,
       pcpAddress: null,
@@ -199,6 +204,10 @@ describe('patient repository', () => {
         { name: 'Metformin', dose: '500 mg', frequency: 'twice daily' },
         { name: 'Lisinopril', dose: null, frequency: null },
       ],
+      conditions: [
+        { condition: 'diabetes', onset: '2019', treatedBy: 'Dr. Smith', medicated: true, medications: 'Metformin' },
+        { condition: 'hypertension', onset: null, treatedBy: null, medicated: false, medications: null },
+      ],
       historyOther: null,
       pcpName: 'Dr. Jones',
       pcpAddress: null,
@@ -260,14 +269,15 @@ describe('patient repository', () => {
     expect(await db.patients.findById(created.id)).toEqual(updated)
   })
 
-  it('replaces the medication list wholesale and leaves the rest alone', async () => {
+  it('replaces the clinical lists wholesale and leaves the rest alone', async () => {
     const created = await db.patients.create(GRACE_INPUT)
 
-    // A removed row (Metformin) stays removed; a changed one is the new row.
+    // A removed row (Metformin, diabetes) stays removed; a changed one is the new row.
     const updated = await db.patients.updateClinical({
       id: created.id,
       heightInches: 61.5,
       medications: [{ name: 'Lisinopril', dose: '10 mg', frequency: 'daily' }],
+      conditions: [{ condition: 'hypertension', onset: '2021', treatedBy: undefined, medicated: true, medications: 'Lisinopril' }],
       pcpName: 'Dr. Lee',
       pcpAddress: '2 Clinic Rd',
       pcpPhone: undefined,
@@ -277,25 +287,31 @@ describe('patient repository', () => {
       ...created,
       heightInches: 61.5,
       medications: [{ name: 'Lisinopril', dose: '10 mg', frequency: 'daily' }],
+      conditions: [{ condition: 'hypertension', onset: '2021', treatedBy: null, medicated: true, medications: 'Lisinopril' }],
       pcpName: 'Dr. Lee',
       pcpAddress: '2 Clinic Rd',
       pcpPhone: null,
     })
-    // The old rows are gone, not orphaned: one medication row in the table.
+    // The old rows are gone, not orphaned: one row of each in the tables.
     expect(await prisma.patientMedication.count()).toBe(1)
+    expect(await prisma.patientCondition.count()).toBe(1)
     expect(await db.patients.findById(created.id)).toEqual(updated)
 
-    // Removing the last row leaves an empty list, not a stale one.
+    // Removing the last row leaves an empty list, not a stale one; a checklist
+    // answered all "No" likewise stores nothing.
     const emptied = await db.patients.updateClinical({
       id: created.id,
       heightInches: 61.5,
       medications: [],
+      conditions: [],
       pcpName: 'Dr. Lee',
       pcpAddress: '2 Clinic Rd',
       pcpPhone: undefined,
     })
     expect(emptied?.medications).toEqual([])
+    expect(emptied?.conditions).toEqual([])
     expect(await prisma.patientMedication.count()).toBe(0)
+    expect(await prisma.patientCondition.count()).toBe(0)
   })
 
   it('leaves the legacy history text untouched by a clinical save', async () => {
@@ -307,6 +323,7 @@ describe('patient repository', () => {
       id: ADA.id,
       heightInches: 64,
       medications: [],
+      conditions: [],
       pcpName: undefined,
       pcpAddress: undefined,
       pcpPhone: undefined,
