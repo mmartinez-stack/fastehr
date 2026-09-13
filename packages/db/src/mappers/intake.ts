@@ -25,5 +25,17 @@ export function toIntakeRequest(row: IntakeRequestRow): IntakeRequest {
     createdAt: row.createdAt.toISOString(),
     patientId: row.patientId,
     submission: row.submission,
+    consent:
+      row.consentSignature === null ||
+      row.consentSignedAt === null ||
+      row.consentVersion === null ||
+      row.consentLanguage === null
+        ? null
+        : {
+            signature: row.consentSignature,
+            signedAt: row.consentSignedAt.toISOString(),
+            version: row.consentVersion,
+            language: row.consentLanguage,
+          },
   })
 }

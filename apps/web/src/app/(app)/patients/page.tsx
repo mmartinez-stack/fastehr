@@ -135,6 +135,9 @@ function formatSubmitted(iso: string): string {
   })
 }
 
+/** The legacy queue showed when to call; the person's answer, in their words' order. */
+const CONTACT_TIME_LABEL = { morning: "Morning", afternoon: "Afternoon", evening: "Evening" } as const
+
 /** The office's queue of submitted intakes, each opening the review screen. */
 function PendingIntakes() {
   const { office } = useOffice()
@@ -151,6 +154,7 @@ function PendingIntakes() {
               <TableHead>Last name</TableHead>
               <TableHead>Phone</TableHead>
               <TableHead>Language</TableHead>
+              <TableHead>Best time to call</TableHead>
               <TableHead>Submitted</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -163,6 +167,11 @@ function PendingIntakes() {
                 <TableCell className="text-muted-foreground">{formatPhone(request.phone)}</TableCell>
                 <TableCell>
                   {request.language === null ? "-" : request.language === "english" ? "English" : "Spanish"}
+                </TableCell>
+                <TableCell>
+                  {request.submission?.preferredContactTime === undefined
+                    ? "-"
+                    : CONTACT_TIME_LABEL[request.submission.preferredContactTime]}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {request.submittedAt === null ? "-" : formatSubmitted(request.submittedAt)}
@@ -185,19 +194,19 @@ function PendingIntakes() {
             ))}
             {pending.isPending ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                   Loading intakes…
                 </TableCell>
               </TableRow>
             ) : pending.isError ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                   The queue could not be loaded. Try again.
                 </TableCell>
               </TableRow>
             ) : rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                   No intakes are waiting for review at {office}.
                 </TableCell>
               </TableRow>

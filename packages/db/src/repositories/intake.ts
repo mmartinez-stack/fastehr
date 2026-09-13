@@ -32,8 +32,15 @@ export interface IntakeRepository {
   }): Promise<IntakeRequest>
   findById(id: string): Promise<IntakeRequest | null>
   findByTokenHash(tokenHash: string): Promise<IntakeRequest | null>
-  /** Records the submission on a request still in `sent`; null if it was not. */
-  submit(input: { tokenHash: string; submission: IntakeSubmission }): Promise<IntakeRequest | null>
+  /**
+   * Records the submission and the signed consent on a request still in
+   * `sent`; null if it was not. The consent's time is the database write.
+   */
+  submit(input: {
+    tokenHash: string
+    submission: IntakeSubmission
+    consent: { signature: string; version: string; language: PatientLanguage }
+  }): Promise<IntakeRequest | null>
   /** The office's queue: submitted, awaiting review, oldest first. */
   listPending(office: Office): Promise<IntakeRequest[]>
   /** Creates the patient and marks the request accepted, atomically; null if the request was not `submitted`. */
@@ -79,13 +86,19 @@ export function createIntakeRepository(getClient: () => PrismaClient): IntakeRep
 
     async submit(input) {
       const client = getClient()
+      // One instant for both: the consent was signed by the act of submitting.
+      const now = new Date()
       const { count } = await client.intakeRequest.updateMany({
         where: { tokenHash: input.tokenHash, status: 'sent' },
         data: {
           status: 'submitted',
           office: input.submission.office,
           submission: input.submission,
-          submittedAt: new Date(),
+          submittedAt: now,
+          consentSignature: input.consent.signature,
+          consentSignedAt: now,
+          consentVersion: input.consent.version,
+          consentLanguage: input.consent.language,
         },
       })
       if (count === 0) return null

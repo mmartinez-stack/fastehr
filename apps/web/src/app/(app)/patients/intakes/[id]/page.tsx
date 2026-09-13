@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, Check, X } from "lucide-react"
+import { ArrowLeft, Check, FileSignature, X } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -16,6 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty"
 import { PageHeader } from "@/components/page-header"
@@ -30,7 +31,23 @@ import { trpc } from "@/trpc/client"
  * becomes the patient record and the page moves to it — or rejects it. Both
  * take the request out of the queue. Billing is absent, as it was on the
  * person's form; it is entered on the record afterwards.
+ *
+ * Two things the person gave are not form fields and show above it: when
+ * they would like to be called, and the consent they signed (name, date,
+ * language). Both stay on the request (ADR 29 as amended).
  */
+
+const CONTACT_TIME_LABEL = { morning: "Morning", afternoon: "Afternoon", evening: "Evening" } as const
+
+function formatSigned(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
 
 export default function ReviewIntakePage() {
   const params = useParams<{ id: string }>()
@@ -116,6 +133,22 @@ export default function ReviewIntakePage() {
           description={`Pending intake for ${pending.office ?? "an office"}. Review, edit if needed, then accept or reject.`}
         />
       </div>
+
+      <Alert className="mb-4">
+        <FileSignature />
+        <AlertTitle>
+          {pending.consent === null
+            ? "No consent on file for this submission"
+            : `Consent signed by ${pending.consent.signature} on ${formatSigned(pending.consent.signedAt)} (${pending.consent.language === "spanish" ? "Spanish" : "English"})`}
+        </AlertTitle>
+        <AlertDescription>
+          Best time to call:{" "}
+          {submission.preferredContactTime === undefined
+            ? "not given"
+            : CONTACT_TIME_LABEL[submission.preferredContactTime]}
+          . Submitted from the self-service form; the office was the person&apos;s choice.
+        </AlertDescription>
+      </Alert>
 
       <PatientForm
         title="Submitted information"

@@ -1,96 +1,109 @@
 "use client"
 
 import * as React from "react"
-import { CheckCircle2, HeartPulse, Send } from "lucide-react"
-import type { PatientOffice } from "@fastehr/contracts"
+import { CheckCircle2, HeartPulse } from "lucide-react"
+import type { PatientLanguage } from "@fastehr/contracts"
 
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty"
-import { EMPTY_PATIENT_FORM, PatientForm } from "@/features/patients/patient-form"
-import { INTAKE_TABS } from "@/features/patients/patient-tabs"
 import { trpc } from "@/trpc/client"
+import { INTAKE_COPY } from "./intake-copy.ts"
+import { emptyIntakeValues, PatientIntakeForm } from "./patient-intake-form.tsx"
 
 /**
- * The person's side of the intake: the same tabbed form the front desk
- * uses, minus Billing (no card details are ever asked for here), with the
- * office required because it decides which queue the submission lands in.
- * The name arrives prefilled from the request; everything else is theirs to
- * type. One submit, then a thank-you — the link is spent.
+ * The page a texted link opens: the form, or the reasons it cannot be shown
+ * (still loading, a dead link) and what follows it (the thank-you). The
+ * language starts as the one the front desk chose for the text and the
+ * person can switch at the top; the form re-renders in place with its
+ * values kept. A dead link has no language to go by, so that state speaks
+ * both.
+ *
+ * Narrow by design: this is a phone surface, and on a larger screen a form
+ * column stays readable rather than stretching (the staff app's full-width
+ * rule is for the staff app; ADR 29 as amended).
  */
-
 export function IntakeClient({ token }: { token: string }) {
   const invite = trpc.intake.open.useQuery({ token }, { retry: false })
-  const submit = trpc.intake.submit.useMutation()
+  const [language, setLanguage] = React.useState<PatientLanguage | null>(null)
   const [done, setDone] = React.useState(false)
 
+  const current: PatientLanguage = language ?? invite.data?.language ?? "english"
+  const copy = INTAKE_COPY[current]
+
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-6">
-      <header className="flex items-center gap-2">
-        <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <HeartPulse className="size-5" />
-        </span>
-        <span className="text-lg font-semibold tracking-tight">Fastehr</span>
+    <main className="mx-auto flex w-full max-w-xl flex-col gap-4 px-4 pb-6 pt-4">
+      <header className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <HeartPulse className="size-5" />
+          </span>
+          <span className="text-lg font-semibold tracking-tight">Fastehr</span>
+        </div>
+        {invite.isSuccess && !done ? (
+          <div className="flex gap-1" role="group" aria-label="Language / Idioma">
+            <LanguageButton active={current === "english"} onClick={() => setLanguage("english")}>
+              English
+            </LanguageButton>
+            <LanguageButton active={current === "spanish"} onClick={() => setLanguage("spanish")}>
+              Español
+            </LanguageButton>
+          </div>
+        ) : null}
       </header>
 
       {invite.isPending ? (
-        <p className="py-8 text-center text-muted-foreground">Opening your form…</p>
+        <p className="py-8 text-center text-muted-foreground">
+          {INTAKE_COPY.english.page.opening} / {INTAKE_COPY.spanish.page.opening}
+        </p>
       ) : invite.isError || invite.data === undefined ? (
         <Empty>
-          <EmptyTitle>This link is no longer valid</EmptyTitle>
-          <EmptyDescription>
-            It may have expired or already been used. Please ask the clinic to send you a new one.
-          </EmptyDescription>
+          <EmptyTitle>{INTAKE_COPY.english.page.invalidTitle}</EmptyTitle>
+          <EmptyDescription>{INTAKE_COPY.english.page.invalidDescription}</EmptyDescription>
+          <EmptyTitle className="mt-4">{INTAKE_COPY.spanish.page.invalidTitle}</EmptyTitle>
+          <EmptyDescription>{INTAKE_COPY.spanish.page.invalidDescription}</EmptyDescription>
         </Empty>
       ) : done ? (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <CheckCircle2 className="size-5 text-primary" />
-              Thank you, {invite.data.firstName}
+              {copy.page.doneTitle(invite.data.firstName)}
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Your information has been sent to the clinic. The front desk will review it before your
-            visit. You can close this page.
-          </CardContent>
+          <CardContent className="text-sm text-muted-foreground">{copy.page.doneDescription}</CardContent>
         </Card>
       ) : (
         <>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Welcome, {invite.data.firstName}</h1>
-            <p className="text-sm text-muted-foreground">
-              Please fill in each tab and choose the office you will visit, then send the form.
-              Fields marked with * are required.
-            </p>
+          <div className="flex flex-col gap-1">
+            <h1 className="text-2xl font-semibold tracking-tight">{copy.page.welcome(invite.data.firstName)}</h1>
+            <p className="text-sm text-muted-foreground">{copy.page.intro}</p>
+            <p className="text-sm text-muted-foreground">{copy.page.requiredHint}</p>
           </div>
-          <PatientForm
-            title="Your information"
-            sections={INTAKE_TABS}
-            defaultValues={{
-              ...EMPTY_PATIENT_FORM,
-              firstName: invite.data.firstName,
-              lastName: invite.data.lastName,
-              language: invite.data.language ?? "",
-            }}
-            submit={async (value) => {
-              // The office is required here and the schema refuses anything
-              // outside the list; the narrowing only names what it accepts.
-              await submit.mutateAsync({ ...value, token, office: value.office as PatientOffice })
-              setDone(true)
-            }}
-            submitLabel={
-              <>
-                <Send data-icon="inline-start" />
-                Send to the clinic
-              </>
-            }
-            submittingLabel="Sending…"
-            saved={done}
-            allowReferralPicker={false}
-            officeRequired
+          <PatientIntakeForm
+            token={token}
+            language={current}
+            defaultValues={emptyIntakeValues(invite.data.firstName, invite.data.lastName)}
+            onDone={() => setDone(true)}
           />
         </>
       )}
     </main>
+  )
+}
+
+function LanguageButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <Button type="button" size="sm" variant={active ? "default" : "outline"} aria-pressed={active} onClick={onClick}>
+      {children}
+    </Button>
   )
 }

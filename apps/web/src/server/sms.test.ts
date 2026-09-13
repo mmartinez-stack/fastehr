@@ -7,8 +7,9 @@ describe('the console transport', () => {
   it('prints the body and only the last four digits of the number', async () => {
     const info = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-    await consoleSmsTransport.send({ to: '9515550000', body: 'Hi Ada, your link: https://x/intake/abc' })
+    const outcome = await consoleSmsTransport.send({ to: '9515550000', body: 'Hi Ada, your link: https://x/intake/abc' })
 
+    expect(outcome).toBe('logged')
     const line = String(info.mock.calls[0]?.[0])
     expect(line).toContain('https://x/intake/abc')
     expect(line).toContain('***-0000')
@@ -26,7 +27,7 @@ describe('the Twilio transport', () => {
       fetch: fetchMock as unknown as typeof fetch,
     })
 
-    await transport.send({ to: '9515550000', body: 'hello' })
+    expect(await transport.send({ to: '9515550000', body: 'hello' })).toBe('delivered')
 
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe('https://api.twilio.com/2010-04-01/Accounts/ACxxx/Messages.json')
@@ -56,7 +57,7 @@ describe('choosing from the environment', () => {
   it('falls back to the console when no Twilio variable is set', async () => {
     const info = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-    await smsTransportFromEnv({}).send({ to: '9515550000', body: 'x' })
+    expect(await smsTransportFromEnv({}).send({ to: '9515550000', body: 'x' })).toBe('logged')
 
     expect(info).toHaveBeenCalled()
   })

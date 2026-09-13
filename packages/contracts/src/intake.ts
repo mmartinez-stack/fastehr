@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { INTAKE_CONSENT_VERSION, signatureMatchesName } from './intake-consent.ts'
 import { officeSchema } from './office.ts'
 import {
   clinicalFields,
@@ -10,7 +11,7 @@ import {
 } from './patient.ts'
 
 /**
- * Self-service intake (DIA-72, ADR 29).
+ * Self-service intake (DIA-72, ADR 29 as amended).
  *
  * The front desk texts a person a link; the person fills the patient form on
  * their phone and picks the office they will visit; the submission waits in
@@ -24,15 +25,29 @@ import {
  * The submission is stored as the *normalized* form (the same shape
  * `createPatientInput` emits, minus billing), so accepting it is one patient
  * create with nothing to reinterpret, and the review screen prefills from it
- * the way the edit screen prefills from a record.
+ * the way the edit screen prefills from a record. Two things the person
+ * gives are not patient-record fields and stay with the request: when they
+ * would like to be called (`preferredContactTime`, kept in the submission
+ * for the queue), and the treatment consent they signed (recorded on the
+ * request row, for DIA-56 to take over).
  */
 
 export const INTAKE_STATUSES = ['sent', 'submitted', 'accepted', 'rejected'] as const
 export const intakeStatusSchema = z.enum(INTAKE_STATUSES)
 export type IntakeStatus = z.infer<typeof intakeStatusSchema>
 
-/** How long a texted link works. A week covers "I'll do it at home tonight" with room to spare. */
-export const INTAKE_LINK_TTL_DAYS = 7
+/**
+ * How long a texted link works. Two days: the person is expected to fill
+ * the form before the visit the link was sent for, and a shorter window
+ * limits how long a leaked link is worth anything (the Sep 13 decision,
+ * down from a week).
+ */
+export const INTAKE_LINK_TTL_HOURS = 48
+
+/** When the person would like the clinic to call: the legacy intake's three options. */
+export const INTAKE_CONTACT_TIMES = ['morning', 'afternoon', 'evening'] as const
+export const intakeContactTimeSchema = z.enum(INTAKE_CONTACT_TIMES)
+export type IntakeContactTime = z.infer<typeof intakeContactTimeSchema>
 
 const optionalText = z.string().optional()
 
@@ -59,6 +74,8 @@ export const intakeSubmissionSchema = z.object({
   addressZip: z.string(),
   phone: z.string().regex(/^\d{10}$/),
   phoneFollowUpAllowed: z.boolean(),
+  /** Optional on read: a submission stored before the question was asked has no answer. */
+  preferredContactTime: intakeContactTimeSchema.optional(),
   referralSource: optionalText,
   referredByPatientId: optionalText,
   programType: optionalText,
@@ -82,6 +99,19 @@ export const intakeSubmissionSchema = z.object({
 })
 export type IntakeSubmission = z.infer<typeof intakeSubmissionSchema>
 
+/**
+ * The consent as recorded on the request: who signed (the typed name), when
+ * (server time, at submission), which text (its version key) and in which
+ * language it was shown. The text itself is looked up by version.
+ */
+export const intakeConsentSchema = z.object({
+  signature: z.string().min(1),
+  signedAt: z.iso.datetime(),
+  version: z.string().min(1),
+  language: patientLanguageSchema,
+})
+export type IntakeConsent = z.infer<typeof intakeConsentSchema>
+
 /** The request as the front desk sees it in the queue. The token hash never leaves the database. */
 export const intakeRequestSchema = z.object({
   id: z.uuid(),
@@ -98,8 +128,22 @@ export const intakeRequestSchema = z.object({
   /** The record the submission became, once accepted. */
   patientId: z.uuid().nullable(),
   submission: intakeSubmissionSchema.nullable(),
+  /** Null until the person submits; a submission always carries one. */
+  consent: intakeConsentSchema.nullable(),
 })
 export type IntakeRequest = z.infer<typeof intakeRequestSchema>
+
+/**
+ * What `intake.send` answers: the request, and the link **only when the
+ * message was not delivered** — the console transport, in an environment
+ * without text messaging — so a developer or tester can open it without
+ * reading the server log. With messaging configured the link is null: the
+ * token is in the person's text and nowhere else.
+ */
+export interface SendIntakeResult {
+  request: IntakeRequest
+  link: string | null
+}
 
 /**
  * What the public page learns from a valid token: whose form this is (the
@@ -123,10 +167,35 @@ export type OpenIntakeInput = z.infer<typeof openIntakeInput>
 /**
  * The person's submission: every demographics and clinical field, with the
  * office **required** (it decides the queue) — on the staff form it is
- * optional. No billing: the self-service form has no Billing tab.
+ * optional — plus when to call them and the signed consent. No billing: the
+ * self-service form has no Billing tab.
+ *
+ * The consent is three fields, all required: the acknowledgement box, the
+ * version of the text the page showed (refused unless current, so a form
+ * left open across a wording change cannot sign the old one), and the
+ * typed signature, which must be the person's own name as entered above
+ * (issue code `custom` on `consentSignature`).
  */
 export const submitIntakeInput = z
-  .object({ token, ...demographicsFields, ...clinicalFields, office: officeSchema })
+  .object({
+    token,
+    ...demographicsFields,
+    ...clinicalFields,
+    office: officeSchema,
+    preferredContactTime: intakeContactTimeSchema,
+    consentAcknowledged: z.literal(true),
+    consentVersion: z.literal(INTAKE_CONSENT_VERSION),
+    consentSignature: z.string().trim().min(1).max(150),
+  })
+  .superRefine((value, ctx) => {
+    // An empty signature already failed `min(1)`; one code per mistake.
+    if (
+      value.consentSignature !== '' &&
+      !signatureMatchesName(value.consentSignature, value.firstName, value.lastName)
+    ) {
+      ctx.addIssue({ code: 'custom', path: ['consentSignature'] })
+    }
+  })
   .transform(composeClinical)
 export type SubmitIntakeInput = z.infer<typeof submitIntakeInput>
 
@@ -137,7 +206,8 @@ export type IntakeByIdInput = z.infer<typeof intakeByIdInput>
  * Accepting is the front desk re-submitting the reviewed form — edits
  * included — so the patient is created from what the reviewer saw, not from
  * what the person typed. Billing is absent here too; it is entered on the
- * record afterwards.
+ * record afterwards. The consent and contact time are not re-submitted:
+ * they are the person's, recorded once, and stay on the request.
  */
 export const acceptIntakeInput = z
   .object({ id: z.uuid(), ...demographicsFields, ...clinicalFields })

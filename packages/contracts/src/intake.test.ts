@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { INTAKE_CONSENT_VERSION, signatureMatchesName } from './intake-consent.ts'
 import { acceptIntakeInput, intakeSubmissionSchema, submitIntakeInput } from './intake.ts'
 
 /** The raw form a phone submits, plus the token from the link. */
@@ -17,6 +18,7 @@ const FORM = {
   addressZip: '91101',
   phone: '(951) 555-0000',
   phoneFollowUpAllowed: true,
+  preferredContactTime: 'morning',
   referralSource: '',
   referredByPatientId: '',
   programType: '',
@@ -30,6 +32,21 @@ const FORM = {
   pcpName: '',
   pcpAddress: '',
   pcpPhone: '',
+  consentAcknowledged: true,
+  consentVersion: INTAKE_CONSENT_VERSION,
+  consentSignature: 'ada lovelace',
+}
+
+/** The stored submission is the form minus the token and the consent fields. */
+function submissionOf(form: typeof FORM) {
+  const {
+    token: _token,
+    consentAcknowledged: _acknowledged,
+    consentVersion: _version,
+    consentSignature: _signature,
+    ...submission
+  } = submitIntakeInput.parse(form)
+  return submission
 }
 
 describe('submitIntakeInput', () => {
@@ -42,9 +59,11 @@ describe('submitIntakeInput', () => {
       office: 'PennProgram',
       addressState: 'CA',
       phone: '9515550000',
+      preferredContactTime: 'morning',
       heightInches: 64,
       medications: [{ name: 'Metformin' }],
       conditions: [{ condition: 'diabetes', onset: '2019', medicated: false }],
+      consentSignature: 'ada lovelace',
     })
     expect(submission).not.toHaveProperty('heightFeet')
     expect(submission).not.toHaveProperty('creditCardNumber')
@@ -55,14 +74,56 @@ describe('submitIntakeInput', () => {
     expect(submitIntakeInput.safeParse({ ...FORM, office: 'Fresno' }).success).toBe(false)
   })
 
+  it('requires a preferred contact time from the list', () => {
+    expect(submitIntakeInput.safeParse({ ...FORM, preferredContactTime: '' }).success).toBe(false)
+    expect(submitIntakeInput.safeParse({ ...FORM, preferredContactTime: 'night' }).success).toBe(false)
+  })
+
   it('refuses a token that is too short to be one', () => {
     expect(submitIntakeInput.safeParse({ ...FORM, token: 'abc' }).success).toBe(false)
+  })
+
+  describe('the consent', () => {
+    const codesFor = (form: unknown, field: string) => {
+      const result = submitIntakeInput.safeParse(form)
+      if (result.success) return []
+      return result.error.issues.filter((issue) => issue.path.join('.') === field).map((issue) => issue.code)
+    }
+
+    it('must be acknowledged', () => {
+      expect(codesFor({ ...FORM, consentAcknowledged: false }, 'consentAcknowledged')).toEqual(['invalid_value'])
+    })
+
+    it('must be signed against the current text, not an older one', () => {
+      expect(codesFor({ ...FORM, consentVersion: 'telehealth-treatment-consent/0' }, 'consentVersion')).toEqual([
+        'invalid_value',
+      ])
+    })
+
+    it('must be signed with the person’s own name, as entered on the form', () => {
+      expect(codesFor({ ...FORM, consentSignature: '' }, 'consentSignature')).toEqual(['too_small'])
+      expect(codesFor({ ...FORM, consentSignature: 'A. Lovelace' }, 'consentSignature')).toEqual(['custom'])
+      // Case, accents, and spacing are not part of a name.
+      expect(submitIntakeInput.safeParse({ ...FORM, consentSignature: '  ADA   Lovelace ' }).success).toBe(true)
+      expect(
+        submitIntakeInput.safeParse({ ...FORM, firstName: 'José', lastName: 'López', consentSignature: 'jose lopez' })
+          .success,
+      ).toBe(true)
+    })
+  })
+})
+
+describe('signatureMatchesName', () => {
+  it('folds case, accents, and whitespace on both sides', () => {
+    expect(signatureMatchesName('josé  lópez', 'Jose', 'Lopez')).toBe(true)
+    expect(signatureMatchesName('Jose Lopez Jr', 'Jose', 'Lopez')).toBe(false)
+    expect(signatureMatchesName('', 'Jose', 'Lopez')).toBe(false)
   })
 })
 
 describe('intakeSubmissionSchema', () => {
-  it('reads back exactly what submitIntakeInput stored', () => {
-    const { token: _token, ...submission } = submitIntakeInput.parse(FORM)
+  it('reads back exactly what the router stores from submitIntakeInput', () => {
+    const submission = submissionOf(FORM)
     // Through JSON, as the column round-trips it: undefined fields vanish.
     const stored = JSON.parse(JSON.stringify(submission)) as unknown
     expect(intakeSubmissionSchema.parse(stored)).toEqual(submission)
@@ -73,13 +134,16 @@ describe('intakeSubmissionSchema', () => {
   })
 
   it('still reads a submission stored under an earlier cut of the form', () => {
-    const { token: _token, ...submission } = submitIntakeInput.parse(FORM)
+    const submission = submissionOf(FORM)
     // With an allergy list and history text: stripped.
     const withAllergies = { ...submission, allergies: [], historyOther: 'x' }
     expect(intakeSubmissionSchema.parse(withAllergies)).toEqual(submission)
     // Without the checklist: every item "No".
     const { conditions: _conditions, ...withoutChecklist } = submission
     expect(intakeSubmissionSchema.parse(withoutChecklist)).toEqual({ ...submission, conditions: [] })
+    // Before the contact-time question existed: no answer, not a failure.
+    const { preferredContactTime: _time, ...withoutContactTime } = submission
+    expect(intakeSubmissionSchema.parse(withoutContactTime)).toEqual(withoutContactTime)
   })
 })
 
@@ -92,5 +156,8 @@ describe('acceptIntakeInput', () => {
     // On the staff side the office is optional again, as on the create form.
     expect(parsed.office).toBeUndefined()
     expect(parsed.heightInches).toBe(64)
+    // The consent is the person's, recorded once: the reviewer does not re-sign it.
+    expect(parsed).not.toHaveProperty('consentSignature')
+    expect(parsed).not.toHaveProperty('preferredContactTime')
   })
 })

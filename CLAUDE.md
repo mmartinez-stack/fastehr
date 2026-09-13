@@ -192,10 +192,12 @@ view is still mockup; the record itself has three tabs, Medical, Patient
 Info, and Billing, each served by its own procedure per ADR 28 as amended,
 with Medical open to every role and the other two clerical; the medical
 history checklist defaults to No, the legacy history text is read-only
-beneath it, and allergies are out of scope). The self-service intake is wired end to end (ADR 29): a texted
-single-use link, a public form at `/intake/[token]`, and a per-office Pending
-tab on the roster; text messages go to the server log until `TWILIO_*` is
-set. The medical-director review queue (ADR 30) samples signed notes through
+beneath it, and allergies are out of scope). The self-service intake is wired end to end (ADR 29 as amended): a texted
+single-use link that lives 48 hours, a phone-first bilingual form at
+`/intake/[token]` that ends with a signed treatment consent (recorded on the
+request until DIA-56), and a per-office Pending tab on the roster; until
+`TWILIO_*` is set, text messages go to the server log and the send panel
+shows the link instead. The medical-director review queue (ADR 30) samples signed notes through
 `apps/web/scripts/sample-notes-for-review.ts` (weekly cron) or "run now";
 the `medical_director` role (ADR 31: an admin's access plus the queue, one
 access matrix `ROLE_ACCESS` in contracts read by server and client) sees the

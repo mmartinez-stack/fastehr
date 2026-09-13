@@ -2,10 +2,11 @@
 
 import * as React from "react"
 import { useForm } from "@tanstack/react-form"
-import { MessageSquareText } from "lucide-react"
+import { Copy, MessageSquareText } from "lucide-react"
 import { toast } from "sonner"
 import {
   describeValidationFailure,
+  INTAKE_LINK_TTL_HOURS,
   PATIENT_LANGUAGES,
   sendPatientIntakeInput,
 } from "@fastehr/contracts"
@@ -41,8 +42,9 @@ import { trpc } from "@/trpc/client"
  *
  * Validates through `sendPatientIntakeInput` (ADR 25) and submits to
  * `intake.send`. Without Twilio credentials the server prints the text to
- * its log instead of sending it — the alert below says so, so nobody waits
- * for a phone to buzz in development.
+ * its log instead of sending it, and answers with the link itself: the
+ * alert below shows it with a copy button, so a tester can open the form
+ * without reading the log and nobody waits for a phone to buzz.
  */
 
 const COPY: FormCopy = {
@@ -60,7 +62,7 @@ function formatPhone(phone: string): string {
 }
 
 export function IntakeForm() {
-  const [sentTo, setSentTo] = React.useState<string | null>(null)
+  const [sent, setSent] = React.useState<{ to: string; link: string | null } | null>(null)
   const send = trpc.intake.send.useMutation()
 
   const form = useForm({
@@ -74,9 +76,13 @@ export function IntakeForm() {
       },
       onSubmitAsync: async ({ value, formApi }) => {
         try {
-          const request = await send.mutateAsync(value)
-          setSentTo(request.phone)
-          toast.success(`Intake link sent to ${request.firstName} ${request.lastName}`)
+          const { request, link } = await send.mutateAsync(value)
+          setSent({ to: request.phone, link })
+          toast.success(
+            link === null
+              ? `Intake link sent to ${request.firstName} ${request.lastName}`
+              : `Intake link created for ${request.firstName} ${request.lastName}`,
+          )
           formApi.reset()
           return undefined
         } catch (error) {
@@ -136,7 +142,7 @@ export function IntakeForm() {
               Texts the person a link to the self-service intake page. They fill in their own
               details from their phone and pick the office they will visit; the submission then
               waits in that office&apos;s Pending tab for review. The link works once and expires
-              after seven days.
+              after {INTAKE_LINK_TTL_HOURS} hours.
             </p>
 
             <form.Subscribe selector={(state) => state.errorMap.onSubmit}>
@@ -191,17 +197,43 @@ export function IntakeForm() {
               </form.Field>
             </div>
 
-            {sentTo !== null ? (
+            {sent === null ? null : sent.link === null ? (
               <Alert>
                 <MessageSquareText />
-                <AlertTitle>Link sent to {formatPhone(sentTo)}</AlertTitle>
+                <AlertTitle>Link sent to {formatPhone(sent.to)}</AlertTitle>
                 <AlertDescription>
                   The submission will appear in the Pending tab of the office the person picks.
-                  In an environment without text messaging configured, the link is printed to the
-                  server log instead of being sent.
                 </AlertDescription>
               </Alert>
-            ) : null}
+            ) : (
+              <Alert>
+                <MessageSquareText />
+                <AlertTitle>Text messaging is not configured, so nothing was sent to {formatPhone(sent.to)}</AlertTitle>
+                <AlertDescription className="flex flex-col gap-2">
+                  <span>
+                    Open the link yourself or pass it on. It works once and expires after{" "}
+                    {INTAKE_LINK_TTL_HOURS} hours.
+                  </span>
+                  <span className="flex flex-wrap items-center gap-2">
+                    <code className="break-all rounded bg-muted px-1.5 py-0.5 text-xs">{sent.link}</code>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(sent.link ?? "").then(
+                          () => toast.success("Link copied"),
+                          () => toast.error("The link could not be copied. Select it and copy it by hand."),
+                        )
+                      }}
+                    >
+                      <Copy data-icon="inline-start" />
+                      Copy link
+                    </Button>
+                  </span>
+                </AlertDescription>
+              </Alert>
+            )}
           </FieldGroup>
         </CardContent>
         <CardFooter className="justify-end">

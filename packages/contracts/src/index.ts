@@ -119,7 +119,10 @@ export {
 export {
   INTAKE_STATUSES,
   intakeStatusSchema,
-  INTAKE_LINK_TTL_DAYS,
+  INTAKE_LINK_TTL_HOURS,
+  INTAKE_CONTACT_TIMES,
+  intakeContactTimeSchema,
+  intakeConsentSchema,
   intakeSubmissionSchema,
   intakeRequestSchema,
   intakeInviteSchema,
@@ -128,6 +131,9 @@ export {
   acceptIntakeInput,
   intakeByIdInput,
   type IntakeStatus,
+  type IntakeContactTime,
+  type IntakeConsent,
+  type SendIntakeResult,
   type IntakeSubmission,
   type IntakeRequest,
   type IntakeInvite,
@@ -136,6 +142,7 @@ export {
   type AcceptIntakeInput,
   type IntakeByIdInput,
 } from './intake.ts'
+export { INTAKE_CONSENT_VERSION, INTAKE_CONSENT_TEXT, signatureMatchesName } from './intake-consent.ts'
 export {
   LEGACY_CREDENTIAL_PREFIX,
   legacyCredentialSchema,

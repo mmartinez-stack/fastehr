@@ -16,9 +16,16 @@ import { smsEnvSchema, type SmsEnv } from '@fastehr/contracts'
  * Framework-agnostic on purpose (ADR 9): `fetch` and `console`, nothing from
  * Next.
  */
+/**
+ * Whether the message reached a carrier. `logged` is the console transport:
+ * nothing was sent, and a caller may need to hand the content over some
+ * other way (the intake link is shown to the front desk in that case).
+ */
+export type SmsOutcome = 'delivered' | 'logged'
+
 export interface SmsTransport {
   /** `to` is ten bare digits, as the contract normalizes phone numbers. */
-  send(message: { to: string; body: string }): Promise<void>
+  send(message: { to: string; body: string }): Promise<SmsOutcome>
 }
 
 /** The subset of the environment the transport reads — structural, so a test can pass a literal. */
@@ -44,6 +51,7 @@ function maskPhone(to: string): string {
 export const consoleSmsTransport: SmsTransport = {
   async send({ to, body }) {
     console.info(`[sms] console transport (no TWILIO_* configured) → ${maskPhone(to)}\n${body}`)
+    return 'logged'
   },
 }
 
@@ -72,6 +80,7 @@ export function twilioSmsTransport(config: {
         // number and the message, and neither belongs in a log.
         throw new Error(`Twilio refused the message: HTTP ${response.status}`)
       }
+      return 'delivered'
     },
   }
 }
@@ -94,7 +103,7 @@ export function smsTransportFromEnv(env: SmsProcessEnv = process.env): SmsTransp
               })
             : consoleSmsTransport
       }
-      await transport.send(message)
+      return transport.send(message)
     },
   }
 }

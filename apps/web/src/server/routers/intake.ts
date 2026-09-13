@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import {
   acceptIntakeInput,
-  INTAKE_LINK_TTL_DAYS,
+  INTAKE_LINK_TTL_HOURS,
   intakeByIdInput,
   intakeInviteSchema,
   openIntakeInput,
@@ -9,6 +9,7 @@ import {
   sendPatientIntakeInput,
   submitIntakeInput,
   type IntakeRequest,
+  type SendIntakeResult,
 } from '@fastehr/contracts'
 import { TRPCError } from '@trpc/server'
 import {
@@ -19,7 +20,7 @@ import {
 import { router } from '../trpc.ts'
 
 /**
- * Self-service intake (DIA-72, ADR 29).
+ * Self-service intake (DIA-72, ADR 29 as amended).
  *
  * Three audiences, three procedure kinds. The front desk sends a link and
  * reviews what comes back (`clericalProcedure`, the office queue additionally
@@ -30,7 +31,10 @@ import { router } from '../trpc.ts'
  *
  * The token is 32 random bytes; the server stores its SHA-256 and compares
  * hashes, so a read of the table cannot produce a working link and the token
- * exists only in the text message and the URL.
+ * exists only in the text message and the URL. The one exception is an
+ * environment without text messaging: the console transport logs the
+ * message instead of sending it, and `send` then answers with the link so
+ * the front desk (in practice, a developer or tester) can open it.
  */
 
 function hashToken(token: string): string {
@@ -43,8 +47,8 @@ function hashToken(token: string): string {
  */
 function intakeMessage(firstName: string, language: 'english' | 'spanish', link: string): string {
   return language === 'spanish'
-    ? `Hola ${firstName}, por favor complete su información de paciente en el siguiente enlace (válido por ${INTAKE_LINK_TTL_DAYS} días): ${link}`
-    : `Hi ${firstName}, please fill out your patient information at the following link (valid for ${INTAKE_LINK_TTL_DAYS} days): ${link}`
+    ? `Hola ${firstName}, por favor complete su información de paciente en el siguiente enlace (válido por ${INTAKE_LINK_TTL_HOURS} horas): ${link}`
+    : `Hi ${firstName}, please fill out your patient information at the following link (valid for ${INTAKE_LINK_TTL_HOURS} hours): ${link}`
 }
 
 /** A request the public page may still act on: sent, and not yet expired. */
@@ -55,11 +59,12 @@ function isOpen(request: IntakeRequest, now: Date): boolean {
 export const intakeRouter = router({
   /**
    * The legacy "Send Intake Form" panel, now sending. Creates the request,
-   * texts the link, returns the request (never the token).
+   * texts the link, returns the request. The link comes back only when the
+   * transport did not deliver it (see `SendIntakeResult`).
    */
-  send: clericalProcedure.input(sendPatientIntakeInput).mutation(async ({ ctx, input }) => {
+  send: clericalProcedure.input(sendPatientIntakeInput).mutation(async ({ ctx, input }): Promise<SendIntakeResult> => {
     const token = randomBytes(32).toString('base64url')
-    const expiresAt = new Date(Date.now() + INTAKE_LINK_TTL_DAYS * 24 * 60 * 60 * 1000)
+    const expiresAt = new Date(Date.now() + INTAKE_LINK_TTL_HOURS * 60 * 60 * 1000)
     const request = await ctx.db.intakes.create({
       firstName: input.firstName,
       lastName: input.lastName,
@@ -70,11 +75,11 @@ export const intakeRouter = router({
       createdById: ctx.actor.id,
     })
     const link = `${ctx.appBaseUrl().replace(/\/$/, '')}/intake/${token}`
-    await ctx.sms.send({
+    const outcome = await ctx.sms.send({
       to: input.phone,
       body: intakeMessage(input.firstName, input.language ?? 'english', link),
     })
-    return request
+    return { request, link: outcome === 'logged' ? link : null }
   }),
 
   /** What the public page learns from a link: the person's name and language, or a refusal. */
@@ -87,15 +92,31 @@ export const intakeRouter = router({
     return intakeInviteSchema.parse(request)
   }),
 
-  /** The person's submission — one per link. */
+  /** The person's submission — one per link — with the consent they signed. */
   submit: publicProcedure.input(submitIntakeInput).mutation(async ({ ctx, input }) => {
-    const { token, ...submission } = input
+    const {
+      token,
+      consentAcknowledged: _acknowledged,
+      consentVersion,
+      consentSignature,
+      ...submission
+    } = input
     const tokenHash = hashToken(token)
     const request = await ctx.db.intakes.findByTokenHash(tokenHash)
     if (request === null || !isOpen(request, new Date())) throw new TRPCError({ code: 'NOT_FOUND' })
     // The conditional write is the real guard: a second submit that raced
     // past the check above finds the status already moved and gets null.
-    const submitted = await ctx.db.intakes.submit({ tokenHash, submission })
+    const submitted = await ctx.db.intakes.submit({
+      tokenHash,
+      submission,
+      consent: {
+        signature: consentSignature,
+        version: consentVersion,
+        // The language the page showed the consent in: the form's, which
+        // starts from the request's and follows the person's toggle.
+        language: submission.language ?? request.language ?? 'english',
+      },
+    })
     if (submitted === null) throw new TRPCError({ code: 'NOT_FOUND' })
     return { status: submitted.status }
   }),

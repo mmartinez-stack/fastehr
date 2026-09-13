@@ -410,6 +410,14 @@ model IntakeRequest {
   submission  Json?
   submittedAt DateTime?
 
+  // The treatment consent signed with the submission (ADR 29 as amended):
+  // the typed name, when, which text version, and the language it was shown
+  // in. Null until submitted. DIA-56's consent module takes these over.
+  consentSignature String?
+  consentSignedAt  DateTime?
+  consentVersion   String?
+  consentLanguage  PatientLanguage?
+
   patientId String?
   patient   Patient? @relation(fields: [patientId], references: [id])
 

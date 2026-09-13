@@ -23,13 +23,17 @@ const SUBMISSION: IntakeSubmission = {
   addressZip: '91101',
   phone: '9515550000',
   phoneFollowUpAllowed: true,
+  preferredContactTime: 'morning',
   heightInches: 64,
   medications: [{ name: 'Metformin', dose: '500 mg' }],
   conditions: [{ condition: 'diabetes', onset: '2019', medicated: true, medications: 'Metformin' }],
 }
 
+const CONSENT = { signature: 'Ada Lovelace', version: 'telehealth-treatment-consent/1', language: 'english' as const }
+
+const { preferredContactTime: _preferredContactTime, ...PATIENT_FIELDS } = SUBMISSION
 const PATIENT_INPUT: CreatePatientInput = {
-  ...SUBMISSION,
+  ...PATIENT_FIELDS,
   language: undefined,
   email: undefined,
   referralSource: undefined,
@@ -72,30 +76,32 @@ describe('intake repository', () => {
   it('creates a request as sent, findable by its token hash, without exposing the hash', async () => {
     const created = await seed()
 
-    expect(created).toMatchObject({ status: 'sent', office: null, submission: null, language: 'spanish' })
+    expect(created).toMatchObject({ status: 'sent', office: null, submission: null, consent: null, language: 'spanish' })
     expect(created).not.toHaveProperty('tokenHash')
     expect(await db.intakes.findByTokenHash('hash-1')).toEqual(created)
     expect(await db.intakes.findByTokenHash('nope')).toBeNull()
     expect(await db.intakes.findById(created.id)).toEqual(created)
   })
 
-  it('records a submission once — the second attempt finds the status moved', async () => {
+  it('records a submission and its consent once — the second attempt finds the status moved', async () => {
     await seed()
 
-    const submitted = await db.intakes.submit({ tokenHash: 'hash-1', submission: SUBMISSION })
-    expect(submitted).toMatchObject({ status: 'submitted', office: 'PennProgram', submission: SUBMISSION })
+    const submitted = await db.intakes.submit({ tokenHash: 'hash-1', submission: SUBMISSION, consent: CONSENT })
+    expect(submitted).toMatchObject({ status: 'submitted', office: 'PennProgram', submission: SUBMISSION, consent: CONSENT })
     expect(submitted?.submittedAt).not.toBeNull()
+    expect(submitted?.consent).toMatchObject(CONSENT)
+    expect(submitted?.consent?.signedAt).toBe(submitted?.submittedAt)
 
-    expect(await db.intakes.submit({ tokenHash: 'hash-1', submission: SUBMISSION })).toBeNull()
-    expect(await db.intakes.submit({ tokenHash: 'unknown', submission: SUBMISSION })).toBeNull()
+    expect(await db.intakes.submit({ tokenHash: 'hash-1', submission: SUBMISSION, consent: CONSENT })).toBeNull()
+    expect(await db.intakes.submit({ tokenHash: 'unknown', submission: SUBMISSION, consent: CONSENT })).toBeNull()
   })
 
   it('lists the office queue: submitted only, that office only, oldest first', async () => {
     const first = await seed('hash-a')
     await seed('hash-b')
     await seed('hash-c')
-    await db.intakes.submit({ tokenHash: 'hash-a', submission: SUBMISSION })
-    await db.intakes.submit({ tokenHash: 'hash-b', submission: { ...SUBMISSION, office: 'Sylmar' } })
+    await db.intakes.submit({ tokenHash: 'hash-a', submission: SUBMISSION, consent: CONSENT })
+    await db.intakes.submit({ tokenHash: 'hash-b', submission: { ...SUBMISSION, office: 'Sylmar' }, consent: CONSENT })
     // hash-c stays `sent`.
 
     const penn = await db.intakes.listPending('PennProgram')
@@ -106,7 +112,7 @@ describe('intake repository', () => {
 
   it('accepts once: the patient row with its lists, the request linked and closed', async () => {
     const created = await seed()
-    await db.intakes.submit({ tokenHash: 'hash-1', submission: SUBMISSION })
+    await db.intakes.submit({ tokenHash: 'hash-1', submission: SUBMISSION, consent: CONSENT })
 
     const outcome = await db.intakes.accept({ id: created.id, patient: PATIENT_INPUT, reviewedById: staffId })
 
@@ -133,7 +139,7 @@ describe('intake repository', () => {
     const created = await seed()
     expect(await db.intakes.reject({ id: created.id, reviewedById: staffId })).toBeNull() // still `sent`
 
-    await db.intakes.submit({ tokenHash: 'hash-1', submission: SUBMISSION })
+    await db.intakes.submit({ tokenHash: 'hash-1', submission: SUBMISSION, consent: CONSENT })
     expect((await db.intakes.reject({ id: created.id, reviewedById: staffId }))?.status).toBe('rejected')
     expect(await db.intakes.reject({ id: created.id, reviewedById: staffId })).toBeNull()
     expect(await prisma.patient.count()).toBe(0)

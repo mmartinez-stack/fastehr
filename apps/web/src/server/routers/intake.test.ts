@@ -1,9 +1,9 @@
 import type { Db } from '@fastehr/db'
-import type { IntakeRequest, IntakeSubmission, Patient } from '@fastehr/contracts'
+import { INTAKE_CONSENT_VERSION, type IntakeRequest, type IntakeSubmission, type Patient } from '@fastehr/contracts'
 import { createHash } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContext, type Actor } from '../context.ts'
-import type { SmsTransport } from '../sms.ts'
+import type { SmsOutcome, SmsTransport } from '../sms.ts'
 import { appRouter } from './root.ts'
 
 /**
@@ -27,6 +27,7 @@ const SUBMISSION: IntakeSubmission = {
   addressZip: '91101',
   phone: '9515550000',
   phoneFollowUpAllowed: true,
+  preferredContactTime: 'morning',
   heightInches: 64,
   medications: [],
   conditions: [],
@@ -45,6 +46,7 @@ const REQUEST: IntakeRequest = {
   createdAt: new Date().toISOString(),
   patientId: null,
   submission: null,
+  consent: null,
 }
 
 const SUBMITTED: IntakeRequest = {
@@ -53,6 +55,12 @@ const SUBMITTED: IntakeRequest = {
   office: 'PennProgram',
   submittedAt: new Date().toISOString(),
   submission: SUBMISSION,
+  consent: {
+    signature: 'Ada Lovelace',
+    signedAt: new Date().toISOString(),
+    version: INTAKE_CONSENT_VERSION,
+    language: 'english',
+  },
 }
 
 const PATIENT: Patient = {
@@ -103,6 +111,7 @@ const FORM = {
   addressZip: '91101',
   phone: '(951) 555-0000',
   phoneFollowUpAllowed: true,
+  preferredContactTime: 'morning' as const,
   referralSource: '',
   referredByPatientId: '',
   programType: '',
@@ -113,6 +122,9 @@ const FORM = {
   pcpName: '',
   pcpAddress: '',
   pcpPhone: '',
+  consentAcknowledged: true as const,
+  consentVersion: INTAKE_CONSENT_VERSION,
+  consentSignature: 'Ada Lovelace',
 }
 
 const FRONTDESK: Actor = { id: 'user-2', roles: ['frontdesk'], offices: ['Sylmar', 'PennProgram'] }
@@ -170,12 +182,14 @@ function fakeDb(overrides: Partial<Db['intakes']> = {}): Db {
   }
 }
 
-function fakeSms(): SmsTransport & { sent: { to: string; body: string }[] } {
+/** A transport that records what it was given and answers as told: a carrier, or the console. */
+function fakeSms(outcome: SmsOutcome = 'delivered'): SmsTransport & { sent: { to: string; body: string }[] } {
   const sent: { to: string; body: string }[] = []
   return {
     sent,
     async send(message) {
       sent.push(message)
+      return outcome
     },
   }
 }
@@ -202,18 +216,19 @@ describe('intake.send', () => {
     const sms = fakeSms()
     const caller = callerWith(fakeDb({ create }), FRONTDESK, sms)
 
-    const request = await caller.intake.send({
+    const result = await caller.intake.send({
       firstName: 'Ada',
       lastName: 'Lovelace',
       phone: '(951) 555-0000',
       language: 'spanish',
     })
 
-    expect(request).toEqual(REQUEST)
+    expect(result).toEqual({ request: REQUEST, link: null })
     expect(sms.sent).toHaveLength(1)
     const [message] = sms.sent
     expect(message?.to).toBe('9515550000')
     expect(message?.body).toContain('Hola Ada')
+    expect(message?.body).toContain('48 horas')
     const link = /https:\/\/dev\.example\.com\/intake\/([A-Za-z0-9_-]+)/.exec(message?.body ?? '')
     expect(link).not.toBeNull()
     const token = link?.[1] ?? ''
@@ -223,9 +238,21 @@ describe('intake.send', () => {
     if (stored === undefined) throw new Error('expected the repository to be called')
     expect(stored.tokenHash).toBe(sha256(token))
     expect(stored.createdById).toBe(FRONTDESK.id)
-    // Seven days, give or take the test's own runtime.
-    expect(stored.expiresAt.getTime() - Date.now()).toBeGreaterThan(6.9 * 86_400_000)
-    expect(JSON.stringify(request)).not.toContain(token)
+    // Forty-eight hours, give or take the test's own runtime.
+    expect(stored.expiresAt.getTime() - Date.now()).toBeGreaterThan(47.9 * 3_600_000)
+    expect(stored.expiresAt.getTime() - Date.now()).toBeLessThan(48.1 * 3_600_000)
+    expect(JSON.stringify(result)).not.toContain(token)
+  })
+
+  it('hands the link back only when the message was logged rather than delivered', async () => {
+    const sms = fakeSms('logged')
+    const caller = callerWith(fakeDb(), FRONTDESK, sms)
+
+    const result = await caller.intake.send({ firstName: 'Ada', lastName: 'Lovelace', phone: '9515550000' })
+
+    expect(result.link).toMatch(/^https:\/\/dev\.example\.com\/intake\/[A-Za-z0-9_-]{40,}$/)
+    expect(sms.sent[0]?.body).toContain(result.link)
+    expect(sms.sent[0]?.body).toContain('48 hours')
   })
 
   it('is clerical: a provider cannot send, and nothing is texted', async () => {
@@ -280,7 +307,11 @@ describe('intake.open and intake.submit (public, token-bound)', () => {
     const caller = callerWith(fakeDb({ findByTokenHash: async () => REQUEST, submit }), null)
 
     expect(await caller.intake.submit({ ...FORM, token })).toEqual({ status: 'submitted' })
-    expect(submit).toHaveBeenCalledWith({ tokenHash: sha256(token), submission: SUBMISSION })
+    expect(submit).toHaveBeenCalledWith({
+      tokenHash: sha256(token),
+      submission: SUBMISSION,
+      consent: { signature: 'Ada Lovelace', version: INTAKE_CONSENT_VERSION, language: 'english' },
+    })
     // The token never reaches the repository as itself.
     expect(JSON.stringify(submit.mock.calls)).not.toContain(token)
 
@@ -296,6 +327,22 @@ describe('intake.open and intake.submit (public, token-bound)', () => {
     await expect(caller.intake.submit({ ...FORM, token, office: '' as 'Sylmar' })).rejects.toThrow()
     await expect(caller.intake.submit({ ...FORM, token, phone: '555' })).rejects.toThrow()
     expect(submit).not.toHaveBeenCalled()
+  })
+
+  it('requires the consent: acknowledged, current, and signed with the person’s name', async () => {
+    const submit = vi.fn<Db['intakes']['submit']>(async () => SUBMITTED)
+    const caller = callerWith(fakeDb({ findByTokenHash: async () => REQUEST, submit }), null)
+
+    await expect(caller.intake.submit({ ...FORM, token, consentAcknowledged: false as true })).rejects.toThrow()
+    await expect(caller.intake.submit({ ...FORM, token, consentSignature: 'A. Lovelace' })).rejects.toThrow()
+    await expect(
+      caller.intake.submit({ ...FORM, token, consentVersion: 'older' as typeof INTAKE_CONSENT_VERSION }),
+    ).rejects.toThrow()
+    expect(submit).not.toHaveBeenCalled()
+
+    // The consent is recorded in the language the form was filled in.
+    await caller.intake.submit({ ...FORM, token, language: 'spanish' })
+    expect(submit.mock.calls[0]?.[0]).toMatchObject({ consent: { language: 'spanish' } })
   })
 })
 
