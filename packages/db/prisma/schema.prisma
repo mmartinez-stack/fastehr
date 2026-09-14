@@ -44,6 +44,38 @@ enum PatientLanguage {
   @@map("patient_language")
 }
 
+/// How a visit happened (ADR 32). The legacy system filed remote care under
+/// the pseudo-offices Telemedicine and At Home; here that is the modality,
+/// and `locationId` is the clinic the visit counts against, if any.
+enum VisitModality {
+  in_person
+  telemedicine
+  at_home
+
+  @@map("visit_modality")
+}
+
+/// The clinics (ADR 32, DIA-46). Seeded by migration, keyed by slug, no
+/// CRUD: adding one is a migration. `legacyName` is the office string the
+/// legacy system wrote on patients and visits, the consolidation key.
+/// `active` decides whether a filter offers it; history keeps it either way.
+model Location {
+  slug       String  @id
+  name       String
+  legacyName String  @unique
+  active     Boolean @default(true)
+  sortOrder  Int
+
+  patients       Patient[]
+  visits         Visit[]
+  intakeRequests IntakeRequest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("locations")
+}
+
 enum PatientStatus {
   active
   inactive
@@ -67,6 +99,10 @@ model Patient {
   gender   PatientGender?
   language PatientLanguage?
   office   String?
+  /// The clinic, derived from `office` on every write (ADR 32); null for a
+  /// remote-only or dead office value. `office` stays the legacy string.
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [slug], onDelete: Restrict)
 
   // --- Clinical sections (DIA-52). The record is one row plus three child
   // tables; which sections a caller may read or write is decided per role in
@@ -141,6 +177,7 @@ model Patient {
 
   // The legacy compound index, for the roster search's exact name matches.
   @@index([lastName, firstName, dateOfBirth])
+  @@index([locationId])
   // The roster's default order: most recently seen first.
   @@index([lastVisitAt])
   @@map("patients")
@@ -214,6 +251,11 @@ model Visit {
   patient       Patient  @relation(fields: [patientId], references: [id])
   dateOfService DateTime
   office        String?
+  /// ADR 32: the clinic the visit counts against (a remote visit is
+  /// attributed to its patient's clinic), and how it happened.
+  locationId String?
+  location   Location?     @relation(fields: [locationId], references: [slug], onDelete: Restrict)
+  modality   VisitModality @default(in_person)
   notes         String?
   // `Restrict`, not the default `SetNull`: the legacy system hard-deleted
   // users and left 38,047 signatures pointing at nothing. Here the delete is
@@ -240,6 +282,7 @@ model Visit {
   updatedAt DateTime @default(now()) @updatedAt
 
   @@index([patientId, dateOfService])
+  @@index([locationId, dateOfService])
   @@index([signedAt])
   // The queue: sampled and not yet reviewed.
   @@index([sampledAt, reviewedAt])
@@ -407,6 +450,9 @@ model IntakeRequest {
   status    IntakeStatus     @default(sent)
 
   office      String?
+  /// The clinic `office` names (ADR 32): the Pending queue it waits in.
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [slug], onDelete: Restrict)
   submission  Json?
   submittedAt DateTime?
 
@@ -431,5 +477,6 @@ model IntakeRequest {
   updatedAt DateTime @default(now()) @updatedAt
 
   @@index([status, office])
+  @@index([status, locationId])
   @@map("intake_requests")
 }

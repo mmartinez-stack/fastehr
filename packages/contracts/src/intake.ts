@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { INTAKE_CONSENT_VERSION, signatureMatchesName } from './intake-consent.ts'
+import { locationOptionSchema, locationSlugSchema } from './location.ts'
 import { officeSchema } from './office.ts'
 import {
   clinicalFields,
@@ -122,6 +123,8 @@ export const intakeRequestSchema = z.object({
   status: intakeStatusSchema,
   /** The office the person chose; null until they submit. */
   office: z.string().nullable(),
+  /** The clinic that office names (ADR 32): the queue it waits in. Null until submitted. */
+  locationId: locationSlugSchema.nullable(),
   expiresAt: z.iso.datetime(),
   submittedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
@@ -155,6 +158,8 @@ export const intakeInviteSchema = z.object({
   lastName: z.string(),
   language: patientLanguageSchema.nullable(),
   expiresAt: z.iso.datetime(),
+  /** The clinics the person may choose to visit: the active locations, in order. */
+  locations: z.array(locationOptionSchema),
 })
 export type IntakeInvite = z.infer<typeof intakeInviteSchema>
 

@@ -41,6 +41,7 @@ const REQUEST: IntakeRequest = {
   language: 'english',
   status: 'sent',
   office: null,
+  locationId: null,
   expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
   submittedAt: null,
   createdAt: new Date().toISOString(),
@@ -53,6 +54,7 @@ const SUBMITTED: IntakeRequest = {
   ...REQUEST,
   status: 'submitted',
   office: 'PennProgram',
+  locationId: 'kanoga',
   submittedAt: new Date().toISOString(),
   submission: SUBMISSION,
   consent: {
@@ -127,9 +129,9 @@ const FORM = {
   consentSignature: 'Ada Lovelace',
 }
 
-const FRONTDESK: Actor = { id: 'user-2', roles: ['frontdesk'], offices: ['Sylmar', 'PennProgram'] }
-const PROVIDER: Actor = { id: 'user-1', roles: ['provider'], offices: ['Sylmar', 'PennProgram'] }
-const ELSEWHERE: Actor = { id: 'user-4', roles: ['frontdesk'], offices: ['Sylmar'] }
+const FRONTDESK: Actor = { id: 'user-2', roles: ['frontdesk'], locations: ['sylmar', 'kanoga'] }
+const PROVIDER: Actor = { id: 'user-1', roles: ['provider'], locations: ['sylmar', 'kanoga'] }
+const ELSEWHERE: Actor = { id: 'user-4', roles: ['frontdesk'], locations: ['sylmar'] }
 
 function fakeDb(overrides: Partial<Db['intakes']> = {}): Db {
   return {
@@ -178,6 +180,10 @@ function fakeDb(overrides: Partial<Db['intakes']> = {}): Db {
       listQueue: async () => [],
       findNote: async () => null,
       signOff: async () => null,
+    },
+    locations: {
+      list: async () => [],
+      listActive: async () => [],
     },
   }
 }
@@ -281,6 +287,7 @@ describe('intake.open and intake.submit (public, token-bound)', () => {
       lastName: 'Lovelace',
       language: 'english',
       expiresAt: REQUEST.expiresAt,
+      locations: [],
     })
     expect(invite).not.toHaveProperty('phone')
     expect(invite).not.toHaveProperty('id')
@@ -347,18 +354,22 @@ describe('intake.open and intake.submit (public, token-bound)', () => {
 })
 
 describe('the pending queue', () => {
-  it('lists an office the actor holds, for clerical roles only', async () => {
+  it('lists a clinic the actor holds, or all clinics, for clerical roles only', async () => {
     const listPending = vi.fn(async () => [SUBMITTED])
     const db = fakeDb({ listPending })
 
-    expect(await callerWith(db, FRONTDESK).intake.listPending({ office: 'PennProgram' })).toEqual([SUBMITTED])
-    expect(listPending).toHaveBeenCalledWith('PennProgram')
+    expect(await callerWith(db, FRONTDESK).intake.listPending({ location: 'kanoga' })).toEqual([SUBMITTED])
+    expect(listPending).toHaveBeenCalledWith('kanoga')
+    expect(await callerWith(db, ELSEWHERE).intake.listPending({ location: 'all' })).toEqual([SUBMITTED])
+    expect(listPending).toHaveBeenLastCalledWith('all')
 
-    await expect(callerWith(db, PROVIDER).intake.listPending({ office: 'PennProgram' })).rejects.toThrow('FORBIDDEN')
-    await expect(callerWith(db, ELSEWHERE).intake.listPending({ office: 'PennProgram' })).rejects.toThrow('FORBIDDEN')
+    await expect(callerWith(db, PROVIDER).intake.listPending({ location: 'kanoga' })).rejects.toThrow('FORBIDDEN')
+    await expect(callerWith(db, ELSEWHERE).intake.listPending({ location: 'kanoga' })).rejects.toThrow('FORBIDDEN')
+    // @ts-expect-error — the contract is a union of slugs; this is the runtime guard.
+    await expect(callerWith(db, FRONTDESK).intake.listPending({ location: 'fresno' })).rejects.toThrow()
   })
 
-  it('serves a request by id within the actor’s offices', async () => {
+  it('serves a request by id within the actor’s clinics', async () => {
     const db = fakeDb({ findById: async () => SUBMITTED })
 
     expect(await callerWith(db, FRONTDESK).intake.byId({ id: SUBMITTED.id })).toEqual(SUBMITTED)

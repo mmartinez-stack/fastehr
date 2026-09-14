@@ -11,6 +11,7 @@ import {
   type UpdatePatientBillingInput,
   type UpdatePatientClinicalInput,
   type UpdatePatientDemographicsInput,
+  resolveLegacyOffice,
 } from '@fastehr/contracts'
 import type { PrismaClient } from '../client.ts'
 import { toPatient, toPatientSummary } from '../mappers/patient.ts'
@@ -99,6 +100,9 @@ function demographicsData(input: Omit<UpdatePatientDemographicsInput, 'id'>) {
     gender: input.gender,
     language: input.language ?? null,
     office: input.office ?? null,
+    // The clinic the office names, kept consistent with the backfill (ADR
+    // 32); a remote pseudo-office or no office is no clinic.
+    locationId: resolveLegacyOffice(input.office)?.locationSlug ?? null,
     email: input.email ?? null,
     addressStreet: input.addressStreet,
     addressCity: input.addressCity,

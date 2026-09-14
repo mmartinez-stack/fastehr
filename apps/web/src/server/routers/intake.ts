@@ -12,11 +12,7 @@ import {
   type SendIntakeResult,
 } from '@fastehr/contracts'
 import { TRPCError } from '@trpc/server'
-import {
-  clericalOfficeScopedProcedure,
-  clericalProcedure,
-  publicProcedure,
-} from '../procedures.ts'
+import { clericalLocationProcedure, clericalProcedure, publicProcedure } from '../procedures.ts'
 import { router } from '../trpc.ts'
 
 /**
@@ -82,14 +78,18 @@ export const intakeRouter = router({
     return { request, link: outcome === 'logged' ? link : null }
   }),
 
-  /** What the public page learns from a link: the person's name and language, or a refusal. */
+  /**
+   * What the public page learns from a link: the person's name and language
+   * and the clinics they may choose, or a refusal.
+   */
   open: publicProcedure.input(openIntakeInput).query(async ({ ctx, input }) => {
     const request = await ctx.db.intakes.findByTokenHash(hashToken(input.token))
     // One answer for "no such token", "already used", and "expired": the
     // page tells the person to ask the clinic for a new link, and a probe
     // learns nothing about which it was.
     if (request === null || !isOpen(request, new Date())) throw new TRPCError({ code: 'NOT_FOUND' })
-    return intakeInviteSchema.parse(request)
+    const locations = await ctx.db.locations.listActive()
+    return intakeInviteSchema.parse({ ...request, locations })
   }),
 
   /** The person's submission — one per link — with the consent they signed. */
@@ -121,16 +121,17 @@ export const intakeRouter = router({
     return { status: submitted.status }
   }),
 
-  /** The office's Pending queue — the front desk's, for the sites they hold. */
-  listPending: clericalOfficeScopedProcedure.query(({ ctx, input }) =>
-    ctx.db.intakes.listPending(input.office),
+  /** A clinic's Pending queue, or every clinic's — the front desk's. */
+  listPending: clericalLocationProcedure.query(({ ctx, input }) =>
+    ctx.db.intakes.listPending(input.location),
   ),
 
   byId: clericalProcedure.input(intakeByIdInput).query(async ({ ctx, input }) => {
     const request = await ctx.db.intakes.findById(input.id)
     if (request === null) throw new TRPCError({ code: 'NOT_FOUND' })
-    if (!ctx.actor.offices.includes(request.office as (typeof ctx.actor.offices)[number])) {
-      // A request that has an office belongs to that office's queue (ADR 22).
+    if (request.locationId !== null && !ctx.actor.locations.includes(request.locationId)) {
+      // A request in a clinic's queue is that clinic's (ADR 22); one with no
+      // clinic sits in the unified queue and is anyone's to review.
       throw new TRPCError({ code: 'FORBIDDEN' })
     }
     return request

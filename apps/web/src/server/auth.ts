@@ -2,7 +2,7 @@ import {
   betterAuthSecretSchema,
   betterAuthUrlSchema,
   isLegacyCredential,
-  officeSchema,
+  LOCATION_SLUGS,
   staffRoleSchema,
 } from '@fastehr/contracts'
 import { createAuthAdapter } from '@fastehr/db'
@@ -209,7 +209,8 @@ export async function actorFromHeaders(headers: Headers): Promise<Actor | null> 
   return {
     id: user.id,
     roles: [role.data],
-    offices: officeSchema.options,
+    // Every clinic, for every role: a location is a filter (ADR 32).
+    locations: LOCATION_SLUGS,
     mustChangePassword: user.mustChangePassword === true,
   }
 }

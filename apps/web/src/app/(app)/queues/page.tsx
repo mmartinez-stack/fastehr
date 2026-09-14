@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/table"
 import { PageHeader } from "@/components/page-header"
 import { LanguageTag } from "@/components/status-badges"
-import { useOffice } from "@/components/office-provider"
+import { useLocation } from "@/components/location-provider"
 import { MedicalDirectorQueue } from "@/features/review/medical-director-queue"
 import {
   unsignedQueue,
@@ -82,16 +82,14 @@ function QueueTable({ rows }: { rows: QueueRow[] }) {
 }
 
 export default function QueuesPage() {
-  const { office } = useOffice()
-  const unsigned = unsignedQueue(office)
-  const signed = signedQueue(office)
+  const { location, labelFor } = useLocation()
+  const unsigned = unsignedQueue(location)
+  const signed = signedQueue(location)
+  const where = location === "all" ? "all locations" : labelFor(location)
 
   return (
     <div>
-      <PageHeader
-        title="Queues"
-        description={`Charting queues for the ${office} office.`}
-      />
+      <PageHeader title="Queues" description={`Charting queues for ${where}.`} />
       <QueueSubnav />
 
       {/*
@@ -113,7 +111,7 @@ export default function QueuesPage() {
                   <FileText className="size-4 text-warning-foreground" />
                   Clinic Queue: Unsigned
                 </CardTitle>
-                <CardDescription>{office}</CardDescription>
+                <CardDescription>{labelFor(location)}</CardDescription>
               </div>
               <Badge variant="ghost" className="bg-warning/15 text-warning-foreground">
                 {unsigned.length}
@@ -133,7 +131,7 @@ export default function QueuesPage() {
                   <FileCheck className="size-4 text-success" />
                   Clinic Queue: Signed
                 </CardTitle>
-                <CardDescription>{office}</CardDescription>
+                <CardDescription>{labelFor(location)}</CardDescription>
               </div>
               <Badge variant="ghost" className="bg-success/15 text-success">
                 {signed.length}

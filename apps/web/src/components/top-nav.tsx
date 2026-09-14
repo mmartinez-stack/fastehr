@@ -25,10 +25,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useOffice } from "@/components/office-provider"
+import { useLocation } from "@/components/location-provider"
 import { useRole, surfacesFor, type RoleSurfaces } from "@/components/role-provider"
 import { authClient } from "@/lib/auth-client"
-import type { StaffRole } from "@fastehr/contracts"
+import { LOCATION_FILTER_ALL, type LocationFilter, type StaffRole } from "@fastehr/contracts"
 import { ROLE_LABEL } from "@/lib/staff-role-label"
 
 /**
@@ -56,7 +56,7 @@ const NAV: {
 
 export function TopNav() {
   const pathname = usePathname()
-  const { office, offices, setOffice } = useOffice()
+  const { location, activeLocations, setLocation, labelFor } = useLocation()
   const { role, roles, canSwitch, setRole } = useRole()
   const router = useRouter()
 
@@ -134,17 +134,20 @@ export function TopNav() {
             </Select>
           </div>
           ) : null}
-          <Select value={office} onValueChange={(v) => setOffice(v as typeof office)}>
+          {/* The clinic in view, or all of them: a filter, not a login (ADR 32). */}
+          <Select value={location} onValueChange={(v) => setLocation(v as LocationFilter)}>
             <SelectTrigger
-              className="w-[130px] border-primary-foreground/25 bg-primary-foreground/10 text-primary-foreground"
+              className="w-[150px] border-primary-foreground/25 bg-primary-foreground/10 text-primary-foreground"
               size="sm"
+              aria-label="Location"
             >
-              <SelectValue placeholder="Office" />
+              <SelectValue placeholder="Location">{labelFor(location)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {offices.map((o) => (
-                <SelectItem key={o} value={o}>
-                  {o}
+              <SelectItem value={LOCATION_FILTER_ALL}>{labelFor(LOCATION_FILTER_ALL)}</SelectItem>
+              {activeLocations.map((row) => (
+                <SelectItem key={row.slug} value={row.slug}>
+                  {row.name}
                 </SelectItem>
               ))}
             </SelectContent>

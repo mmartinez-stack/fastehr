@@ -42,10 +42,10 @@ const RUN: ReviewSampleRun = {
   rate: 20,
 }
 
-const DIRECTOR: Actor = { id: 'dr-penn', roles: ['medical_director'], offices: ['Sylmar'] }
-const PROVIDER: Actor = { id: 'dr-other', roles: ['provider'], offices: ['Sylmar'] }
-const FRONTDESK: Actor = { id: 'desk-1', roles: ['frontdesk'], offices: ['Sylmar'] }
-const ADMIN: Actor = { id: 'admin-1', roles: ['admin'], offices: ['Sylmar'] }
+const DIRECTOR: Actor = { id: 'dr-penn', roles: ['medical_director'], locations: ['sylmar'] }
+const PROVIDER: Actor = { id: 'dr-other', roles: ['provider'], locations: ['sylmar'] }
+const FRONTDESK: Actor = { id: 'desk-1', roles: ['frontdesk'], locations: ['sylmar'] }
+const ADMIN: Actor = { id: 'admin-1', roles: ['admin'], locations: ['sylmar'] }
 
 function fakeDb(overrides: Partial<Db['reviews']> = {}): Db {
   return {
@@ -101,6 +101,10 @@ function fakeDb(overrides: Partial<Db['reviews']> = {}): Db {
       findNote: async () => null,
       signOff: async () => null,
       ...overrides,
+    },
+    locations: {
+      list: async () => [],
+      listActive: async () => [],
     },
   }
 }

@@ -76,7 +76,7 @@ describe('intake repository', () => {
   it('creates a request as sent, findable by its token hash, without exposing the hash', async () => {
     const created = await seed()
 
-    expect(created).toMatchObject({ status: 'sent', office: null, submission: null, consent: null, language: 'spanish' })
+    expect(created).toMatchObject({ status: 'sent', office: null, locationId: null, submission: null, consent: null, language: 'spanish' })
     expect(created).not.toHaveProperty('tokenHash')
     expect(await db.intakes.findByTokenHash('hash-1')).toEqual(created)
     expect(await db.intakes.findByTokenHash('nope')).toBeNull()
@@ -87,7 +87,7 @@ describe('intake repository', () => {
     await seed()
 
     const submitted = await db.intakes.submit({ tokenHash: 'hash-1', submission: SUBMISSION, consent: CONSENT })
-    expect(submitted).toMatchObject({ status: 'submitted', office: 'PennProgram', submission: SUBMISSION, consent: CONSENT })
+    expect(submitted).toMatchObject({ status: 'submitted', office: 'PennProgram', locationId: 'kanoga', submission: SUBMISSION, consent: CONSENT })
     expect(submitted?.submittedAt).not.toBeNull()
     expect(submitted?.consent).toMatchObject(CONSENT)
     expect(submitted?.consent?.signedAt).toBe(submitted?.submittedAt)
@@ -96,18 +96,21 @@ describe('intake repository', () => {
     expect(await db.intakes.submit({ tokenHash: 'unknown', submission: SUBMISSION, consent: CONSENT })).toBeNull()
   })
 
-  it('lists the office queue: submitted only, that office only, oldest first', async () => {
+  it('lists a clinic queue or all of them: submitted only, oldest first', async () => {
     const first = await seed('hash-a')
-    await seed('hash-b')
+    const second = await seed('hash-b')
     await seed('hash-c')
+    await seed('hash-d')
     await db.intakes.submit({ tokenHash: 'hash-a', submission: SUBMISSION, consent: CONSENT })
     await db.intakes.submit({ tokenHash: 'hash-b', submission: { ...SUBMISSION, office: 'Sylmar' }, consent: CONSENT })
-    // hash-c stays `sent`.
+    // A remote pseudo-office names no clinic: only the unified view lists it.
+    const remote = await db.intakes.submit({ tokenHash: 'hash-c', submission: { ...SUBMISSION, office: 'Telemedicine' }, consent: CONSENT })
+    // hash-d stays `sent`.
 
-    const penn = await db.intakes.listPending('PennProgram')
-    expect(penn.map((request) => request.id)).toEqual([first.id])
-    expect((await db.intakes.listPending('Sylmar')).map((request) => request.office)).toEqual(['Sylmar'])
-    expect(await db.intakes.listPending('Montebello')).toEqual([])
+    expect((await db.intakes.listPending('kanoga')).map((request) => request.id)).toEqual([first.id])
+    expect((await db.intakes.listPending('sylmar')).map((request) => request.id)).toEqual([second.id])
+    expect(await db.intakes.listPending('montebello')).toEqual([])
+    expect((await db.intakes.listPending('all')).map((request) => request.id)).toEqual([first.id, second.id, remote?.id])
   })
 
   it('accepts once: the patient row with its lists, the request linked and closed', async () => {
@@ -132,7 +135,7 @@ describe('intake repository', () => {
     // A second accept — another front-desk user, a double click — loses.
     expect(await db.intakes.accept({ id: created.id, patient: PATIENT_INPUT, reviewedById: staffId })).toBeNull()
     expect(await prisma.patient.count()).toBe(1)
-    expect(await db.intakes.listPending('PennProgram')).toEqual([])
+    expect(await db.intakes.listPending('kanoga')).toEqual([])
   })
 
   it('rejects a submitted request and no other', async () => {

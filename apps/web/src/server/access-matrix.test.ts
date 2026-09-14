@@ -33,7 +33,7 @@ const probe = router({
 const ENFORCED = ['clerical', 'staff', 'review'] as const satisfies readonly RoleSurface[]
 
 function call(procedure: keyof typeof probe._def.procedures, roles: readonly string[]) {
-  const caller = probe.createCaller(createContext({ actor: { id: 'probe', roles, offices: ['Sylmar'] } }))
+  const caller = probe.createCaller(createContext({ actor: { id: 'probe', roles, locations: ['sylmar'] } }))
   return caller[procedure]()
 }
 

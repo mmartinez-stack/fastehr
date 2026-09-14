@@ -9,6 +9,7 @@ const row: PatientRecordRow = {
   gender: null,
   language: null,
   office: null,
+  locationId: null,
   email: null,
   phone: null,
   phoneFollowUpAllowed: true,

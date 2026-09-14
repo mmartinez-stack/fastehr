@@ -20,6 +20,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty"
 import { PageHeader } from "@/components/page-header"
+import { useLocation } from "@/components/location-provider"
 import { useSurfaces } from "@/components/role-provider"
 import { PatientForm, toIntakeFormValues } from "@/features/patients/patient-form"
 import { INTAKE_TABS } from "@/features/patients/patient-tabs"
@@ -54,6 +55,7 @@ export default function ReviewIntakePage() {
   const router = useRouter()
   const utils = trpc.useUtils()
   const { clerical } = useSurfaces()
+  const { nameForOffice } = useLocation()
   const [confirmingReject, setConfirmingReject] = React.useState(false)
   const [accepted, setAccepted] = React.useState(false)
 
@@ -130,7 +132,7 @@ export default function ReviewIntakePage() {
         <PageHeader
           className="mb-0 flex-1"
           title={`${pending.firstName} ${pending.lastName}`}
-          description={`Pending intake for ${pending.office ?? "an office"}. Review, edit if needed, then accept or reject.`}
+          description={`Pending intake for ${pending.office === null ? "an office" : nameForOffice(pending.office)}. Review, edit if needed, then accept or reject.`}
         />
       </div>
 

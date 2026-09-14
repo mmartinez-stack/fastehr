@@ -53,6 +53,8 @@ import {
   patientGenderSchema,
   patientLanguageSchema,
   patientSchema,
+  resolveLegacyOffice,
+  type LocationSlug,
   type PatientGender,
   type PatientLanguage,
   type PatientStatus,
@@ -73,6 +75,8 @@ interface ImportedPatient {
   heightInches: number | null
   language: PatientLanguage | null
   office: string | null
+  /** The clinic `office` names (ADR 32), or null for a remote, blank, or dead value. */
+  locationId: LocationSlug | null
   email: string | null
   phone: string | null
   phoneFollowUpAllowed: boolean
@@ -172,6 +176,8 @@ const lines = readFileSync(input, 'utf8').split('\n').filter((line) => line.trim
 
 const parsed: ImportedPatient[] = []
 const skips: Skip[] = []
+/** Office strings the consolidation does not know (ADR 32): the run refuses on any. */
+const unknownOffices = new Map<string, number>()
 const fieldNotes: FieldNote[] = []
 const seenLegacyIds = new Set<string>()
 
@@ -267,6 +273,15 @@ for (const [index, line] of lines.entries()) {
   const statusRaw = asTrimmed(raw.status)
   const programType = asTrimmed(raw.programType)
 
+  // An office string the consolidation does not know stops the run below,
+  // before any write, naming the value; a location is never invented (ADR 32).
+  const location = resolveLegacyOffice(asTrimmed(raw.office))
+  if (location === null) {
+    const value = asTrimmed(raw.office) ?? ''
+    unknownOffices.set(value, (unknownOffices.get(value) ?? 0) + 1)
+    continue
+  }
+
   const candidate: ImportedPatient = {
     legacyId,
     firstName,
@@ -276,6 +291,7 @@ for (const [index, line] of lines.entries()) {
     heightInches,
     language: language.success ? language.data : null,
     office: asTrimmed(raw.office),
+    locationId: location.locationSlug,
     email: email.success ? email.data : null,
     phone,
     // Legacy `phone.permission` hydrated to true (the form default); only an
@@ -305,7 +321,7 @@ for (const [index, line] of lines.entries()) {
   // referral aside) is what `toPatient` will re-parse on every read. Failing
   // here, with paths and codes only, beats failing there with a live roster.
   const validated = patientSchema
-    .omit({ id: true, referredByPatientId: true, medications: true, allergies: true, conditions: true })
+    .omit({ id: true, referredByPatientId: true, medications: true, conditions: true })
     .safeParse({
       ...candidate,
       legacyId: undefined,
@@ -325,6 +341,11 @@ for (const [index, line] of lines.entries()) {
   }
 
   parsed.push(candidate)
+}
+
+if (unknownOffices.size > 0) {
+  const listed = [...unknownOffices.entries()].map(([value, count]) => `"${value}" (${count})`).join(', ')
+  throw new Error(`Unknown office value(s) in the export, refusing to run: ${listed}. Add the mapping in contracts (ADR 32).`)
 }
 
 const prisma = getPrismaClient()

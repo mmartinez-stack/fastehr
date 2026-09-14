@@ -1,4 +1,4 @@
-import { officeSchema, type Office } from "@fastehr/contracts"
+import { officeSchema, resolveLegacyOffice, type LocationFilter, type Office } from "@fastehr/contracts"
 
 // Centralized mock data for the iCardio EHR mockup. No backend — everything here
 // is deterministic, plausible clinical data used across the app.
@@ -911,14 +911,20 @@ function dedupeByPatient(rows: Visit[]): QueueRow[] {
   return out
 }
 
-export function unsignedQueue(office: Office): QueueRow[] {
+/** The mockup's office strings against the location filter (ADR 32): a clinic, or all. */
+function inLocation(office: Office | undefined, location: LocationFilter): boolean {
+  if (location === "all") return true
+  return office !== undefined && resolveLegacyOffice(office)?.locationSlug === location
+}
+
+export function unsignedQueue(location: LocationFilter): QueueRow[] {
   return dedupeByPatient(
-    visits.filter((v) => !v.signed && getPatient(v.patientId)?.office === office),
+    visits.filter((v) => !v.signed && inLocation(getPatient(v.patientId)?.office, location)),
   )
 }
 
-export function signedQueue(office: Office): QueueRow[] {
+export function signedQueue(location: LocationFilter): QueueRow[] {
   return dedupeByPatient(
-    visits.filter((v) => v.signed && getPatient(v.patientId)?.office === office),
+    visits.filter((v) => v.signed && inLocation(getPatient(v.patientId)?.office, location)),
   )
 }

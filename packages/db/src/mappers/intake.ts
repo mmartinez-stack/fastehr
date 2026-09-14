@@ -20,6 +20,7 @@ export function toIntakeRequest(row: IntakeRequestRow): IntakeRequest {
     language: row.language,
     status: row.status,
     office: row.office,
+    locationId: row.locationId,
     expiresAt: row.expiresAt.toISOString(),
     submittedAt: row.submittedAt === null ? null : row.submittedAt.toISOString(),
     createdAt: row.createdAt.toISOString(),

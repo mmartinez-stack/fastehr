@@ -1,5 +1,6 @@
 import { getPrismaClient, type PrismaClient } from './client.ts'
 import { createIntakeRepository, type IntakeRepository } from './repositories/intake.ts'
+import { createLocationRepository, type LocationRepository } from './repositories/location.ts'
 import { createPatientRepository, type PatientRepository } from './repositories/patient.ts'
 import { createReviewRepository, type ReviewRepository } from './repositories/review.ts'
 import {
@@ -28,6 +29,7 @@ export interface Db {
   staffUsers: StaffUserRepository
   intakes: IntakeRepository
   reviews: ReviewRepository
+  locations: LocationRepository
 }
 
 /**
@@ -48,6 +50,7 @@ export function createDb(getClient: () => PrismaClient = getPrismaClient): Db {
     staffUsers: createStaffUserRepository(getClient),
     intakes: createIntakeRepository(getClient),
     reviews: createReviewRepository(getClient),
+    locations: createLocationRepository(getClient),
   }
 }
 
@@ -56,4 +59,4 @@ export const db: Db = createDb()
 
 export { createAuthAdapter } from './auth-adapter.ts'
 export { StaffUserEmailTakenError, StaffUserReferencedError }
-export type { IntakeRepository, PatientRepository, ReviewRepository, StaffUserRepository }
+export type { IntakeRepository, LocationRepository, PatientRepository, ReviewRepository, StaffUserRepository }

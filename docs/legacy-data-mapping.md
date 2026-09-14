@@ -240,3 +240,11 @@ modelled yet; they migrate with the modules that read them.
   remove, not on create. Recomputing from the rows is exact.
 - Idempotent on `legacyId`: new rows insert in bulk, existing rows refresh
   field by field, and a re-run converges.
+
+## Locations (consolidation, DIA-47)
+
+Not a collection: the legacy system had no location table, only the free
+`office` string on patients and visits. The consolidation into the
+two-location model is a backfill migration plus a mapping in the two import
+scripts above, recorded in [ADR 32](adr/032-locations-and-visit-modality.md)
+with the mapping table and the expected counts.

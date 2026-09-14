@@ -23,6 +23,12 @@
  *   migration refused resolve to nothing, so `signedById` is NULL and the
  *   legacy signature block's name snapshot carries the attribution
  *   (`signedByName`), noted in the report.
+ * - **The office string becomes a clinic and a modality (ADR 32).** The
+ *   contract's `resolveLegacyOffice` maps it: a clinic to its `locationId`,
+ *   Telemedicine and At Home to the modality with the clinic taken from the
+ *   patient's row, dead values to no clinic (counted). An office string the
+ *   mapping does not know **stops the run before any write**: a location is
+ *   never invented by a typo.
  * - **`lastVisitAt` is recomputed for every patient** after the rows are in,
  *   in one statement, the way the legacy visit hooks kept `recentVisit`:
  *   `max(dateOfService)` per patient, NULL where there is none.
@@ -42,6 +48,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { config as loadDotenv } from 'dotenv'
+import { resolveLegacyOffice, type LocationSlug, type VisitModality } from '@fastehr/contracts'
 
 loadDotenv({ path: fileURLToPath(new URL('../../../.env', import.meta.url)), quiet: true })
 
@@ -52,6 +59,9 @@ interface ImportedVisit {
   patientLegacyId: string
   dateOfService: Date
   office: string | null
+  /** From `office` through the contract's mapping; the clinic may come from the patient. */
+  locationId: LocationSlug | null
+  modality: VisitModality
   notes: string | null
   signerLegacyId: string | null
   signedByName: string | null
@@ -132,6 +142,8 @@ const parsed: ImportedVisit[] = []
 const skips: Skip[] = []
 const fieldNotes: FieldNote[] = []
 const seenLegacyIds = new Set<string>()
+const unknownOffices = new Map<string, number>()
+let deadOffices = 0
 
 for (const [index, line] of lines.entries()) {
   let raw: Record<string, unknown>
@@ -187,11 +199,25 @@ for (const [index, line] of lines.entries()) {
     .filter((part): part is string => part !== null)
     .join(' ')
 
+  const office = asTrimmed(raw.office)
+  const resolved = resolveLegacyOffice(office)
+  if (resolved === null) {
+    // Counted, not skipped: the run refuses below, once, naming every value.
+    unknownOffices.set(office ?? '', (unknownOffices.get(office ?? '') ?? 0) + 1)
+    continue
+  }
+  if (office !== null && resolved.locationSlug === null && resolved.modality === 'in_person') {
+    deadOffices += 1
+    note('locationId', 'dead office value — imported with no clinic')
+  }
+
   parsed.push({
     legacyId,
     patientLegacyId,
     dateOfService,
-    office: asTrimmed(raw.office),
+    office,
+    locationId: resolved.locationSlug,
+    modality: resolved.modality,
     notes: asTrimmed(raw.notes),
     signerLegacyId,
     signedByName: signedAt === null || signerName === '' ? null : signerName,
@@ -199,16 +225,23 @@ for (const [index, line] of lines.entries()) {
   })
 }
 
+if (unknownOffices.size > 0) {
+  const listed = [...unknownOffices.entries()].map(([value, count]) => `"${value}" (${count})`).join(', ')
+  throw new Error(`Unknown office value(s) in the export, refusing to run: ${listed}. Add the mapping in contracts (ADR 32).`)
+}
+
 const prisma = getPrismaClient()
 
 // Both references resolve through the legacy id columns the earlier imports
 // left behind. The whole patient map is loaded once: a visits export is many
 // times the size of the patient table, and a query per row would be the cost.
+// The patient's clinic rides along: a remote visit is attributed to it.
 const patientRows = await prisma.patient.findMany({
   where: { legacyId: { not: null } },
-  select: { id: true, legacyId: true },
+  select: { id: true, legacyId: true, locationId: true },
 })
 const patientIdByLegacyId = new Map(patientRows.map((row) => [row.legacyId ?? '', row.id]))
+const patientLocationById = new Map(patientRows.map((row) => [row.id, row.locationId]))
 
 const userRows = await prisma.user.findMany({
   where: { legacyId: { not: null } },
@@ -218,12 +251,27 @@ const userIdByLegacyId = new Map(userRows.map((row) => [row.legacyId ?? '', row.
 
 const resolvable: (ImportedVisit & { patientId: string; signedById: string | null })[] = []
 let signersUnresolved = 0
+let remoteAttributed = 0
+let remoteUnattributed = 0
 for (const visit of parsed) {
   const patientId = patientIdByLegacyId.get(visit.patientLegacyId)
   if (patientId === undefined) {
     skips.push({ legacyId: visit.legacyId, reason: 'patient never migrated' })
     continue
   }
+  // A remote visit counts against the patient's clinic (ADR 32). NULL when
+  // the patient has none: "no clinic on record", not a guess.
+  let locationId = visit.locationId
+  if (locationId === null && visit.modality !== 'in_person') {
+    const fromPatient = patientLocationById.get(patientId) ?? null
+    if (fromPatient !== null) {
+      locationId = fromPatient as LocationSlug
+      remoteAttributed += 1
+    } else {
+      remoteUnattributed += 1
+    }
+  }
+  visit.locationId = locationId
   let signedById: string | null = null
   if (visit.signerLegacyId !== null) {
     signedById = userIdByLegacyId.get(visit.signerLegacyId) ?? null
@@ -256,6 +304,8 @@ if (apply) {
         patientId: visit.patientId,
         dateOfService: visit.dateOfService,
         office: visit.office,
+        locationId: visit.locationId,
+        modality: visit.modality,
         notes: visit.notes,
         signedById: visit.signedById,
         signedByName: visit.signedByName,
@@ -317,6 +367,9 @@ const report = {
   written,
   signed: resolvable.filter((visit) => visit.signedAt !== null).length,
   signersUnresolved,
+  deadOffices,
+  remoteAttributed,
+  remoteUnattributed,
   patientsBackfilled,
   // Field names, legacy ids, and reasons only — never a note or a name.
   fieldNotes,
@@ -327,7 +380,8 @@ writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n')
 
 console.log(
   `${apply ? 'APPLY' : 'DRY RUN'}: read ${lines.length}, parsed ${parsed.length}, resolvable ${resolvable.length}, ` +
-    `written ${written}, signers unresolved ${signersUnresolved}, patients backfilled ${patientsBackfilled}, ` +
+    `written ${written}, signers unresolved ${signersUnresolved}, remote attributed ${remoteAttributed}, ` +
+    `remote without a clinic ${remoteUnattributed}, dead offices ${deadOffices}, patients backfilled ${patientsBackfilled}, ` +
     `field notes ${fieldNotes.length}, skipped ${skips.length}`,
 )
 console.log(`report: ${reportPath}`)

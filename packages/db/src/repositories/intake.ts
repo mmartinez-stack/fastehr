@@ -1,10 +1,11 @@
-import type {
-  CreatePatientInput,
-  IntakeRequest,
-  IntakeSubmission,
-  Office,
-  Patient,
-  PatientLanguage,
+import {
+  resolveLegacyOffice,
+  type CreatePatientInput,
+  type IntakeRequest,
+  type IntakeSubmission,
+  type LocationFilter,
+  type Patient,
+  type PatientLanguage,
 } from '@fastehr/contracts'
 import type { PrismaClient } from '../client.ts'
 import { toIntakeRequest } from '../mappers/intake.ts'
@@ -41,8 +42,8 @@ export interface IntakeRepository {
     submission: IntakeSubmission
     consent: { signature: string; version: string; language: PatientLanguage }
   }): Promise<IntakeRequest | null>
-  /** The office's queue: submitted, awaiting review, oldest first. */
-  listPending(office: Office): Promise<IntakeRequest[]>
+  /** A clinic's queue, or every clinic's: submitted, awaiting review, oldest first. */
+  listPending(location: LocationFilter): Promise<IntakeRequest[]>
   /** Creates the patient and marks the request accepted, atomically; null if the request was not `submitted`. */
   accept(input: {
     id: string
@@ -93,6 +94,7 @@ export function createIntakeRepository(getClient: () => PrismaClient): IntakeRep
         data: {
           status: 'submitted',
           office: input.submission.office,
+          locationId: resolveLegacyOffice(input.submission.office)?.locationSlug ?? null,
           submission: input.submission,
           submittedAt: now,
           consentSignature: input.consent.signature,
@@ -106,9 +108,9 @@ export function createIntakeRepository(getClient: () => PrismaClient): IntakeRep
       return row === null ? null : toIntakeRequest(row)
     },
 
-    async listPending(office) {
+    async listPending(location) {
       const rows = await getClient().intakeRequest.findMany({
-        where: { status: 'submitted', office },
+        where: { status: 'submitted', ...(location === 'all' ? {} : { locationId: location }) },
         orderBy: { submittedAt: 'asc' },
       })
       return rows.map(toIntakeRequest)

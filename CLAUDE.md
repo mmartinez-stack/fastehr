@@ -202,7 +202,13 @@ shows the link instead. The medical-director review queue (ADR 30) samples signe
 the `medical_director` role (ADR 31: an admin's access plus the queue, one
 access matrix `ROLE_ACCESS` in contracts read by server and client) sees the
 queue as a card on `/queues` and signs off at `/review/[visitId]`. Visits are imported (§ visits) and drive the roster's
-last-visit column, order, and service-date search (ADR 27 as amended); patient `status` stays in the schema but is no
+last-visit column, order, and service-date search (ADR 27 as amended);
+locations are rows (ADR 32: `sylmar`, `kanoga`, `montebello` inactive) with
+`locationId` on patients, visits, and intake requests and a visit
+`modality`, backfilled from the legacy office strings, which stay on the
+patient record; the nav selector is a location filter (a clinic or all of
+them, `LocationProvider`, `locationFilteredProcedure`) that the queues and
+the Pending intakes tab follow; patient `status` stays in the schema but is no
 longer exposed anywhere (DIA-50). Auth is real (Better Auth; migrated legacy credentials
 verify per ADR 26). `noUncheckedIndexedAccess` is on everywhere with no
 exceptions — the mockup's fixture lookups go through the checked `at()` helper

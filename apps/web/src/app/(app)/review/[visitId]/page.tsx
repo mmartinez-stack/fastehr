@@ -12,6 +12,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Textarea } from "@/components/ui/textarea"
+import { useLocation } from "@/components/location-provider"
 import { PageHeader } from "@/components/page-header"
 import { useSessionSurfaces } from "@/components/role-provider"
 import { trpc } from "@/trpc/client"
@@ -42,6 +43,7 @@ function formatDob(iso: string): string {
 }
 
 export default function ReviewNotePage() {
+  const { nameForOffice } = useLocation()
   const params = useParams<{ visitId: string }>()
   const router = useRouter()
   const utils = trpc.useUtils()
@@ -111,7 +113,7 @@ export default function ReviewNotePage() {
         <PageHeader
           className="mb-0 flex-1"
           title={`${item.patient.lastName}, ${item.patient.firstName}`}
-          description={`DOB ${formatDob(item.patient.dateOfBirth)}. Seen ${formatWhen(item.dateOfService)}${item.office === null ? "" : ` at ${item.office}`}.`}
+          description={`DOB ${formatDob(item.patient.dateOfBirth)}. Seen ${formatWhen(item.dateOfService)}${item.office === null ? "" : ` at ${nameForOffice(item.office)}`}.`}
         />
       </div>
 

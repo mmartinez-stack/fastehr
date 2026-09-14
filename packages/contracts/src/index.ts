@@ -31,7 +31,26 @@ export {
   type SearchStaffUsersInput,
 } from './staff-user.ts'
 export { describeValidationFailure, type ValidationFailure } from './errors.ts'
-export { officeSchema, officeScopedInput, type Office } from './office.ts'
+export { officeSchema, type Office } from './office.ts'
+export {
+  LOCATION_SLUGS,
+  locationSlugSchema,
+  locationSchema,
+  LOCATION_FILTER_ALL,
+  locationFilterSchema,
+  locationFilteredInput,
+  locationOptionSchema,
+  VISIT_MODALITIES,
+  visitModalitySchema,
+  LEGACY_DEAD_OFFICES,
+  resolveLegacyOffice,
+  type LocationSlug,
+  type Location,
+  type LocationFilter,
+  type LocationOption,
+  type VisitModality,
+  type LegacyOfficeResolution,
+} from './location.ts'
 export {
   patientSchema,
   patientMedicationSchema,

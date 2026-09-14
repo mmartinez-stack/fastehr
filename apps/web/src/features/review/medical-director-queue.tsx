@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useSessionSurfaces, useSurfaces } from "@/components/role-provider"
+import { useLocation } from "@/components/location-provider"
 import { trpc } from "@/trpc/client"
 
 /**
@@ -109,6 +110,7 @@ function RunSampleForm() {
 }
 
 export function MedicalDirectorQueue({ className }: { className?: string }) {
+  const { nameForOffice } = useLocation()
   const { review } = useSurfaces()
   const session = useSessionSurfaces()
   const enabled = review && session.review
@@ -158,7 +160,7 @@ export function MedicalDirectorQueue({ className }: { className?: string }) {
                   </TableCell>
                   <TableCell className="text-muted-foreground">{formatDob(item.patient.dateOfBirth)}</TableCell>
                   <TableCell>{formatDay(item.dateOfService)}</TableCell>
-                  <TableCell>{item.office ?? "-"}</TableCell>
+                  <TableCell>{item.office === null ? "-" : nameForOffice(item.office)}</TableCell>
                   <TableCell>{item.signedByName ?? "-"}</TableCell>
                   <TableCell className="text-muted-foreground">{formatDay(item.sampledAt)}</TableCell>
                   <TableCell>

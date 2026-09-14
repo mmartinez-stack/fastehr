@@ -1,4 +1,4 @@
-import { officeScopedInput } from '@fastehr/contracts'
+import { locationFilteredInput } from '@fastehr/contracts'
 import { TRPCError } from '@trpc/server'
 import { auditPhiAccess } from './middleware/audit.ts'
 import {
@@ -51,38 +51,32 @@ export const clericalProcedure = protectedProcedure.use(requireClericalRole)
 export const medicalDirectorProcedure = protectedProcedure.use(requireMedicalDirector)
 
 /**
- * Procedures that read or write for a single clinic site.
+ * Procedures that list for one clinic, or for all of them (`'all'`).
  *
- * A clinic with several sites has an authorization boundary between them: a
- * front-desk user at Downtown has no business reading Eastside's queue. The
- * office therefore belongs to the **actor**, resolved from the session, and a
- * request that names one is checked against that set rather than believed.
- *
- * The hazard this closes is that `office` began life as a value the browser
- * picked — a React context in `office-provider.tsx`, defaulting to "Downtown"
- * and switchable from the nav. A procedure filtering by an office taken from
- * its input would be asking the client which records it is entitled to, and the
- * answer would arrive in a query string that anyone can edit. Nothing about the
- * resulting request looks wrong in a log.
+ * The location named in the input is checked against the **actor's** set,
+ * resolved from the session, rather than believed (ADR 22). Since the Aug 21
+ * sync a location is a filter, not a boundary, and every actor holds every
+ * clinic (ADR 32) — so today the check refuses only a slug the contract does
+ * not know. The shape is kept because the hazard it closed has not changed:
+ * the value still arrives from a nav selector the browser controls, and a
+ * procedure must never take from its input which records the caller may see.
  *
  * It lives here rather than under ./middleware because it composes `.input()`
  * with a check — a procedure, not a middleware. Putting it in a middleware
  * module that imported `protectedProcedure` created exactly the cycle ADR 9
  * describes, and failed at import with `Cannot read properties of undefined`.
- *
- * See ADR 22.
  */
-export const officeScopedProcedure = protectedProcedure
-  .input(officeScopedInput)
+export const locationFilteredProcedure = protectedProcedure
+  .input(locationFilteredInput)
   .use(({ ctx, input, next }) => {
-    if (!ctx.actor.offices.includes(input.office)) {
-      // FORBIDDEN, not NOT_FOUND: the actor is known and the site exists — they
-      // are simply not entitled to it. The audit middleware records this as a
-      // denial, which is the trail that matters here.
+    if (input.location !== 'all' && !ctx.actor.locations.includes(input.location)) {
+      // FORBIDDEN, not NOT_FOUND: the actor is known and the clinic exists —
+      // they are simply not entitled to it. The audit middleware records this
+      // as a denial, which is the trail that matters here.
       throw new TRPCError({ code: 'FORBIDDEN' })
     }
     return next()
   })
 
-/** A site's clerical queue (the pending intakes): office-scoped *and* clerical. */
-export const clericalOfficeScopedProcedure = officeScopedProcedure.use(requireClericalRole)
+/** A clinic's clerical queue (the pending intakes): location-filtered *and* clerical. */
+export const clericalLocationProcedure = locationFilteredProcedure.use(requireClericalRole)

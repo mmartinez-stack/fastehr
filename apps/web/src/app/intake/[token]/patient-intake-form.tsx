@@ -10,10 +10,10 @@ import {
   INTAKE_CONTACT_TIMES,
   PATIENT_CONDITIONS,
   PATIENT_GENDERS,
-  PATIENT_OFFICES,
   PATIENT_REFERRAL_SOURCES,
   submitIntakeInput,
   type IntakeContactTime,
+  type LocationOption,
   type PatientCondition,
   type PatientGender,
   type PatientLanguage,
@@ -189,11 +189,14 @@ function formatToday(language: PatientLanguage): string {
 export function PatientIntakeForm({
   token,
   language,
+  locations,
   defaultValues,
   onDone,
 }: {
   token: string
   language: PatientLanguage
+  /** The clinics the person may choose: the active locations, from the invite (ADR 32). */
+  locations: readonly LocationOption[]
   defaultValues: PatientIntakeValues
   onDone: () => void
 }) {
@@ -464,10 +467,11 @@ export function PatientIntakeForm({
       </Section>
 
       <Section title={copy.sections.visit} step={4}>
+        {/* The clinic by its display name; the record stores the legacy office string it maps to. */}
         {selectField(
           "office",
           copy.labels.office,
-          PATIENT_OFFICES.map((value) => ({ value, label: value })),
+          locations.map((row) => ({ value: row.legacyName, label: row.name })),
           { required: true, description: copy.labels.officeHint },
         )}
         {selectField(

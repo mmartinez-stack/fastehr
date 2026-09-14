@@ -19,8 +19,8 @@ const JUNE: ReturnType<Db['staffUsers']['list']> extends Promise<Array<infer U>>
   createdAt: '2020-01-15T00:00:00.000Z',
 }
 
-const ADMIN: Actor = { id: 'admin-1', roles: ['admin'], offices: ['Sylmar'] }
-const PROVIDER: Actor = { id: 'prov-1', roles: ['provider'], offices: ['Sylmar'] }
+const ADMIN: Actor = { id: 'admin-1', roles: ['admin'], locations: ['sylmar'] }
+const PROVIDER: Actor = { id: 'prov-1', roles: ['provider'], locations: ['sylmar'] }
 
 function fakeDb(overrides: Partial<Db['staffUsers']> = {}): Db {
   return {
@@ -75,6 +75,10 @@ function fakeDb(overrides: Partial<Db['staffUsers']> = {}): Db {
       listQueue: async () => [],
       findNote: async () => null,
       signOff: async () => null,
+    },
+    locations: {
+      list: async () => [],
+      listActive: async () => [],
     },
   }
 }

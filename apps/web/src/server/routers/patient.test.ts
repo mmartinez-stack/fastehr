@@ -143,10 +143,10 @@ const NORMALIZED = {
   creditCardZip: undefined,
 }
 
-const PROVIDER: Actor = { id: 'user-1', roles: ['provider'], offices: ['Sylmar'] }
-const FRONTDESK: Actor = { id: 'user-2', roles: ['frontdesk'], offices: ['Sylmar'] }
-const ADMIN: Actor = { id: 'user-3', roles: ['admin'], offices: ['Sylmar'] }
-const MEDICAL_DIRECTOR: Actor = { id: 'user-4', roles: ['medical_director'], offices: ['Sylmar'] }
+const PROVIDER: Actor = { id: 'user-1', roles: ['provider'], locations: ['sylmar'] }
+const FRONTDESK: Actor = { id: 'user-2', roles: ['frontdesk'], locations: ['sylmar'] }
+const ADMIN: Actor = { id: 'user-3', roles: ['admin'], locations: ['sylmar'] }
+const MEDICAL_DIRECTOR: Actor = { id: 'user-4', roles: ['medical_director'], locations: ['sylmar'] }
 
 function fakeDb(overrides: Partial<Db['patients']> = {}): Db {
   return {
@@ -203,6 +203,10 @@ function fakeDb(overrides: Partial<Db['patients']> = {}): Db {
       listQueue: async () => [],
       findNote: async () => null,
       signOff: async () => null,
+    },
+    locations: {
+      list: async () => [],
+      listActive: async () => [],
     },
   }
 }

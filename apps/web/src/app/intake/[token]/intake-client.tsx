@@ -83,6 +83,7 @@ export function IntakeClient({ token }: { token: string }) {
           <PatientIntakeForm
             token={token}
             language={current}
+            locations={invite.data.locations}
             defaultValues={emptyIntakeValues(invite.data.firstName, invite.data.lastName)}
             onDone={() => setDone(true)}
           />

@@ -12,7 +12,6 @@ import {
   PATIENT_CONDITIONS,
   PATIENT_GENDERS,
   PATIENT_LANGUAGES,
-  PATIENT_OFFICES,
   PATIENT_PROGRAM_TYPES,
   PATIENT_REFERRAL_SOURCES,
   type PatientBilling,
@@ -46,6 +45,7 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field"
+import { useLocation } from "@/components/location-provider"
 import { RequiredMark } from "@/components/required-mark"
 import {
   FALLBACK_FIELD_MESSAGE,
@@ -315,6 +315,15 @@ const FEET = ["0", "1", "2", "3", "4", "5", "6", "7", "8"]
 
 /** The legacy system's office → at-home test, verbatim. */
 const AT_HOME_OFFICE = /(.*\s)home$/i
+
+/**
+ * The record's `office` is still the legacy string (ADR 32), so the two
+ * values that are not clinics stay choosable here: they mark the At Home
+ * program and telemedicine-only patients until the appointment work gives
+ * those a field of their own. Shown as they are; the clinics show their
+ * display names.
+ */
+const NON_CLINIC_OFFICES = ["Telemedicine", "At Home"] as const
 /** The legacy referral-source → show-patient-picker test, verbatim. */
 const REFERRED_BY_PATIENT = /patient/
 
@@ -557,6 +566,23 @@ export function PatientForm({
   // Opens on the first tab given, which in PATIENT_TABS order is Medical
   // whenever the role renders it.
   const [tab, setTab] = React.useState<PatientTab>(sections[0] ?? "medical")
+
+  // The office pick-list: the active clinics by display name, stored as the
+  // legacy string the record keeps; the two non-clinic values; and, if the
+  // record already holds something else (a closed clinic, a dead value), that
+  // value too, so opening an old record never silently changes it.
+  const { activeLocations, nameForOffice } = useLocation()
+  const officeItems = React.useMemo(() => {
+    const items = [
+      ...activeLocations.map((row) => ({ value: row.legacyName, label: row.name })),
+      ...NON_CLINIC_OFFICES.map((value) => ({ value, label: value })),
+    ]
+    const current = defaultValues.office
+    if (current !== "" && !items.some((item) => item.value === current)) {
+      items.unshift({ value: current, label: nameForOffice(current) })
+    }
+    return items
+  }, [activeLocations, defaultValues.office, nameForOffice])
   // Tabs holding an error after the last submit — shown as a count on the
   // trigger, so a failure on a hidden tab is never a silent one.
   const [erroring, setErroring] = React.useState<Set<PatientTab>>(new Set())
@@ -727,7 +753,7 @@ export function PatientForm({
             label: value === "english" ? "English" : "Spanish",
           })),
         )}
-        {selectField("office", "Office", asItems(PATIENT_OFFICES), {
+        {selectField("office", "Office", officeItems, {
           required: officeRequired,
           ...(officeRequired ? { description: "The office or program you will visit." } : {}),
         })}

@@ -1,4 +1,4 @@
-import type { Office } from '@fastehr/contracts'
+import type { LocationSlug } from '@fastehr/contracts'
 import { db, type Db } from '@fastehr/db'
 import { getAppBaseUrl } from './auth.ts'
 import { smsTransportFromEnv, type SmsTransport } from './sms.ts'
@@ -16,14 +16,16 @@ import { smsTransportFromEnv, type SmsTransport } from './sms.ts'
 /**
  * The authenticated caller, resolved by `actorFromHeaders` in ./auth.ts.
  *
- * `offices` is the set of sites this actor may read or write. It is part of the
- * *identity*, resolved server-side from the session — never taken from a
- * request, and never from a client-side selection. See ADR 22.
+ * `locations` is the set of clinics this actor may filter by. It is part of
+ * the *identity*, resolved server-side — never taken from a request, and
+ * never from a client-side selection (ADR 22). Since the Aug 21 sync a
+ * location is a filter rather than a boundary, so every actor holds every
+ * clinic (ADR 32); the shape stays so the check has one place to live.
  */
 export interface Actor {
   id: string
   roles: readonly string[]
-  offices: readonly Office[]
+  locations: readonly LocationSlug[]
   /**
    * Set when the account holds an admin-issued temporary credential. The
    * session is real, but `requireSession` refuses to hand it out until the

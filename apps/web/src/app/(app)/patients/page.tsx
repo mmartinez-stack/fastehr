@@ -22,7 +22,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { PageHeader } from "@/components/page-header"
-import { useOffice } from "@/components/office-provider"
+import { useLocation } from "@/components/location-provider"
 import { useSurfaces } from "@/components/role-provider"
 import { trpc } from "@/trpc/client"
 
@@ -50,8 +50,8 @@ import { trpc } from "@/trpc/client"
  * the docs/forms.md rule, applied to a search.
  *
  * For the clerical roles the page has a second tab, **Pending intakes**: the
- * self-service submissions waiting for review in the office currently
- * selected in the header (DIA-72). A provider sees the roster alone — the
+ * self-service submissions waiting for review in the clinic currently
+ * selected in the header, or in every clinic (DIA-72, ADR 32). A provider sees the roster alone — the
  * tab is not rendered for them, and the procedure behind it would refuse
  * them anyway.
  */
@@ -138,10 +138,10 @@ function formatSubmitted(iso: string): string {
 /** The legacy queue showed when to call; the person's answer, in their words' order. */
 const CONTACT_TIME_LABEL = { morning: "Morning", afternoon: "Afternoon", evening: "Evening" } as const
 
-/** The office's queue of submitted intakes, each opening the review screen. */
+/** The clinic's queue of submitted intakes (or every clinic's), each opening the review screen. */
 function PendingIntakes() {
-  const { office } = useOffice()
-  const pending = trpc.intake.listPending.useQuery({ office })
+  const { location, labelFor } = useLocation()
+  const pending = trpc.intake.listPending.useQuery({ location })
   const rows = pending.data ?? []
 
   return (
@@ -207,7 +207,7 @@ function PendingIntakes() {
             ) : rows.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                  No intakes are waiting for review at {office}.
+                  No intakes are waiting for review{location === "all" ? "" : ` at ${labelFor(location)}`}.
                 </TableCell>
               </TableRow>
             ) : null}
@@ -238,9 +238,9 @@ export default function PatientsPage() {
   const [suggesting, setSuggesting] = React.useState(false)
   // Contact details are clerical, on the roster as much as on the record.
   const { clerical } = useSurfaces()
-  const { office } = useOffice()
+  const { location, nameForOffice } = useLocation()
   // The tab's count: fetched only for the roles that can see the tab.
-  const pendingCount = trpc.intake.listPending.useQuery({ office }, { enabled: clerical })
+  const pendingCount = trpc.intake.listPending.useQuery({ location }, { enabled: clerical })
   // "Now" for the over-a-year flag, read once per mount: a render is pure,
   // and the day boundary does not need to move under an open screen.
   const [now] = React.useState(() => Date.now())
@@ -453,7 +453,7 @@ export default function PatientsPage() {
                           {formatPhone(patient.phone)}
                         </TableCell>
                       )}
-                      <TableCell>{patient.office ?? "-"}</TableCell>
+                      <TableCell>{patient.office === null ? "-" : nameForOffice(patient.office)}</TableCell>
                       <TableCell>
                         <LastVisitCell lastVisitAt={patient.lastVisitAt} now={now} />
                       </TableCell>
@@ -640,7 +640,7 @@ export default function PatientsPage() {
                       {formatPhone(patient.phone)}
                     </TableCell>
                   )}
-                  <TableCell>{patient.office ?? "-"}</TableCell>
+                  <TableCell>{patient.office === null ? "-" : nameForOffice(patient.office)}</TableCell>
                   <TableCell>
                     <LastVisitCell lastVisitAt={patient.lastVisitAt} now={now} />
                   </TableCell>
