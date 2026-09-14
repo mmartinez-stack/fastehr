@@ -310,6 +310,10 @@ if (apply) {
         signedById: visit.signedById,
         signedByName: visit.signedByName,
         signedAt: visit.signedAt,
+        // ADR 33: history never waited in the queue. Signed is closed;
+        // unsigned is in progress (the legacy "unsigned" queue).
+        status: visit.signedAt === null ? ('in_progress' as const) : ('closed' as const),
+        startedAt: visit.signedAt === null ? visit.dateOfService : null,
       })
 
       const fresh = resolvable.filter((visit) => !existingIdByLegacyId.has(visit.legacyId))

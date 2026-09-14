@@ -42,6 +42,7 @@ first and produced a bug that type-checked.
 | [30](030-medical-director-review-sampling.md) | Medical-director review: a recorded sampling window, a flag (superseded by 31), and the review on the note | `packages/core` · `packages/contracts` · `packages/db` · `apps/web/src/server` · `apps/web/scripts` |
 | [31](031-medical-director-role.md) | The medical director is a role with the administrator's access, and the queue lives on the Queues page | `packages/contracts` · `packages/db` · `apps/web/src/server` · `apps/web/src/components` · `apps/web/src/features/review` |
 | [32](032-locations-and-visit-modality.md) | Locations: two active clinics as rows, remote care as a visit modality | `packages/contracts` · `packages/db` |
+| [33](033-wait-queue-as-visit-status.md) | The wait-time queue is a status on the visit, and the place in line is derived | `packages/contracts` · `packages/core` · `packages/db` |
 
 ## Adding one
 

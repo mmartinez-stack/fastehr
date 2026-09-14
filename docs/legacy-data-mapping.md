@@ -217,6 +217,7 @@ modelled yet; they migrate with the modules that read them.
 | `signature.firstName` + `lastName` | `signedByName` | `String?` | The legacy signature block's own snapshot. |
 | `signature.signed` | `signedAt` | `DateTime?` | NULL means unsigned. |
 | (derived) | `patients.lastVisitAt` | `DateTime?` | `max(dateOfService)` per patient, recomputed for the whole table in one statement after every run. |
+| (derived) | `status`, `startedAt` | `VisitStatus`, `DateTime?` | ADR 33: signed → `closed`; unsigned → `in_progress` with `startedAt` = the date of service (the legacy "unsigned" queue). Imported history never enters the wait queue. |
 
 ### Discarded fields
 

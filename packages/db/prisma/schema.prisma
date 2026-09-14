@@ -55,6 +55,19 @@ enum VisitModality {
   @@map("visit_modality")
 }
 
+/// ADR 33: where a visit is in the day. `arrived` and `roomed` are the wait
+/// queue; the provider's first write to the record moves it to `in_progress`
+/// (or the manual "Seen" action does), and the sign-off closes it.
+enum VisitStatus {
+  scheduled
+  arrived
+  roomed
+  in_progress
+  closed
+
+  @@map("visit_status")
+}
+
 /// The clinics (ADR 32, DIA-46). Seeded by migration, keyed by slug, no
 /// CRUD: adding one is a migration. `legacyName` is the office string the
 /// legacy system wrote on patients and visits, the consolidation key.
@@ -257,6 +270,17 @@ model Visit {
   location   Location?     @relation(fields: [locationId], references: [slug], onDelete: Restrict)
   modality   VisitModality @default(in_person)
   notes         String?
+  /// ADR 33: the wait queue is a status on the visit, not a table of its
+  /// own. `arrivedAt` is the wait-time source; `startedAt` is when the
+  /// patient left the queue (the provider's first write, or "Seen").
+  status     VisitStatus @default(scheduled)
+  arrivedAt  DateTime?
+  roomedAt   DateTime?
+  startedAt  DateTime?
+  /// The provider the front desk expects to see the patient. An
+  /// assignment, not a record: `SetNull` on delete, unlike a signature.
+  providerId String?
+  provider   User?       @relation("VisitProviders", fields: [providerId], references: [id], onDelete: SetNull)
   // `Restrict`, not the default `SetNull`: the legacy system hard-deleted
   // users and left 38,047 signatures pointing at nothing. Here the delete is
   // refused while a signature references the account.
@@ -283,6 +307,9 @@ model Visit {
 
   @@index([patientId, dateOfService])
   @@index([locationId, dateOfService])
+  // The wait queue: a clinic's arrived and roomed visits, by arrival.
+  @@index([locationId, status, arrivedAt])
+  @@index([patientId, status])
   @@index([signedAt])
   // The queue: sampled and not yet reviewed.
   @@index([sampledAt, reviewedAt])
@@ -365,6 +392,7 @@ model User {
   sentIntakes        IntakeRequest[] @relation("IntakeSenders")
   reviewedIntakes    IntakeRequest[] @relation("IntakeReviewers")
   reviewedVisits     Visit[]   @relation("VisitReviews")
+  assignedVisits     Visit[]   @relation("VisitProviders")
   triggeredSamples   ReviewSampleRun[]
 
   @@map("users")

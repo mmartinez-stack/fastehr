@@ -161,6 +161,26 @@ export {
   type AcceptIntakeInput,
   type IntakeByIdInput,
 } from './intake.ts'
+export {
+  VISIT_STATUSES,
+  visitStatusSchema,
+  WAITING_STATUSES,
+  waitingStatusSchema,
+  waitQueueRowSchema,
+  waitQueueEntrySchema,
+  listWaitQueueInput,
+  arriveInput,
+  roomInput,
+  removeFromWaitQueueInput,
+  type VisitStatus,
+  type WaitingStatus,
+  type WaitQueueRow,
+  type WaitQueueEntry,
+  type ListWaitQueueInput,
+  type ArriveInput,
+  type RoomInput,
+  type RemoveFromWaitQueueInput,
+} from './queue.ts'
 export { INTAKE_CONSENT_VERSION, INTAKE_CONSENT_TEXT, signatureMatchesName } from './intake-consent.ts'
 export {
   LEGACY_CREDENTIAL_PREFIX,

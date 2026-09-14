@@ -8,6 +8,7 @@ import type { Patient } from '@fastehr/contracts'
  * those imports fail to resolve outright (ADR 2).
  */
 export { REVIEW_SAMPLE_RATE_DEFAULT, reviewSampleSize, sampleForReview } from './review-sampling.ts'
+export { minutesWaiting, rankWaitQueue } from './wait-queue.ts'
 
 export function patientDisplayName(patient: Pick<Patient, 'firstName' | 'lastName'>): string {
   return `${patient.lastName}, ${patient.firstName}`

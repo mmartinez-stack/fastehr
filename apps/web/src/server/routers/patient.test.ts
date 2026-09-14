@@ -208,6 +208,15 @@ function fakeDb(overrides: Partial<Db['patients']> = {}): Db {
       list: async () => [],
       listActive: async () => [],
     },
+    queue: {
+      arrive: async () => {
+        throw new Error('not under test')
+      },
+      room: async () => null,
+      remove: async () => null,
+      startFromRecordWrite: async () => 0,
+      listWaiting: async () => [],
+    },
   }
 }
 
