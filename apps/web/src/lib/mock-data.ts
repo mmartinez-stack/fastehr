@@ -87,14 +87,51 @@ export interface Coupon {
   validUntil: string
 }
 
+/** The base coupons an administrator defines; staff assign one to a patient. */
+export const BASE_COUPONS: Coupon[] = [
+  { description: "$50 off next Semaglutide refill", validUntil: "2025-09-30" },
+  { description: "Free B12 with visit", validUntil: "2025-08-31" },
+  { description: "10% off Tirzepatide package", validUntil: "2025-10-15" },
+  { description: "$20 off follow-up visit", validUntil: "2025-12-31" },
+]
+
+/**
+ * Who wrote a record. The legacy chart tinted a visit by its signer: a
+ * clinician's note (the default), an administrative entry (green, signed
+ * "non-doc"), and an unsigned one (yellow). Comments on a signed note carry
+ * the same distinction.
+ */
+export type RecordAuthor = "provider" | "administrative"
+
+export const ADMINISTRATIVE_STAFF = ["M. Reyes", "L. Ortiz"] as const
+
+export interface VisitAddendum {
+  notes: string
+  author: RecordAuthor
+  signedBy: string
+  signedAt: string // ISO datetime
+}
+
 export interface Visit {
   id: string
   patientId: string
   date: string // ISO date
   type: ApptType
   weight: number // lbs
+  bloodPressure?: { systolic: number; diastolic: number }
   meds: MedDose[]
   provider: string
+  /** Who filled the record: a clinician, or the front desk / billing. */
+  author: RecordAuthor
+  /** Signed comments added after the note was signed, oldest first. */
+  addenda: VisitAddendum[]
+  /** The second signature of a reviewing provider, when one reviewed the note. */
+  reviewedBy?: string
+  reviewedAt?: string // ISO datetime
+  noShow: boolean
+  phoneVisit: boolean
+  /** Phone visit only: the medication was mailed. */
+  mailingCompleted: boolean
   signed: boolean
   signedBy?: string
   signedAt?: string // ISO datetime
@@ -127,6 +164,11 @@ export interface Patient {
   lastVisit: string
   missingConsents: string[]
   coupons: Coupon[]
+  /** Referral discounts earned and not yet used. */
+  referralCredits: number
+  /** At-Home program: the welcome package's tracking number, once sent. */
+  trackingNumber?: string
+  welcomePackageSent: boolean
 }
 
 export interface Appointment {
@@ -356,6 +398,9 @@ function makePatients(): Patient[] {
         "HTN, mild hyperlipidemia. No known drug allergies. Prior trial of phentermine with good tolerance.",
       lastVisit: iso((i % 6) + 1),
       missingConsents: missing,
+      referralCredits: i % 4 === 0 ? 2 : i % 4 === 2 ? 1 : 0,
+      trackingNumber: atHome && i % 2 === 1 ? `9405511105${String(700000000 + i * 3571).slice(0, 9)}` : undefined,
+      welcomePackageSent: atHome && i % 2 === 1,
       coupons:
         i % 2 === 0
           ? [
@@ -391,6 +436,12 @@ const FOLLOWUP_NOTES = [
   "Weight check + refill. Pt tolerating well, no new complaints. Increased dose per titration schedule. Discussed plateau strategies. Continue plan, recheck in 2 weeks.",
 ]
 
+const ADMIN_NOTES = [
+  "Payment collected at the front desk. Refill scheduled for next Monday, reminder text sent.",
+  "Called to confirm follow-up. Pt asked to move to Thursday; rebooked. Balance due at next visit.",
+  "Medication mailed. Tracking number texted to the patient. Mailing marked completed.",
+]
+
 function makeVisits(): Visit[] {
   const out: Visit[] = []
   patients.forEach((p, pi) => {
@@ -406,12 +457,45 @@ function makeVisits(): Visit[] {
       const medName = at(PRESCRIBING_MIX, (pi * 3 + v) % PRESCRIBING_MIX.length)
       const signed = v > 0
       const amount = 120 + ((pi + v) % 5) * 20
+      // Every fourth record is the front desk's: payment, mailing, a call.
+      const author: RecordAuthor = (pi + v) % 4 === 3 ? "administrative" : "provider"
+      const adminName = at(ADMINISTRATIVE_STAFF, (pi + v) % ADMINISTRATIVE_STAFF.length)
+      const providerName = at(PROVIDERS, (pi + v) % PROVIDERS.length)
+      const phoneVisit = type === "Follow-up" && (pi + v) % 7 === 0
+      const addenda: VisitAddendum[] = []
+      if (signed && v % 4 === 1) {
+        addenda.push({
+          notes: "Pt called: nausea resolved after day 3. Continue current dose.",
+          author: "provider",
+          signedBy: providerName,
+          signedAt: iso(daysAgo - 4, 14, 20),
+        })
+      }
+      if (signed && v % 5 === 2) {
+        addenda.push({
+          notes: `Balance of $${amount} paid in full at the front desk.`,
+          author: "administrative",
+          signedBy: adminName,
+          signedAt: iso(daysAgo - 1, 16, 5),
+        })
+      }
       out.push({
         id: `v${pi + 1}-${v + 1}`,
         patientId: p.id,
         date: iso(daysAgo),
         type,
         weight,
+        bloodPressure:
+          author === "provider"
+            ? { systolic: 118 + ((pi * 3 + v * 5) % 24), diastolic: 72 + ((pi + v * 3) % 14) }
+            : undefined,
+        author,
+        addenda,
+        reviewedBy: signed && v % 6 === 3 ? at(PROVIDERS, (pi + v + 1) % PROVIDERS.length) : undefined,
+        reviewedAt: signed && v % 6 === 3 ? iso(daysAgo - 6, 9, 30) : undefined,
+        noShow: v === 5 && pi % 4 === 1,
+        phoneVisit,
+        mailingCompleted: phoneVisit && v % 2 === 0,
         meds: [
           { name: medName, dosage: `${0.25 * (((v % 4) + 1))} mg` },
           // Keyed on the patient as well as the visit so the B12 total does
@@ -421,9 +505,9 @@ function makeVisits(): Visit[] {
           // frequency ranking exists to replace.
           ...((pi + v) % 3 === 0 ? [{ name: "B12", dosage: "1 mL" }] : []),
         ],
-        provider: at(PROVIDERS, (pi + v) % PROVIDERS.length),
+        provider: author === "provider" ? providerName : adminName,
         signed,
-        signedBy: signed ? at(PROVIDERS, (pi + v) % PROVIDERS.length) : undefined,
+        signedBy: signed ? (author === "provider" ? providerName : adminName) : undefined,
         signedAt: signed ? iso(daysAgo - 2) : undefined,
         openedAt: iso(daysAgo),
         tracking:
@@ -436,7 +520,9 @@ function makeVisits(): Visit[] {
         notes:
           v === 0
             ? "Initial consult. Reviewed goals and medical history. Started GLP-1 titration. Discussed diet, hydration, and expected side effects. Welcome package to be sent. Baseline weight recorded. Goal weight discussed. RTC in 2 weeks."
-            : at(FOLLOWUP_NOTES, (pi + v) % FOLLOWUP_NOTES.length),
+            : author === "administrative"
+              ? at(ADMIN_NOTES, (pi + v) % ADMIN_NOTES.length)
+              : at(FOLLOWUP_NOTES, (pi + v) % FOLLOWUP_NOTES.length),
         photo: v % 3 === 0,
       })
     }

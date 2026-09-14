@@ -5,8 +5,13 @@ import Link from "next/link"
 import {
   ArrowLeftIcon,
   CalendarPlusIcon,
+  CameraIcon,
+  CircleAlertIcon,
   FileTextIcon,
+  HouseIcon,
   MessageSquareIcon,
+  MessagesSquareIcon,
+  PackageCheckIcon,
   PillIcon,
   SaveIcon,
   StethoscopeIcon,
@@ -16,6 +21,7 @@ import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { useSurfaces } from "@/components/role-provider"
@@ -35,7 +41,7 @@ import {
 } from "@/lib/mock-data"
 import { AppointmentsPanel, BillingPanel, ConsentsPanel } from "./clerical-tabs"
 import { RefillDialog } from "./refill-dialog"
-import { VisitRecords } from "./visit-records"
+import { VisitRecords, type CrossComment } from "./visit-records"
 import { WeightChart } from "./weight-chart"
 
 /**
@@ -51,9 +57,13 @@ import { WeightChart } from "./weight-chart"
  * - The medical history is a free text box the provider writes in; no file
  *   upload. Nothing administrative (contact, billing) is on a provider's
  *   screen, and no dispensing action ("Register new vial") is either.
- * - One tab strip holds every section a role may see: Visit records for
- *   the clinical surface; Consents, Appointments, Billing (coupons inside
- *   it, where the legacy record applied them) for the clerical one.
+ * - One tab strip holds every section a role may see, and the records are
+ *   split by kind rather than colour-coded: Visit records (the clinical
+ *   notes) for the clinical surface; Administrative records (payment,
+ *   mailing, calls, and the front desk's comments on clinical visits),
+ *   Consents, Appointments, and Billing (coupons inside it, where the
+ *   legacy record applied them) for the clerical one. An administrator has
+ *   both surfaces and sees every tab.
  *
  * The role comes from a client-side switcher (see RoleProvider): this is a
  * mockup of the division on fixtures, not an implementation of it.
@@ -76,6 +86,15 @@ export function PatientDetail({
   const currentWeight = latest?.weight ?? null
   const currentBmi = currentWeight === null ? null : bmi(currentWeight, patient.heightIn)
   const currentMeds = latest?.meds ?? []
+
+  // Records split by kind, each on its own tab (the 2026-09-13 review). A
+  // comment goes with the kind of its author, referencing the visit it is on.
+  const clinicalVisits = visits.filter((v) => v.author === "provider")
+  const administrativeVisits = visits.filter((v) => v.author === "administrative")
+  const crossComments = (kind: "provider" | "administrative"): CrossComment[] =>
+    visits
+      .filter((v) => v.author !== kind)
+      .flatMap((visit) => visit.addenda.filter((a) => a.author === kind).map((addendum) => ({ visit, addendum })))
 
   return (
     <div>
@@ -107,6 +126,15 @@ export function PatientDetail({
                 <MessageSquareIcon data-icon="inline-start" />
                 Text
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                nativeButton={false}
+                render={<Link href="/sms" />}
+              >
+                <MessagesSquareIcon data-icon="inline-start" />
+                SMS chat
+              </Button>
               <Button size="sm">
                 <CalendarPlusIcon data-icon="inline-start" />
                 Book Visit
@@ -127,9 +155,10 @@ export function PatientDetail({
           {clinical && <MedicalHistoryNotes initial={patient.medsHistory} />}
 
           {/* One strip for every section a role may see; each fact lives in one tab. */}
-          <Tabs defaultValue={clinical ? "records" : "consents"}>
+          <Tabs defaultValue={clinical ? "records" : "administrative"}>
             <TabsList className="flex-wrap">
               {clinical && <TabsTrigger value="records">Visit records</TabsTrigger>}
+              {clerical && <TabsTrigger value="administrative">Administrative records</TabsTrigger>}
               {clerical && <TabsTrigger value="consents">Consents</TabsTrigger>}
               {clerical && <TabsTrigger value="appointments">Appointments</TabsTrigger>}
               {clerical && <TabsTrigger value="billing">Billing</TabsTrigger>}
@@ -137,7 +166,7 @@ export function PatientDetail({
 
             {clinical && (
               <TabsContent value="records" className="mt-2">
-                {visits.length === 0 ? (
+                {clinicalVisits.length === 0 ? (
                   <Card>
                     <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
                       <FileTextIcon className="size-6 text-muted-foreground" />
@@ -145,8 +174,23 @@ export function PatientDetail({
                     </CardContent>
                   </Card>
                 ) : (
-                  <VisitRecords visits={visits} currentUser="Mauricio Martinez" />
+                  <VisitRecords
+                    kind="provider"
+                    visits={clinicalVisits}
+                    comments={crossComments("provider")}
+                    currentUser="Mauricio Martinez"
+                  />
                 )}
+              </TabsContent>
+            )}
+            {clerical && (
+              <TabsContent value="administrative" className="mt-2">
+                <VisitRecords
+                  kind="administrative"
+                  visits={administrativeVisits}
+                  comments={crossComments("administrative")}
+                  currentUser="Mauricio Martinez"
+                />
               </TabsContent>
             )}
             {clerical && (
@@ -239,11 +283,40 @@ export function PatientDetail({
                   <WeightChart
                     className="h-[220px] w-full 3xl:h-[280px]"
                     data={[...visits].reverse().map((v) => ({ date: v.date, weight: v.weight }))}
+                    exportName={`${patient.lastName}-${patient.firstName}-weight`}
                   />
                 )}
               </CardContent>
             </Card>
           )}
+
+          {clinical && visits.some((v) => v.photo) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <CameraIcon className="size-4 text-primary" />
+                  Visit photos
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {/* Placeholders: the images wait for PHI file storage (DIA-68, DIA-71). */}
+                <div className="grid grid-cols-3 gap-2">
+                  {visits
+                    .filter((v) => v.photo)
+                    .map((v) => (
+                      <figure key={v.id} className="flex flex-col gap-1">
+                        <div className="flex aspect-[3/4] items-center justify-center rounded-md border border-dashed border-border bg-muted/40">
+                          <CameraIcon className="size-5 text-muted-foreground" />
+                        </div>
+                        <figcaption className="text-center text-xs text-muted-foreground">{fmtDateLong(v.date)}</figcaption>
+                      </figure>
+                    ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {clerical && patient.atHome && <AtHomeCard patient={patient} />}
 
           {clerical && !clinical && (
             <WaiversColumn
@@ -261,6 +334,64 @@ export function PatientDetail({
         </p>
       )}
     </div>
+  )
+}
+
+/**
+ * The At-Home program block the legacy chart kept beside the patient: the
+ * welcome package's tracking number and the text that tells the patient it
+ * shipped, and a warning when the program type the contract needs is
+ * missing. Front desk only.
+ */
+function AtHomeCard({ patient }: { patient: Patient }) {
+  const [tracking, setTracking] = useState(patient.trackingNumber ?? "")
+  const [sent, setSent] = useState(patient.welcomePackageSent)
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <HouseIcon className="size-4 text-appt-athome" />
+          At-Home program
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 text-sm">
+        {patient.program === undefined && (
+          <p className="flex items-center gap-2 text-warning-foreground">
+            <CircleAlertIcon className="size-4" />
+            Missing program type for the contract.
+          </p>
+        )}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="tracking-number" className="text-sm font-medium">
+            Welcome package tracking number
+          </label>
+          <Input
+            id="tracking-number"
+            value={tracking}
+            onChange={(event) => setTracking(event.target.value)}
+            placeholder="9405 5111 05…"
+            className="font-mono"
+          />
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-muted-foreground">
+            {sent ? "Package sent, patient texted." : "Not sent yet."}
+          </span>
+          <Button
+            size="sm"
+            variant={sent ? "outline" : "default"}
+            disabled={tracking.trim() === ""}
+            onClick={() => {
+              setSent(true)
+              toast.success(`Welcome package text sent to ${patient.firstName} with the tracking number`)
+            }}
+          >
+            <PackageCheckIcon data-icon="inline-start" />
+            {sent ? "Send again" : "Welcome package sent"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 

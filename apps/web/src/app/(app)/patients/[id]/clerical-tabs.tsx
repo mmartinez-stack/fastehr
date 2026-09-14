@@ -1,15 +1,23 @@
 "use client"
 
+import { useState } from "react"
 import {
   CalendarClockIcon,
   CheckCircle2Icon,
   CircleAlertIcon,
   DollarSignIcon,
+  DownloadIcon,
+  GiftIcon,
+  PlusIcon,
+  SendIcon,
   TicketPercentIcon,
 } from "lucide-react"
+import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Table,
   TableBody,
@@ -19,10 +27,12 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
+  BASE_COUPONS,
   CONSENT_TYPES,
   fmtDateLong,
   fmtTime,
   type Appointment,
+  type Coupon,
   type Patient,
   type Visit,
 } from "@/lib/mock-data"
@@ -35,8 +45,15 @@ const usd = (n: number) => `$${n.toLocaleString("en-US")}`
  * tab strip beside Visit records, and none renders for a provider.
  */
 
+/**
+ * Consents as the legacy chart handled them: a form is pending or on file,
+ * a pending one is sent to the patient by text (one link per form), and a
+ * signed one is downloadable. Sending and downloading are mockup here: the
+ * text waits for the SMS provider (DIA-67) and the file for storage (DIA-68).
+ */
 export function ConsentsPanel({ patient }: { patient: Patient }) {
   const onFile = CONSENT_TYPES.filter((c) => !patient.missingConsents.includes(c))
+  const [sent, setSent] = useState<Set<string>>(() => new Set())
   return (
     <Card>
       <CardHeader>
@@ -47,7 +64,8 @@ export function ConsentsPanel({ patient }: { patient: Patient }) {
           <TableHeader>
             <TableRow>
               <TableHead>Form</TableHead>
-              <TableHead className="text-right">Status</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -56,7 +74,7 @@ export function ConsentsPanel({ patient }: { patient: Patient }) {
               return (
                 <TableRow key={c}>
                   <TableCell className="font-medium">{c}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell>
                     {/* Icon and word, not colour alone (DIA-22). */}
                     <span
                       className={
@@ -65,8 +83,34 @@ export function ConsentsPanel({ patient }: { patient: Patient }) {
                       }
                     >
                       {pending ? <CircleAlertIcon className="size-4" /> : <CheckCircle2Icon className="size-4" />}
-                      {pending ? "Pending" : "On file"}
+                      {pending ? (sent.has(c) ? "Sent, awaiting signature" : "Pending") : "On file"}
                     </span>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex justify-end gap-1">
+                      {pending ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSent((prev) => new Set(prev).add(c))
+                            toast.success(`${c} form texted to ${patient.firstName}`)
+                          }}
+                        >
+                          <SendIcon data-icon="inline-start" />
+                          {sent.has(c) ? "Send again" : "Send by text"}
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => toast.success(`${c} consent download started`)}
+                        >
+                          <DownloadIcon data-icon="inline-start" />
+                          Download
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               )
@@ -127,6 +171,10 @@ export function AppointmentsPanel({ appointments }: { appointments: Appointment[
  * on the visit's price, so a coupon is a billing fact, not a section.
  */
 export function BillingPanel({ patient, visits }: { patient: Patient; visits: Visit[] }) {
+  const [credits, setCredits] = useState(patient.referralCredits)
+  const [coupons, setCoupons] = useState<Coupon[]>(patient.coupons)
+  const [picked, setPicked] = useState("")
+  const assignable = BASE_COUPONS.filter((base) => !coupons.some((c) => c.description === base.description))
   const collected = visits.filter((v) => v.paid).reduce((s, v) => s + v.amount, 0)
   const outstanding = visits.filter((v) => !v.paid).reduce((s, v) => s + v.amount, 0)
   const byMethod = visits
@@ -182,25 +230,92 @@ export function BillingPanel({ patient, visits }: { patient: Patient; visits: Vi
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Available coupons</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {patient.coupons.length === 0 && (
-            <p className="text-sm text-muted-foreground">No active coupons.</p>
-          )}
-          {patient.coupons.map((c, i) => (
-            <div key={i} className="flex items-center gap-3 rounded-md border border-border bg-accent/40 p-3">
-              <TicketPercentIcon className="size-5 text-primary" />
-              <div className="flex flex-col">
-                <span className="text-sm font-medium">{c.description}</span>
-                <span className="text-xs text-muted-foreground">Valid until {fmtDateLong(c.validUntil)}</span>
-              </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Referral credits, as the legacy chart counted them: earned by
+            referring, spent as a discount on a visit (DIA-66 owns the rules). */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <GiftIcon className="size-4 text-primary" />
+              Referral credits
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 text-sm">
+            <p>
+              <span className="text-2xl font-semibold tabular-nums">{credits}</span>{" "}
+              <span className="text-muted-foreground">
+                {credits === 1 ? "discount available" : "discounts available"}
+              </span>
+            </p>
+            <div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={credits === 0}
+                onClick={() => {
+                  setCredits((n) => n - 1)
+                  toast.success("Referral discount marked as used")
+                }}
+              >
+                Mark discount as used
+              </Button>
             </div>
-          ))}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <TicketPercentIcon className="size-4 text-primary" />
+              Coupons
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {coupons.length === 0 && <p className="text-sm text-muted-foreground">No active coupons.</p>}
+            {coupons.map((c, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-md border border-border bg-accent/40 p-3">
+                <TicketPercentIcon className="size-5 text-primary" />
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium">{c.description}</span>
+                  <span className="text-xs text-muted-foreground">Valid until {fmtDateLong(c.validUntil)}</span>
+                </div>
+              </div>
+            ))}
+            {assignable.length > 0 && (
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-56 flex-1">
+                  <Select value={picked} onValueChange={(value) => setPicked(typeof value === "string" ? value : "")}>
+                    <SelectTrigger className="w-full" aria-label="Coupon to assign">
+                      <SelectValue placeholder="Assign a coupon…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {assignable.map((c) => (
+                        <SelectItem key={c.description} value={c.description}>
+                          {c.description}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  size="sm"
+                  disabled={picked === ""}
+                  onClick={() => {
+                    const coupon = BASE_COUPONS.find((c) => c.description === picked)
+                    if (!coupon) return
+                    setCoupons((prev) => [...prev, coupon])
+                    setPicked("")
+                    toast.success("Coupon assigned to the patient")
+                  }}
+                >
+                  <PlusIcon data-icon="inline-start" />
+                  Assign
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader>
@@ -228,8 +343,8 @@ export function BillingPanel({ patient, visits }: { patient: Patient; visits: Vi
                   <TableCell className="text-right tabular-nums">{usd(v.amount)}</TableCell>
                   <TableCell className="text-right">
                     <Badge
-                      variant={v.paid ? "ghost" : "outline"}
-                      className={v.paid ? "bg-success/15 text-success" : "border-warning/40 text-warning"}
+                      variant="ghost"
+                      className={v.paid ? "bg-success/15 text-success" : "bg-warning/20 text-warning-foreground"}
                     >
                       {v.paid ? "Paid" : "Due"}
                     </Badge>
