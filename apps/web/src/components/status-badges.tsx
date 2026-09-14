@@ -2,27 +2,36 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import type { Language, PatientStatus } from "@/lib/mock-data"
 
-export function LanguageTag({ language }: { language: Language }) {
+/** `lg` is the record header's size: readable beside a title, not a table cell's tag. */
+type BadgeSize = "default" | "lg"
+
+export function LanguageTag({ language, size = "default" }: { language: Language; size?: BadgeSize }) {
   return (
-    <Badge variant="outline" className="font-mono text-[10px]">
+    <Badge
+      variant="ghost"
+      className={cn(
+        "bg-foreground/10 font-mono font-semibold text-foreground",
+        size === "lg" ? "px-2.5 py-1 text-sm" : "text-[10px]",
+      )}
+    >
       {language}
     </Badge>
   )
 }
 
-export function PatientStatusBadge({ status }: { status: PatientStatus }) {
+export function PatientStatusBadge({ status, size = "default" }: { status: PatientStatus; size?: BadgeSize }) {
   return (
     <Badge
       variant="ghost"
       className={cn(
-        status === "active"
-          ? "bg-success/15 text-success"
-          : "bg-destructive/10 text-destructive",
+        status === "active" ? "bg-success/15 text-success" : "bg-destructive/10 text-destructive",
+        size === "lg" && "px-2.5 py-1 text-sm",
       )}
     >
       <span
         className={cn(
-          "size-1.5 rounded-full",
+          "rounded-full",
+          size === "lg" ? "size-2" : "size-1.5",
           status === "active" ? "bg-success" : "bg-destructive",
         )}
       />

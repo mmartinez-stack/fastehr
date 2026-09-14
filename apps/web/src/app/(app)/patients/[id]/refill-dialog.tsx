@@ -44,7 +44,7 @@ export function RefillDialog({ patientName }: { patientName: string }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="lg">
             <PillIcon data-icon="inline-start" />
             Request Refill
           </Button>

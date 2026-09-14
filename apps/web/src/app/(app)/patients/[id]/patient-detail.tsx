@@ -112,30 +112,32 @@ export function PatientDetail({
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight text-balance">{fullName(patient)}</h1>
-          <LanguageTag language={patient.language} />
-          <PatientStatusBadge status={patient.status} />
+          <LanguageTag language={patient.language} size="lg" />
+          <PatientStatusBadge status={patient.status} size="lg" />
           {patient.atHome && (
-            <Badge className="bg-appt-athome text-appt-athome-foreground">At-Home</Badge>
+            <Badge className="bg-appt-athome px-2.5 py-1 text-sm text-appt-athome-foreground">At-Home</Badge>
           )}
         </div>
+        {/* The record's actions at `lg`: the four buttons a visit starts from,
+            sized to be found and hit without aiming (DIA-22). */}
         <div className="flex flex-wrap gap-2">
           {clinical && <RefillDialog patientName={fullName(patient)} />}
           {clerical && (
             <>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="lg">
                 <MessageSquareIcon data-icon="inline-start" />
                 Text
               </Button>
               <Button
                 variant="outline"
-                size="sm"
+                size="lg"
                 nativeButton={false}
                 render={<Link href="/sms" />}
               >
                 <MessagesSquareIcon data-icon="inline-start" />
                 SMS chat
               </Button>
-              <Button size="sm">
+              <Button size="lg">
                 <CalendarPlusIcon data-icon="inline-start" />
                 Book Visit
               </Button>
