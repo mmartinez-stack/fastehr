@@ -6,10 +6,8 @@ import {
   ArrowLeftIcon,
   CalendarPlusIcon,
   FileTextIcon,
-  MailIcon,
-  MapPinIcon,
   MessageSquareIcon,
-  PhoneIcon,
+  PillIcon,
   SaveIcon,
   StethoscopeIcon,
 } from "lucide-react"
@@ -18,26 +16,16 @@ import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { useSurfaces } from "@/components/role-provider"
-import { LanguageTag, PatientStatusBadge, SignedBadge } from "@/components/status-badges"
+import { LanguageTag, PatientStatusBadge } from "@/components/status-badges"
 import { WaiversColumn } from "@/features/consents/waivers-column"
 import { formatHeight } from "@/features/patients/height"
 import { ROLE_LABEL } from "@/lib/staff-role-label"
 import {
   ageFromDob,
   bmi,
-  fmtDate,
   fmtDateLong,
   fullName,
   type Appointment,
@@ -45,7 +33,7 @@ import {
   type PendingWaiver,
   type Visit,
 } from "@/lib/mock-data"
-import { ClericalTabs } from "./clerical-tabs"
+import { AppointmentsPanel, BillingPanel, ConsentsPanel } from "./clerical-tabs"
 import { RefillDialog } from "./refill-dialog"
 import { VisitRecords } from "./visit-records"
 import { WeightChart } from "./weight-chart"
@@ -54,15 +42,18 @@ import { WeightChart } from "./weight-chart"
  * The patient record, split by role (the Aug 7 sync) and laid out per the
  * Sep 7 review of the provider's view:
  *
- * - The patient information sits top right, the weight bar chart directly
- *   beneath it, and the column is fixed so the provider never scrolls to
- *   find either. Visit records take the centre and left.
- * - Height, weight, and medication are squeezed into one compact strip.
- *   Height reads "5 ft 4 in", never "64".
+ * - The patient information sits top right, the current medication and the
+ *   weight bar chart beneath it, and the column is fixed so the provider
+ *   never scrolls to find them. Visit records take the left, 60/40.
+ * - Each fact is shown once (the 2026-09-13 review): age, date of birth,
+ *   height, office, weight, and BMI on the patient card; medication on its
+ *   own card; the visits as records, with no second table.
  * - The medical history is a free text box the provider writes in; no file
- *   upload. Nothing administrative (contact, waivers, billing) is on a
- *   provider's screen, and no dispensing action ("Register new vial") is
- *   either.
+ *   upload. Nothing administrative (contact, billing) is on a provider's
+ *   screen, and no dispensing action ("Register new vial") is either.
+ * - One tab strip holds every section a role may see: Visit records for
+ *   the clinical surface; Consents, Appointments, Billing (coupons inside
+ *   it, where the legacy record applied them) for the clerical one.
  *
  * The role comes from a client-side switcher (see RoleProvider): this is a
  * mockup of the division on fixtures, not an implementation of it.
@@ -82,12 +73,9 @@ export function PatientDetail({
 
   const age = ageFromDob(patient.dob)
   const latest = visits[0]
-  const earliest = visits[visits.length - 1]
-  const startWeight = earliest?.weight ?? null
   const currentWeight = latest?.weight ?? null
-  const lost = startWeight !== null && currentWeight !== null ? startWeight - currentWeight : null
   const currentBmi = currentWeight === null ? null : bmi(currentWeight, patient.heightIn)
-  const currentMeds = latest?.meds.map((m) => `${m.name} ${m.dosage}`).join(", ") ?? ""
+  const currentMeds = latest?.meds ?? []
 
   return (
     <div>
@@ -103,19 +91,13 @@ export function PatientDetail({
       </Button>
 
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight text-balance">{fullName(patient)}</h1>
-            <LanguageTag language={patient.language} />
-            <PatientStatusBadge status={patient.status} />
-            {patient.atHome && (
-              <Badge className="bg-appt-athome text-appt-athome-foreground">At-Home</Badge>
-            )}
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {patient.gender} &middot; {age} yrs &middot; DOB {fmtDateLong(patient.dob)} &middot;{" "}
-            {formatHeight(patient.heightIn)} &middot; {patient.office}
-          </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight text-balance">{fullName(patient)}</h1>
+          <LanguageTag language={patient.language} />
+          <PatientStatusBadge status={patient.status} />
+          {patient.atHome && (
+            <Badge className="bg-appt-athome text-appt-athome-foreground">At-Home</Badge>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {clinical && <RefillDialog patientName={fullName(patient)} />}
@@ -135,32 +117,25 @@ export function PatientDetail({
       </div>
 
       {/*
-        Centre and left: the work. Right: the reference, fixed. At 1080p the
-        right column holds the patient information and the chart without
-        scrolling; the extra width at 3xl goes to the chart, not to the text.
+        Left, 60%: the visits, the work. Right, 40%: the patient information
+        and the chart, fixed, so at 1080p neither scrolls away. The split is
+        proportional rather than a fixed side width so the chart grows with
+        the screen instead of the text.
       */}
-      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] 3xl:grid-cols-[minmax(0,1fr)_440px]">
+      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="flex min-w-0 flex-col gap-6">
-          {clinical && (
-            <VitalsStrip
-              height={formatHeight(patient.heightIn)}
-              startWeight={startWeight}
-              currentWeight={currentWeight}
-              lost={lost}
-              bmi={currentBmi}
-              medication={currentMeds}
-            />
-          )}
-
           {clinical && <MedicalHistoryNotes initial={patient.medsHistory} />}
 
-          {clinical && (
-            <Tabs defaultValue="records">
-              <TabsList>
-                <TabsTrigger value="records">Visit records</TabsTrigger>
-                <TabsTrigger value="visits">Visits</TabsTrigger>
-              </TabsList>
+          {/* One strip for every section a role may see; each fact lives in one tab. */}
+          <Tabs defaultValue={clinical ? "records" : "consents"}>
+            <TabsList className="flex-wrap">
+              {clinical && <TabsTrigger value="records">Visit records</TabsTrigger>}
+              {clerical && <TabsTrigger value="consents">Consents</TabsTrigger>}
+              {clerical && <TabsTrigger value="appointments">Appointments</TabsTrigger>}
+              {clerical && <TabsTrigger value="billing">Billing</TabsTrigger>}
+            </TabsList>
 
+            {clinical && (
               <TabsContent value="records" className="mt-2">
                 {visits.length === 0 ? (
                   <Card>
@@ -170,80 +145,84 @@ export function PatientDetail({
                     </CardContent>
                   </Card>
                 ) : (
-                  <VisitRecords visits={visits} heightIn={patient.heightIn} currentUser="Mauricio Martinez" />
+                  <VisitRecords visits={visits} currentUser="Mauricio Martinez" />
                 )}
               </TabsContent>
-
-              <TabsContent value="visits" className="mt-2">
-                <Card>
-                  <CardContent className="p-0">
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Type</TableHead>
-                            <TableHead className="text-right">Weight</TableHead>
-                            <TableHead className="text-right">BMI</TableHead>
-                            <TableHead>Medication</TableHead>
-                            <TableHead>Provider</TableHead>
-                            <TableHead className="text-right">Status</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {visits.map((v) => (
-                            <TableRow key={v.id}>
-                              <TableCell className="whitespace-nowrap">{fmtDateLong(v.date)}</TableCell>
-                              <TableCell>{v.type}</TableCell>
-                              <TableCell className="text-right tabular-nums">{v.weight} lbs</TableCell>
-                              <TableCell className="text-right tabular-nums">
-                                {bmi(v.weight, patient.heightIn) || "-"}
-                              </TableCell>
-                              <TableCell>
-                                {v.meds.map((m) => `${m.name} ${m.dosage}`).join(", ") || "-"}
-                              </TableCell>
-                              <TableCell className="whitespace-nowrap">{v.provider}</TableCell>
-                              <TableCell className="text-right">
-                                <SignedBadge signed={v.signed} />
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </CardContent>
-                </Card>
+            )}
+            {clerical && (
+              <TabsContent value="consents" className="mt-2">
+                <ConsentsPanel patient={patient} />
               </TabsContent>
-            </Tabs>
-          )}
-
-          {clerical && <ClericalTabs patient={patient} visits={visits} appointments={appointments} />}
+            )}
+            {clerical && (
+              <TabsContent value="appointments" className="mt-2">
+                <AppointmentsPanel appointments={appointments} />
+              </TabsContent>
+            )}
+            {clerical && (
+              <TabsContent value="billing" className="mt-2">
+                <BillingPanel patient={patient} visits={visits} />
+              </TabsContent>
+            )}
+          </Tabs>
         </div>
 
         <aside className="flex flex-col gap-4 xl:sticky xl:top-20 xl:self-start">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <StethoscopeIcon className="size-4 text-primary" />
+                Patient information
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+              <Term>Gender</Term>
+              <Detail>{patient.gender}</Detail>
+              <Term>Age</Term>
+              <Detail>{age} yrs</Detail>
+              <Term>DOB</Term>
+              <Detail>{fmtDateLong(patient.dob)}</Detail>
+              <Term>Height</Term>
+              <Detail>{formatHeight(patient.heightIn)}</Detail>
+              {clinical && (
+                <>
+                  <Term>Weight</Term>
+                  <Detail>{currentWeight === null ? "-" : `${currentWeight} lbs`}</Detail>
+                  <Term>BMI</Term>
+                  <Detail>{currentBmi === null || currentBmi === 0 ? "-" : currentBmi}</Detail>
+                </>
+              )}
+              <Term>Office</Term>
+              <Detail>{patient.office}</Detail>
+              <Term>Program</Term>
+              <Detail>{patient.program ?? "-"}</Detail>
+              <Term>Last visit</Term>
+              <Detail>{fmtDateLong(patient.lastVisit)}</Detail>
+            </CardContent>
+          </Card>
+
           {clinical && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <StethoscopeIcon className="size-4 text-primary" />
-                  Patient information
+                  <PillIcon className="size-4 text-primary" />
+                  Medication
                 </CardTitle>
               </CardHeader>
-              <CardContent className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-                <Term>Age</Term>
-                <Detail>{age} yrs</Detail>
-                <Term>DOB</Term>
-                <Detail>{fmtDateLong(patient.dob)}</Detail>
-                <Term>Height</Term>
-                <Detail>{formatHeight(patient.heightIn)}</Detail>
-                <Term>Office</Term>
-                <Detail>{patient.office}</Detail>
-                <Term>Program</Term>
-                <Detail>{patient.program ?? "-"}</Detail>
-                <Term>Last visit</Term>
-                <Detail>{fmtDateLong(patient.lastVisit)}</Detail>
-                <Term>Medication</Term>
-                <Detail>{currentMeds || "-"}</Detail>
+              <CardContent className="flex flex-col gap-2 text-sm">
+                {currentMeds.length === 0 ? (
+                  <p className="text-muted-foreground">No current medication.</p>
+                ) : (
+                  currentMeds.map((m, i) => (
+                    <div key={i} className="flex items-baseline justify-between gap-3">
+                      <span className="font-medium">{m.name}</span>
+                      <span className="tabular-nums text-muted-foreground">{m.dosage}</span>
+                    </div>
+                  ))
+                )}
+                {latest && (
+                  <p className="text-xs text-muted-foreground">As of the {fmtDateLong(latest.date)} visit.</p>
+                )}
               </CardContent>
             </Card>
           )}
@@ -262,40 +241,6 @@ export function PatientDetail({
                     data={[...visits].reverse().map((v) => ({ date: v.date, weight: v.weight }))}
                   />
                 )}
-              </CardContent>
-            </Card>
-          )}
-
-          {clerical && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Contact</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3 text-sm">
-                <div className="flex items-center gap-2">
-                  <PhoneIcon className="size-4 text-muted-foreground" />
-                  <span>{patient.phone}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <MailIcon className="size-4 text-muted-foreground" />
-                  <span className="truncate">{patient.email}</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <MapPinIcon className="size-4 shrink-0 text-muted-foreground" />
-                  <span>
-                    {patient.address.street}, {patient.address.city}, {patient.address.state}{" "}
-                    {patient.address.zip}
-                  </span>
-                </div>
-                <Separator />
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Referral</span>
-                  <span className="font-medium">{patient.referralSource}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Last visit</span>
-                  <span className="font-medium">{fmtDate(patient.lastVisit)}</span>
-                </div>
               </CardContent>
             </Card>
           )}
@@ -325,54 +270,6 @@ function Term({ children }: { children: React.ReactNode }) {
 
 function Detail({ children }: { children: React.ReactNode }) {
   return <span className="font-medium">{children}</span>
-}
-
-/**
- * Height, weight, and medication in one row of compact columns (the Sep 7
- * sync: "squeezed down"). Numbers are tabular so the columns line up from
- * one patient to the next.
- */
-function VitalsStrip({
-  height,
-  startWeight,
-  currentWeight,
-  lost,
-  bmi,
-  medication,
-}: {
-  height: string
-  startWeight: number | null
-  currentWeight: number | null
-  lost: number | null
-  bmi: number | null
-  medication: string
-}) {
-  const cells: { label: string; value: string; tone?: string }[] = [
-    { label: "Height", value: height },
-    { label: "Start", value: startWeight === null ? "-" : `${startWeight} lbs` },
-    { label: "Current", value: currentWeight === null ? "-" : `${currentWeight} lbs` },
-    {
-      label: "Lost",
-      value: lost === null ? "-" : `${lost.toFixed(0)} lbs`,
-      tone: lost !== null && lost > 0 ? "text-success" : undefined,
-    },
-    { label: "BMI", value: bmi === null || bmi === 0 ? "-" : String(bmi) },
-    { label: "Medication", value: medication || "-" },
-  ]
-  return (
-    <Card>
-      <CardContent className="grid grid-cols-3 gap-x-4 gap-y-3 py-4 sm:grid-cols-6">
-        {cells.map((cell) => (
-          <div key={cell.label} className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-xs text-muted-foreground">{cell.label}</span>
-            <span className={"truncate text-base font-semibold tabular-nums " + (cell.tone ?? "")} title={cell.value}>
-              {cell.value}
-            </span>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  )
 }
 
 /**

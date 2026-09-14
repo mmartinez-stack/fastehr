@@ -6,16 +6,14 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { SignedBadge } from "@/components/status-badges"
-import { fmtDateLong, fmtDateTime, bmi, type Visit } from "@/lib/mock-data"
+import { fmtDateLong, fmtDateTime, type Visit } from "@/lib/mock-data"
 import { PenLineIcon, TruckIcon, CameraIcon } from "lucide-react"
 
 export function VisitRecords({
   visits,
-  heightIn,
   currentUser,
 }: {
   visits: Visit[]
-  heightIn: number
   currentUser: string
 }) {
   const [signedIds, setSignedIds] = useState<Record<string, string>>({})
@@ -31,7 +29,6 @@ export function VisitRecords({
         const locallySigned = signedIds[v.id]
         const isSigned = v.signed || Boolean(locallySigned)
         const signedByName = v.signedBy ?? locallySigned
-        const b = v.weight ? bmi(v.weight, heightIn) : 0
 
         return (
           <article
@@ -41,12 +38,7 @@ export function VisitRecords({
             <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
               <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
                 <span className="font-semibold">On: {fmtDateLong(v.date)}</span>
-                <span className="text-muted-foreground">
-                  Weight: <span className="font-medium text-foreground">{v.weight ? `${v.weight} lbs` : "-"}</span>
-                </span>
-                <span className="text-muted-foreground">
-                  BMI: <span className="font-medium text-foreground">{b || "-"}</span>
-                </span>
+                <span className="text-muted-foreground">{v.provider}</span>
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant="outline">{v.type}</Badge>
