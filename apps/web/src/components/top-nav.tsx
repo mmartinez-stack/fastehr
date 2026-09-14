@@ -147,7 +147,7 @@ export function TopNav() {
               <SelectItem value={LOCATION_FILTER_ALL}>{labelFor(LOCATION_FILTER_ALL)}</SelectItem>
               {activeLocations.map((row) => (
                 <SelectItem key={row.slug} value={row.slug}>
-                  {row.name}
+                  {row.legacyName}
                 </SelectItem>
               ))}
             </SelectContent>

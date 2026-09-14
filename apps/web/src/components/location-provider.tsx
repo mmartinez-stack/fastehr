@@ -16,10 +16,11 @@ import * as React from "react"
  *
  * The list is a **prop, supplied by the server** through `location.list`,
  * not a constant this component reaches for. Records still carry the legacy
- * office string; `nameForOffice` shows the clinic's display name for it
- * ("Kanoga" for a record filed under PennProgram), matched through the
- * contract's legacy mapping, and the string itself for anything that is not
- * a clinic (Telemedicine, At Home, a dead site). That inversion is the point
+ * office string, and **until the clinic confirms the final location list
+ * every label is that legacy string** (Sylmar, PennProgram): the selector,
+ * the pick-lists, and `nameForOffice` all read `legacyName`. When the list is
+ * confirmed, `labelFor` and `nameForOffice` switch to the row's `name` and
+ * the pick-lists follow; nothing stored changes (ADR 32). That inversion is the point
  * (ADR 22): the browser is not the authority on what it may see, and the
  * server re-checks every location-filtered request against the actor.
  */
@@ -109,15 +110,20 @@ export function LocationProvider({
 
   const labelFor = React.useCallback(
     (value: LocationFilter) =>
-      value === LOCATION_FILTER_ALL ? ALL_LABEL : (locations.find((row) => row.slug === value)?.name ?? value),
+      value === LOCATION_FILTER_ALL
+        ? ALL_LABEL
+        : (locations.find((row) => row.slug === value)?.legacyName ?? value),
     [locations],
   )
 
+  // The legacy string itself, for now: the display names are seeded but not
+  // shown until the clinic confirms them. The lookup stays so the switch is
+  // one line here, and the mapping is exercised (a dead value has no row).
   const nameForOffice = React.useCallback(
     (office: string | null | undefined) => {
       if (office === null || office === undefined || office === "") return ""
       const slug = resolveLegacyOffice(office)?.locationSlug ?? null
-      return slug === null ? office : (locations.find((row) => row.slug === slug)?.name ?? office)
+      return slug === null ? office : (locations.find((row) => row.slug === slug)?.legacyName ?? office)
     },
     [locations],
   )

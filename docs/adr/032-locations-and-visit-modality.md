@@ -114,11 +114,13 @@ so the queue is a column, not a string comparison, and the person's form
 offers only the active clinics by display name while the record keeps the
 legacy office string. What is still the enum: the patient record's `office`,
 which doubles as the At Home program marker and changes with the appointment
-work, not here. **Staff never read the legacy string, though**: every place
-the app shows or picks an office shows the clinic's display name and matches
-by the legacy equivalent underneath (`nameForOffice` on the provider, the
-pick-list built from the active clinics plus the two non-clinic values), so
-a record filed under PennProgram reads "Kanoga" and stays PennProgram.
+work, not here. Every place the app shows or picks an office goes through
+one lookup (`nameForOffice` on the provider; the pick-lists built from the
+active clinics plus the two non-clinic values) and matches by the legacy
+equivalent underneath, so a record filed under PennProgram stays PennProgram
+whatever label it shows. **The label is the legacy name for now** (decision
+2026-09-13): the seeded display names ("Kanoga") are not shown until the
+clinic confirms the final list; the switch is one line in the provider.
 
 ## Consolidation mapping (DIA-47)
 

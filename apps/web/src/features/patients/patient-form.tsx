@@ -574,7 +574,8 @@ export function PatientForm({
   const { activeLocations, nameForOffice } = useLocation()
   const officeItems = React.useMemo(() => {
     const items = [
-      ...activeLocations.map((row) => ({ value: row.legacyName, label: row.name })),
+      // The legacy name as the label too, until the clinic confirms the display names.
+      ...activeLocations.map((row) => ({ value: row.legacyName, label: row.legacyName })),
       ...NON_CLINIC_OFFICES.map((value) => ({ value, label: value })),
     ]
     const current = defaultValues.office

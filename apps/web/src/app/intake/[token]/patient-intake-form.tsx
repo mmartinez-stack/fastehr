@@ -467,11 +467,12 @@ export function PatientIntakeForm({
       </Section>
 
       <Section title={copy.sections.visit} step={4}>
-        {/* The clinic by its display name; the record stores the legacy office string it maps to. */}
+        {/* The active clinics, labelled by their legacy name until the clinic
+            confirms the display names; the record stores the legacy string. */}
         {selectField(
           "office",
           copy.labels.office,
-          locations.map((row) => ({ value: row.legacyName, label: row.name })),
+          locations.map((row) => ({ value: row.legacyName, label: row.legacyName })),
           { required: true, description: copy.labels.officeHint },
         )}
         {selectField(
