@@ -1,6 +1,6 @@
 # ADR 28 — The patient record is served and written by section
 
-**Status:** accepted, amended 2026-09-07 (three tabs; allergies out of scope)  
+**Status:** accepted, amended 2026-09-07 (three tabs; allergies out of scope), amended 2026-09-13 (the history text is writable)  
 **Applies to:** `packages/contracts/src/patient.ts` · `packages/db/src/repositories/patient.ts` · `apps/web/src/server/routers/patient.ts` · `apps/web/src/server/procedures.ts` · `apps/web/src/features/patients/patient-form.tsx` · `apps/web/src/features/patients/patient-tabs.ts`
 
 The Aug 31 stakeholder sync (DIA-52) split the patient record into tabs and
@@ -24,9 +24,12 @@ Medical history is a **checklist** of fourteen conditions, every item "No"
 until answered, a "Yes" opening when, who treats it, and whether it is
 medicated and with what. The clinic gave no list, so `PATIENT_CONDITIONS` is
 a working one; the stored key is a plain string, so changing the list is a
-contracts change, not a migration. Beneath the checklist the legacy
-"medications and pertinent history" text (`historyOther`) shows read-only;
-no input writes that column, so a save of the Medical tab cannot touch it.
+contracts change, not a migration. Beneath the checklist is "History", one
+free text box (`historyOther`; the Sep 7 sync asked for a text box and no
+file upload). It is part of the clinical section's input on create, edit,
+and intake, so a save of the Medical tab writes it; the legacy "medications
+and pertinent history" text was migrated into the same column and reads as
+the starting draft. (Until 2026-09-13 it was shown read-only.)
 Allergies are **out of scope**: the allergy list an earlier cut built is
 removed from the contract, the mapper, the repository, and the form, and its
 table (`patient_allergies`) stays in the schema, dormant, since dropping it is

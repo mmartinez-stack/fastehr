@@ -97,6 +97,7 @@ export const intakeSubmissionSchema = z.object({
   pcpName: optionalText,
   pcpAddress: optionalText,
   pcpPhone: optionalText,
+  historyOther: optionalText,
 })
 export type IntakeSubmission = z.infer<typeof intakeSubmissionSchema>
 

@@ -1,6 +1,6 @@
 import { patientClinicalInput } from "@fastehr/contracts"
 import { describe, expect, it } from "vitest"
-import { splitHeight } from "./height.ts"
+import { formatHeight, splitHeight } from "./height.ts"
 
 describe("height round trip", () => {
   it("shows a stored 64 as 5 ft 4 in", () => {
@@ -23,5 +23,14 @@ describe("height round trip", () => {
     }).heightInches
     expect(stored).toBe(64)
     expect(splitHeight(stored)).toEqual({ heightFeet: "5", heightInchesPart: "4" })
+  })
+})
+
+describe("formatHeight", () => {
+  it("reads as feet and inches, not total inches", () => {
+    expect(formatHeight(64)).toBe("5 ft 4 in")
+    expect(formatHeight(74)).toBe("6 ft 2 in")
+    expect(formatHeight(64.5)).toBe("5 ft 4.5 in")
+    expect(formatHeight(null)).toBe("-")
   })
 })

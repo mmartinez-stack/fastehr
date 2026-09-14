@@ -148,6 +148,7 @@ export function createIntakeRepository(getClient: () => PrismaClient): IntakeRep
               pcpName: scalars.pcpName ?? null,
               pcpAddress: scalars.pcpAddress ?? null,
               pcpPhone: scalars.pcpPhone ?? null,
+              historyOther: scalars.historyOther ?? null,
               creditCardNumber: scalars.creditCardNumber ?? null,
               creditCardExpMonth: scalars.creditCardExpMonth ?? null,
               creditCardExpYear: scalars.creditCardExpYear ?? null,

@@ -50,8 +50,8 @@ export interface PatientRepository {
   updateDemographics(input: UpdatePatientDemographicsInput): Promise<Patient | null>
   /**
    * Replaces the medication list and the checklist wholesale — the form
-   * submits the whole section. `historyOther` is not an input: it is the
-   * legacy text, read-only, and this write leaves it as it is.
+   * submits the whole section, the history text included (a cleared box
+   * clears the column).
    */
   updateClinical(input: UpdatePatientClinicalInput): Promise<Patient | null>
   updateBilling(input: UpdatePatientBillingInput): Promise<Patient | null>
@@ -122,6 +122,7 @@ function clinicalScalars(input: Omit<UpdatePatientClinicalInput, 'id'>) {
     pcpName: input.pcpName ?? null,
     pcpAddress: input.pcpAddress ?? null,
     pcpPhone: input.pcpPhone ?? null,
+    historyOther: input.historyOther ?? null,
   }
 }
 

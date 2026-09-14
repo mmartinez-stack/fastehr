@@ -188,11 +188,16 @@ same reason (ADR 19).
 read `src/lib/mock-data.ts`, except the patient roster, `/patients/new`, and
 `/patients/[id]/edit`, which are wired end to end (legacy-parity form and
 search — docs/legacy-data-mapping.md § patients; the `/patients/[id]` detail
-view is still mockup; the record itself has three tabs, Medical, Patient
+view is still mockup, reworked per the Sep 7 review (patient information and
+the weight bar chart fixed on the right, visit records centre and left, a
+compact vitals strip, height as "5 ft 4 in", a medical history text box;
+docs/provider-record-migrations.md lists what it needs from the schema);
+tabs everywhere are styled as distinct buttons through the slot attributes
+in `globals.css`; the record itself has three tabs, Medical, Patient
 Info, and Billing, each served by its own procedure per ADR 28 as amended,
 with Medical open to every role and the other two clerical; the medical
-history checklist defaults to No, the legacy history text is read-only
-beneath it, and allergies are out of scope). The self-service intake is wired end to end (ADR 29 as amended): a texted
+history checklist defaults to No, the history text box beneath it is
+writable (the legacy text migrated into it), and allergies are out of scope). The self-service intake is wired end to end (ADR 29 as amended): a texted
 single-use link that lives 48 hours, a phone-first bilingual form at
 `/intake/[token]` that ends with a signed treatment consent (recorded on the
 request until DIA-56), and a per-office Pending tab on the roster; until

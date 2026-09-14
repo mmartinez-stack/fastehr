@@ -440,15 +440,13 @@ describe('patient router: writes by section (ADR 28)', () => {
     })
   })
 
-  it('strips the history text from a clinical save — it is read-only', async () => {
+  it('carries the history text through a clinical save', async () => {
     const updateClinical = vi.fn<Db['patients']['updateClinical']>(async () => ADA)
     const caller = callerWith(fakeDb({ updateClinical }), PROVIDER)
 
-    // The wire can carry anything; the contract decides what reaches the repository.
-    const tampered = { ...SUBMITTED, id: ADA.id, historyOther: 'rewritten' } as typeof SUBMITTED & { id: string }
-    await caller.patient.updateClinical(tampered)
+    await caller.patient.updateClinical({ ...SUBMITTED, id: ADA.id, historyOther: ' HTN since 2019. ' })
 
-    expect(updateClinical.mock.calls[0]?.[0]).not.toHaveProperty('historyOther')
+    expect(updateClinical.mock.calls[0]?.[0]).toMatchObject({ historyOther: 'HTN since 2019.' })
   })
 
   it('keeps demographics and billing writes clerical', async () => {

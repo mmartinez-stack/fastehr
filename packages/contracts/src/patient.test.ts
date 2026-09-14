@@ -198,13 +198,12 @@ describe('createPatientInput', () => {
     ).toBe(false)
   })
 
-  it('never writes the history text, and has no healthy weight', () => {
-    // Medical history is out of scope: the legacy text stays on the entity,
-    // read-only, and an input carrying it is stripped rather than stored.
-    const parsed = createPatientInput.parse({ ...SUBMITTED, historyOther: 'typed anyway', healthyWeight: 150 })
-    expect(parsed).not.toHaveProperty('historyOther')
+  it('carries the history text, trimmed, blank as absent, and has no healthy weight', () => {
+    const parsed = createPatientInput.parse({ ...SUBMITTED, historyOther: '  HTN since 2019. ', healthyWeight: 150 })
+    expect(parsed.historyOther).toBe('HTN since 2019.')
     expect(parsed).not.toHaveProperty('healthyWeight')
-    expect(patientClinicalInput.parse({ ...SUBMITTED, historyOther: 'typed anyway' })).not.toHaveProperty('historyOther')
+    expect(patientClinicalInput.parse({ ...SUBMITTED, historyOther: '   ' }).historyOther).toBeUndefined()
+    expect(patientClinicalInput.parse({ ...SUBMITTED }).historyOther).toBeUndefined()
     expect(Object.keys(patientSchema.shape)).not.toContain('healthyWeight')
   })
 

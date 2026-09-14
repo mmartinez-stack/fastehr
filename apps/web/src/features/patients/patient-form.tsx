@@ -38,6 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Field,
   FieldDescription,
@@ -72,7 +73,7 @@ import { US_STATES } from "./us-states.ts"
  * role) and which mutations a save runs; this component only validates the
  * tabs it was given and shows them, in the one fixed order. Medical holds
  * vitals, medications, the primary care doctor, and the medical-history
- * checklist (every item "No" until answered) with the legacy history text
+ * checklist (every item "No" until answered) with the history text box
  * read-only beneath it; allergies stay out of scope. Patient Info is the
  * clerical half; Billing is the card block on its own.
  * No field of one tab ever renders inside another.
@@ -145,8 +146,9 @@ export interface PatientFormValues {
   heightInchesPart: string
   // Medical: medications
   medications: MedicationRowValues[]
-  // Medical: history checklist
+  // Medical: history checklist and the free text beneath it
   conditions: ConditionRowValues[]
+  historyOther: string
   // Medical: primary care doctor
   pcpName: string
   pcpAddress: string
@@ -213,6 +215,7 @@ export const EMPTY_PATIENT_FORM: PatientFormValues = {
   heightInchesPart: "",
   medications: [],
   conditions: emptyConditions(),
+  historyOther: "",
   pcpName: "",
   pcpAddress: "",
   pcpPhone: "",
@@ -261,6 +264,7 @@ export function toPatientFormValues(
       frequency: row.frequency ?? "",
     })),
     conditions: toConditionRows(chart.conditions),
+    historyOther: chart.historyOther ?? "",
     pcpName: chart.pcpName ?? "",
     pcpAddress: chart.pcpAddress ?? "",
     pcpPhone: chart.pcpPhone ?? "",
@@ -305,6 +309,7 @@ export function toIntakeFormValues(submission: IntakeSubmission): PatientFormVal
       frequency: row.frequency ?? "",
     })),
     conditions: toConditionRows(submission.conditions),
+    historyOther: submission.historyOther ?? "",
     pcpName: submission.pcpName ?? "",
     pcpAddress: submission.pcpAddress ?? "",
     pcpPhone: submission.pcpPhone ?? "",
@@ -538,18 +543,11 @@ export function PatientForm({
   allowReferralPicker = true,
   /** On for the intake, where the office decides the queue. */
   officeRequired = false,
-  historyOnFile = null,
 }: {
   title?: string
   /** The tabs to render — decided by the page from the session's role, always in PATIENT_TABS order. */
   sections: readonly PatientTab[]
   defaultValues: PatientFormValues
-  /**
-   * The legacy "medications and pertinent history" text on the record, shown
-   * read-only in the Medical tab's placeholder. Not a form value: nothing
-   * here can write it back.
-   */
-  historyOnFile?: string | null
   /** Runs the mutation(s); a thrown tRPC error is mapped back onto the fields. */
   submit: (value: PatientFormSubmission) => Promise<void>
   submitLabel: React.ReactNode
@@ -901,9 +899,7 @@ export function PatientForm({
 
   /**
    * The checklist: every item asked, "No" by default, a "Yes" opening the
-   * details. Beneath it, the legacy history text as it is, never parsed and
-   * never written — not a form field, so a save cannot carry it. Allergies
-   * are out of scope and have no place here yet.
+   * details. Allergies are out of scope and have no place here yet.
    */
   const conditionRow = (condition: PatientCondition, index: number) => (
     <form.Field key={condition} name={`conditions[${index}].present` as "phoneFollowUpAllowed"}>
@@ -967,9 +963,9 @@ export function PatientForm({
   /**
    * The checklist: every item asked, "No" by default, a "Yes" opening the
    * details. Split into two lists side by side from `md`, so fourteen rows
-   * do not run the length of the page. Beneath it, the legacy history text
-   * as it is, never parsed and never written — not a form field, so a save
-   * cannot carry it. Allergies are out of scope and have no place here yet.
+   * do not run the length of the page. Beneath it, "History": one free text
+   * box (the Sep 7 sync), saved with the section; the legacy history text
+   * was migrated into it, so the migrated record reads as the starting draft.
    */
   const half = Math.ceil(PATIENT_CONDITIONS.length / 2)
   const medicalHistory = (
@@ -983,23 +979,24 @@ export function PatientForm({
           {PATIENT_CONDITIONS.slice(half).map((condition, index) => conditionRow(condition, index + half))}
         </div>
       </div>
-      <div className="flex flex-col gap-2">
-        <h4 className="text-sm font-medium">History on file</h4>
-        <FieldDescription>
-          The history text carried over from the previous system, for reference. It cannot be
-          edited here.
-        </FieldDescription>
-        {historyOnFile === null || historyOnFile.trim() === "" ? (
-          <p className="text-sm text-muted-foreground">No history on file.</p>
-        ) : (
-          <p
-            className="whitespace-pre-wrap rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm"
-            aria-label="History on file"
-          >
-            {historyOnFile}
-          </p>
+      <form.Field name="historyOther">
+        {(field) => (
+          <Field data-invalid={!field.state.meta.isValid}>
+            <FieldLabel htmlFor={field.name}>History</FieldLabel>
+            <Textarea
+              id={field.name}
+              name={field.name}
+              rows={5}
+              value={field.state.value}
+              onChange={(event) => field.handleChange(event.target.value)}
+              onBlur={field.handleBlur}
+              aria-invalid={!field.state.meta.isValid}
+              placeholder="Conditions, prior treatments, anything the next provider should read first."
+            />
+            <FieldError errors={field.state.meta.errors} />
+          </Field>
         )}
-      </div>
+      </form.Field>
     </div>
   )
 

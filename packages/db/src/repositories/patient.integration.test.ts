@@ -314,12 +314,9 @@ describe('patient repository', () => {
     expect(await prisma.patientCondition.count()).toBe(0)
   })
 
-  it('leaves the legacy history text untouched by a clinical save', async () => {
-    // The column is read-only until the history section is built: the
-    // migrated text must survive every save of the Medical tab.
+  it('writes the history text with a clinical save, and a cleared box clears it', async () => {
     await prisma.patient.create({ data: { ...ADA, historyOther: 'HTN. Prior phentermine, tolerated.' } })
-
-    const updated = await db.patients.updateClinical({
+    const clinical = {
       id: ADA.id,
       heightInches: 64,
       medications: [],
@@ -327,9 +324,13 @@ describe('patient repository', () => {
       pcpName: undefined,
       pcpAddress: undefined,
       pcpPhone: undefined,
-    })
+    }
 
-    expect(updated?.historyOther).toBe('HTN. Prior phentermine, tolerated.')
+    const updated = await db.patients.updateClinical({ ...clinical, historyOther: 'HTN, controlled. GLP-1 since 2024.' })
+    expect(updated?.historyOther).toBe('HTN, controlled. GLP-1 since 2024.')
+
+    const cleared = await db.patients.updateClinical({ ...clinical, historyOther: undefined })
+    expect(cleared?.historyOther).toBeNull()
   })
 
   it('updates billing alone', async () => {

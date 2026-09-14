@@ -135,9 +135,9 @@ describe('intakeSubmissionSchema', () => {
 
   it('still reads a submission stored under an earlier cut of the form', () => {
     const submission = submissionOf(FORM)
-    // With an allergy list and history text: stripped.
+    // With an allergy list: stripped. The history text stays (it is a field again).
     const withAllergies = { ...submission, allergies: [], historyOther: 'x' }
-    expect(intakeSubmissionSchema.parse(withAllergies)).toEqual(submission)
+    expect(intakeSubmissionSchema.parse(withAllergies)).toEqual({ ...submission, historyOther: 'x' })
     // Without the checklist: every item "No".
     const { conditions: _conditions, ...withoutChecklist } = submission
     expect(intakeSubmissionSchema.parse(withoutChecklist)).toEqual({ ...submission, conditions: [] })

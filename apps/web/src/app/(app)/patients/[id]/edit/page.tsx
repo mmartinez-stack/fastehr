@@ -132,7 +132,6 @@ export default function EditPatientPage() {
         key={`${record.id}:${chart.dataUpdatedAt}`}
         sections={tabs}
         defaultValues={toPatientFormValues(record, demographics.data ?? null, billing.data ?? null)}
-        historyOnFile={record.historyOther}
         submit={async (value) => {
           // The Medical tab first: it is the one every role may save, so a
           // refusal on a clerical tab can never leave the chart unsaved.

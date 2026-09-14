@@ -20,10 +20,11 @@ import { officeSchema } from './office.ts'
  * three read sections are the three tabs; `demographics` is the Patient Info
  * tab's data, named for what it holds rather than for the tab.
  *
- * Medical history is a checklist (`conditions`). Allergies are out of scope
- * for now, and the legacy combined "medications and pertinent history" text
- * is kept on the entity as `historyOther`, read-only, with no input writing
- * it. The `patient_allergies` table exists from an earlier cut and is dormant.
+ * Medical history is a checklist (`conditions`) plus a free text box
+ * (`historyOther`, the Sep 7 sync: "History", written by whoever fills the
+ * form; the legacy combined "medications and pertinent history" text was
+ * migrated into it). Allergies are out of scope for now; the
+ * `patient_allergies` table exists from an earlier cut and is dormant.
  *
  * `createPatientInput` is deliberately not `patientSchema.omit(…)`: an input
  * schema normalizes (trims names, lowercases email, strips phone formatting)
@@ -470,6 +471,7 @@ export const clinicalFields = {
   pcpName: optionalText(100),
   pcpAddress: optionalText(200),
   pcpPhone: blankAsAbsent(normalizedPhone),
+  historyOther: optionalText(10000),
 }
 
 const billingFields = {
