@@ -82,6 +82,12 @@ Two endpoints, both awaiting Twilio before answering.
 - **Send without a patient.** Takes a bare number and a body. Nothing is
   stored. Used for intake links to people who are not yet patients, for
   website-lead follow-ups, and by two public website endpoints (below).
+- **A "test" route that sends nothing.** Despite its name, it runs the
+  call-back 36 recipient query (last visit 6 to 36 months ago, not texted in
+  4 weeks) and answers with the count plus the newest and oldest matching
+  patient documents in full. A diagnostic for the campaign's query, left on
+  the authenticated route list; it returns patient records to any signed-in
+  caller and has no counterpart in the new system.
 
 ### Fire-and-forget bulk
 
@@ -413,7 +419,7 @@ marketing texts), not a behaviour to inherit.
 | Use case (DIA-73) | Legacy today | Gap |
 | --- | --- | --- |
 | Refill approved, patient told to await tracking (DIA-53) | No approval text. The nearest is "medication shipped" with a tracking number, pressed by staff from the visit. | New message and trigger; wording can borrow the shipped variants. |
-| New-patient intake link (DIA-57, DIA-72) | Generic link, no token, not stored. | Done in the new system (ADR 29), with the message stored nowhere yet. |
+| New-patient intake link (DIA-57, DIA-72) | Generic link, no token, not stored. | Done in the new system (ADR 29 as amended): a single-use token that lives 48 hours, the link handed back to the sender when no transport is configured. The outbound message itself is still stored nowhere; that lands with the message history table below. |
 | Front-desk conversation threads (DIA-69) | Inbox, Sent, per-patient conversation, archive. | Port. Replace "unread only" inbox with a proper thread state. |
 | Provider replies via the chart only, no pop-ups (DIA-69) | Every role gets every inbound as a banner. | Route the banner to clerical roles only; reply from the record's clinical half. |
 | Appointment notifications replacing email (DIA-69) | Confirmation exists only on a key-gated public endpoint; reminders not implemented. | New. |
