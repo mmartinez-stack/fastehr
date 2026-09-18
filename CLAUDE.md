@@ -196,8 +196,10 @@ Administrative records for the clerical one with a comment filed under its
 author's kind, where the legacy chart colour-coded one list, and the legacy
 chart's actions mocked in place: addenda, consent send and
 download, referral credits, coupon assignment, the At-Home package, chart
-export, visit photos, delete visit; docs/provider-record-migrations.md lists
-what it needs from the schema);
+export, visit photos, delete visit, and a New visit consultation form in
+the legacy form's four sections, Visit info and Prescription for the
+clinical surface, Billing and Admin for the clerical one;
+docs/provider-record-migrations.md lists what it needs from the schema);
 tabs everywhere are styled as distinct buttons through the slot attributes
 in `globals.css`; the record itself has three tabs, Medical, Patient
 Info, and Billing, each served by its own procedure per ADR 28 as amended,

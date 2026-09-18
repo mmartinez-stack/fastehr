@@ -197,7 +197,8 @@ export function VisitRecords({
               </header>
 
               <div className="flex flex-col gap-3 px-4 py-3">
-                {v.meds.length > 0 && (
+                {/* Medication is clinical detail; an administrative entry has none to show. */}
+                {kind === "provider" && v.meds.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {v.meds.map((m, i) => (
                       <span

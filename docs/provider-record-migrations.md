@@ -62,3 +62,11 @@ medication list on every row, which is honest but not per visit.
 - **The refill request and the sign-off.** Dispensing and charting are
   their own modules (DIA-53, DIA-49's write path); the buttons on the
   mockup stay mockup until then.
+- **The consultation form.** The New visit form on the record is the
+  legacy visit form's four sections split by surface (Visit info and
+  Prescription clinical, Billing and Admin clerical). Its clinical half
+  writes exactly the columns of migration 1 plus the note and signature the
+  `visits` table already has; the prescription is migration 2; the billing
+  half (fee, discount, coupon, program, payment) is the billing module
+  (DIA-66), and the admin half is scheduling (DIA-48), fax, and file
+  storage (DIA-68). Until those land it saves to the screen only.

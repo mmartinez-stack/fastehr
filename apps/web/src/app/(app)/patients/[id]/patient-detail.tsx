@@ -7,6 +7,7 @@ import {
   CalendarPlusIcon,
   CameraIcon,
   CircleAlertIcon,
+  ClipboardPlusIcon,
   FileTextIcon,
   HouseIcon,
   MessageSquareIcon,
@@ -40,6 +41,7 @@ import {
   type Visit,
 } from "@/lib/mock-data"
 import { AppointmentsPanel, BillingPanel, ConsentsPanel } from "./clerical-tabs"
+import { ConsultationForm } from "./consultation-form"
 import { RefillDialog } from "./refill-dialog"
 import { VisitRecords, type CrossComment } from "./visit-records"
 import { WeightChart } from "./weight-chart"
@@ -70,7 +72,7 @@ import { WeightChart } from "./weight-chart"
  */
 export function PatientDetail({
   patient,
-  visits,
+  visits: onFile,
   appointments,
   waivers,
 }: {
@@ -80,16 +82,26 @@ export function PatientDetail({
   waivers: PendingWaiver[]
 }) {
   const { role, clinical, clerical } = useSurfaces()
+  const currentUser = "Mauricio Martinez"
+
+  // A visit opened on this screen (the consultation form) joins the records
+  // at once, newest first; mockup state, gone on reload.
+  const [opened, setOpened] = useState<Visit[]>([])
+  const [composing, setComposing] = useState(false)
+  const visits = [...opened, ...onFile]
 
   const age = ageFromDob(patient.dob)
   const latest = visits[0]
-  const currentWeight = latest?.weight ?? null
+  // A visit saved without a weight carries 0; that is no weight, not a weight.
+  const currentWeight = latest === undefined || latest.weight === 0 ? null : latest.weight
   const currentBmi = currentWeight === null ? null : bmi(currentWeight, patient.heightIn)
-  const currentMeds = latest?.meds ?? []
 
   // Records split by kind, each on its own tab (the 2026-09-13 review). A
   // comment goes with the kind of its author, referencing the visit it is on.
   const clinicalVisits = visits.filter((v) => v.author === "provider")
+  // Current medication is what the last clinical visit dispensed; an
+  // administrative entry in between does not change it.
+  const currentMeds = clinicalVisits[0]?.meds ?? []
   const administrativeVisits = visits.filter((v) => v.author === "administrative")
   const crossComments = (kind: "provider" | "administrative"): CrossComment[] =>
     visits
@@ -121,6 +133,12 @@ export function PatientDetail({
         {/* The record's actions at `lg`: the four buttons a visit starts from,
             sized to be found and hit without aiming (DIA-22). */}
         <div className="flex flex-wrap gap-2">
+          {(clinical || clerical) && (
+            <Button size="lg" onClick={() => setComposing(true)} disabled={composing}>
+              <ClipboardPlusIcon data-icon="inline-start" />
+              New visit
+            </Button>
+          )}
           {clinical && <RefillDialog patientName={fullName(patient)} />}
           {clerical && (
             <>
@@ -137,7 +155,7 @@ export function PatientDetail({
                 <MessagesSquareIcon data-icon="inline-start" />
                 SMS chat
               </Button>
-              <Button size="lg">
+              <Button variant="outline" size="lg">
                 <CalendarPlusIcon data-icon="inline-start" />
                 Book Visit
               </Button>
@@ -154,6 +172,19 @@ export function PatientDetail({
       */}
       <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="flex min-w-0 flex-col gap-6">
+          {composing && (
+            <ConsultationForm
+              patient={patient}
+              visitCount={visits.length}
+              currentUser={currentUser}
+              onCancel={() => setComposing(false)}
+              onSave={(visit) => {
+                setOpened((prev) => [visit, ...prev])
+                setComposing(false)
+              }}
+            />
+          )}
+
           {clinical && <MedicalHistoryNotes initial={patient.medsHistory} />}
 
           {/* One strip for every section a role may see; each fact lives in one tab. */}
@@ -180,7 +211,7 @@ export function PatientDetail({
                     kind="provider"
                     visits={clinicalVisits}
                     comments={crossComments("provider")}
-                    currentUser="Mauricio Martinez"
+                    currentUser={currentUser}
                   />
                 )}
               </TabsContent>
@@ -191,7 +222,7 @@ export function PatientDetail({
                   kind="administrative"
                   visits={administrativeVisits}
                   comments={crossComments("administrative")}
-                  currentUser="Mauricio Martinez"
+                  currentUser={currentUser}
                 />
               </TabsContent>
             )}
@@ -284,7 +315,10 @@ export function PatientDetail({
                 ) : (
                   <WeightChart
                     className="h-[220px] w-full 3xl:h-[280px]"
-                    data={[...visits].reverse().map((v) => ({ date: v.date, weight: v.weight }))}
+                    data={[...visits]
+                      .filter((v) => v.weight > 0)
+                      .reverse()
+                      .map((v) => ({ date: v.date, weight: v.weight }))}
                     exportName={`${patient.lastName}-${patient.firstName}-weight`}
                   />
                 )}

@@ -103,6 +103,52 @@ export const BASE_COUPONS: Coupon[] = [
  */
 export type RecordAuthor = "provider" | "administrative"
 
+/**
+ * The billing catalog the legacy visit form priced from: a visit fee, a
+ * discount, and the At-Home program tier, each a named amount. The names are
+ * the legacy list's, tidied; the amounts are placeholders until the
+ * treatment catalog (DIA-62) owns them.
+ */
+export interface PricedOption {
+  name: string
+  amount: number
+}
+
+export const VISIT_FEES: PricedOption[] = [
+  { name: "None", amount: 0 },
+  { name: "First visit, oral", amount: 50 },
+  { name: "First visit, injectables", amount: 0 },
+  { name: "Mail", amount: 15 },
+  { name: "First visit + mail", amount: 65 },
+  { name: "Restart", amount: 20 },
+  { name: "At-Home sign up", amount: 100 },
+  { name: "Lipoden 4 pack", amount: 71 },
+  { name: "Deposit", amount: 50 },
+]
+
+export const VISIT_DISCOUNTS: PricedOption[] = [
+  { name: "None", amount: 0 },
+  { name: "Referral", amount: 30 },
+  { name: "Promotional", amount: 10 },
+  { name: "Lipoden credit", amount: 35 },
+  { name: "B12 credit", amount: 25 },
+  { name: "Text", amount: 5 },
+  { name: "Facebook", amount: 10 },
+  { name: "At-Home deposit", amount: 50 },
+  { name: "Semaglutide credit", amount: 500 },
+  { name: "Tirzepatide credit", amount: 200 },
+]
+
+export const PROGRAM_FEES: PricedOption[] = [
+  { name: "None", amount: 0 },
+  { name: "Introductory Program", amount: 127 },
+  { name: "Basic Program", amount: 199 },
+  { name: "Professional Program", amount: 299 },
+  { name: "Comprehensive Program", amount: 399 },
+]
+
+export const PAYMENT_METHODS = ["Cash", "Card", "Zelle", "Insurance"] as const
+
 export const ADMINISTRATIVE_STAFF = ["M. Reyes", "L. Ortiz"] as const
 
 export interface VisitAddendum {
@@ -137,7 +183,7 @@ export interface Visit {
   signedAt?: string // ISO datetime
   openedAt?: string // ISO datetime
   tracking?: string
-  paymentMethod: "Cash" | "Card" | "Zelle" | "Insurance"
+  paymentMethod: (typeof PAYMENT_METHODS)[number]
   amount: number
   paid: boolean
   notes: string
@@ -496,15 +542,20 @@ function makeVisits(): Visit[] {
         noShow: v === 5 && pi % 4 === 1,
         phoneVisit,
         mailingCompleted: phoneVisit && v % 2 === 0,
-        meds: [
-          { name: medName, dosage: `${0.25 * (((v % 4) + 1))} mg` },
-          // Keyed on the patient as well as the visit so the B12 total does
-          // not land on a round multiple and tie with a primary medication —
-          // a tie at the head of the quick-pick row would be broken
-          // alphabetically, which is precisely the arbitrary ordering the
-          // frequency ranking exists to replace.
-          ...((pi + v) % 3 === 0 ? [{ name: "B12", dosage: "1 mL" }] : []),
-        ],
+        // Medication is dispensed on a clinical visit; an administrative
+        // entry (a payment, a mailing, a call) carries none.
+        meds:
+          author === "provider"
+            ? [
+                { name: medName, dosage: `${0.25 * (((v % 4) + 1))} mg` },
+                // Keyed on the patient as well as the visit so the B12 total
+                // does not land on a round multiple and tie with a primary
+                // medication: a tie at the head of the quick-pick row would
+                // be broken alphabetically, which is precisely the arbitrary
+                // ordering the frequency ranking exists to replace.
+                ...((pi + v) % 3 === 0 ? [{ name: "B12", dosage: "1 mL" }] : []),
+              ]
+            : [],
         provider: author === "provider" ? providerName : adminName,
         signed,
         signedBy: signed ? (author === "provider" ? providerName : adminName) : undefined,
@@ -514,7 +565,7 @@ function makeVisits(): Visit[] {
           type === "At-Home" && v % 2 === 0
             ? `9405511105${String(500000000 + (pi * 97 + v * 13) * 3571).slice(0, 9)}`
             : undefined,
-        paymentMethod: at(["Cash", "Card", "Zelle", "Insurance"] as const, (pi + v) % 4),
+        paymentMethod: at(PAYMENT_METHODS, (pi + v) % PAYMENT_METHODS.length),
         amount,
         paid: !(v === 0 && pi % 4 === 0),
         notes:
