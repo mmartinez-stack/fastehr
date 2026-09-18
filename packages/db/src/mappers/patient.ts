@@ -111,6 +111,6 @@ export function toPatientSummary(row: PatientRow): PatientSummary {
  * not go through local time, which would shift the day for anyone west of UTC
  * and turn a date of birth into the day before.
  */
-function toCalendarDate(value: Date): string {
+export function toCalendarDate(value: Date): string {
   return value.toISOString().slice(0, 10)
 }

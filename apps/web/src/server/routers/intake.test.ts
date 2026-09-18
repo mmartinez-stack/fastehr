@@ -3,7 +3,7 @@ import { INTAKE_CONSENT_VERSION, type IntakeRequest, type IntakeSubmission, type
 import { createHash } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContext, type Actor } from '../context.ts'
-import { recordingAuditRepository } from '../test-support/fake-db.ts'
+import { recordingAuditRepository, stubRepository } from '../test-support/fake-db.ts'
 import type { SmsOutcome, SmsTransport } from '../sms.ts'
 import { appRouter } from './root.ts'
 
@@ -196,6 +196,8 @@ function fakeDb(overrides: Partial<Db['intakes']> = {}): Db {
       listWaiting: async () => [],
     },
     audit: recordingAuditRepository(),
+    apiClients: stubRepository('apiClients'),
+    verifications: stubRepository('verifications'),
   }
 }
 

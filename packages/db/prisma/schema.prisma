@@ -173,6 +173,7 @@ model Patient {
   lastVisitAt DateTime?
   visits      Visit[]
   intakes     IntakeRequest[]
+  verifications PatientVerification[]
 
   // The provisional credit-card block (contracts § patient header comment):
   // the fields the legacy form rendered, carried for billing continuity until
@@ -193,6 +194,9 @@ model Patient {
   @@index([locationId])
   // The roster's default order: most recently seen first.
   @@index([lastVisitAt])
+  // Partner lookup and verification by phone (ADR 36): without this each
+  // call is a sequential scan, which is both a load lever and a timing signal.
+  @@index([phone])
   @@map("patients")
 }
 
@@ -581,4 +585,95 @@ model PhiAuditEvent {
   @@index([patientId, occurredAt])
   @@index([outcome, occurredAt])
   @@map("phi_audit_events")
+}
+
+// ---------------------------------------------------------------------------
+// Partner API clients and patient verifications (ADR 36)
+// ---------------------------------------------------------------------------
+
+enum ApiClientStatus {
+  active
+  revoked
+
+  @@map("api_client_status")
+}
+
+/**
+ * One partner integration holding one key. `keyId` is the key's public
+ * half, in clear and unique, so a request is matched to a row without a
+ * secret ever touching an index; `keyHash` is the SHA-256 of the secret,
+ * and the mapper never maps it. `expiresAt` is required: a key must end.
+ */
+model ApiClient {
+  id          String          @id @default(uuid())
+  name        String
+  vendor      String?
+  /// `live` or `dev`, for humans; not a control (keys are rows per environment).
+  environment String
+  keyId       String          @unique
+  keyHash     String          @unique
+  scopes      String[]
+  /// Source addresses or CIDRs; empty means any.
+  allowedIps  String[]
+  /// Clinic slugs the key may see; empty means every active clinic.
+  locationIds String[]
+  status      ApiClientStatus @default(active)
+  expiresAt   DateTime
+  lastUsedAt  DateTime?
+  /// When the business associate agreement was signed; a live key needs one.
+  baaSignedAt DateTime?       @db.Date
+  /// The operator who issued it, as typed at the CLI.
+  issuedBy    String
+  createdAt   DateTime        @default(now())
+  revokedAt   DateTime?
+
+  verifications PatientVerification[]
+  attempts      PatientVerificationAttempt[]
+
+  @@index([status])
+  @@map("api_clients")
+}
+
+/**
+ * A verification token the verify endpoint minted: bound to one client and
+ * one patient, honoured until `expiresAt`. Only the token's SHA-256 is
+ * stored (ADR 29's rule); `useCount` and `lastUsedAt` are bookkeeping, not
+ * a single-use gate, because a bot makes several calls per conversation.
+ */
+model PatientVerification {
+  id          String    @id @default(uuid())
+  apiClientId String
+  apiClient   ApiClient @relation(fields: [apiClientId], references: [id], onDelete: Restrict)
+  patientId   String
+  patient     Patient   @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  tokenHash   String    @unique
+  method      String
+  expiresAt   DateTime
+  useCount    Int       @default(0)
+  lastUsedAt  DateTime?
+  requestId   String?
+  ipAddress   String?
+  createdAt   DateTime  @default(now())
+
+  @@index([apiClientId, patientId, expiresAt])
+  @@map("patient_verifications")
+}
+
+/**
+ * Every verify call, pass or fail: the lockout counter and its evidence.
+ * `patientId` has no foreign key on purpose, so an attempt against an id
+ * that does not exist is recorded like any other.
+ */
+model PatientVerificationAttempt {
+  id          String    @id @default(uuid())
+  apiClientId String
+  apiClient   ApiClient @relation(fields: [apiClientId], references: [id], onDelete: Restrict)
+  patientId   String
+  succeeded   Boolean
+  ipAddress   String?
+  occurredAt  DateTime  @default(now())
+
+  @@index([apiClientId, patientId, occurredAt])
+  @@index([apiClientId, occurredAt])
+  @@map("patient_verification_attempts")
 }
