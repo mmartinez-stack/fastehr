@@ -99,6 +99,10 @@ Thumbs.db
 #   components.json      shadcn/ui config
 #   public/              v0 puts real assets here, not just generated files
 # ---------------------------------------------------------------
+# Swagger UI assets for /api/v1/docs, copied from swagger-ui-dist at build
+# and dev time (apps/web/scripts/copy-api-docs-assets.mjs).
+apps/web/public/api-docs/
+
 # Legacy NDJSON exports and their migration reports never enter history.
 *.ndjson
 *.ndjson.report.json

@@ -107,6 +107,18 @@ export type PartnerOperations = typeof PARTNER_OPERATIONS
 export type PartnerOperationId = PartnerOperations[number]['id']
 export type PartnerOperationById<Id extends PartnerOperationId> = Extract<PartnerOperations[number], { id: Id }>
 
+/**
+ * Type helpers for the server layer, which has no Zod of its own (ADR 5) and
+ * so cannot name `z.output` itself.
+ */
+export type PartnerSchema = z.ZodType
+export type SchemaInput<Schema extends z.ZodType> = z.input<Schema>
+export type SchemaOutput<Schema extends z.ZodType> = z.output<Schema>
+/** The parsed value of an optional operation schema; an operation without one gets an empty object. */
+export type OptionalSchemaOutput<Schema> = NonNullable<Schema> extends z.ZodType
+  ? z.output<NonNullable<Schema>>
+  : Record<string, never>
+
 /** Every code an operation may answer with: its own plus the common set, plus the verification ones when it needs a token. */
 export function documentedErrors(operation: PartnerOperation): PartnerErrorCode[] {
   const codes = new Set<PartnerErrorCode>([...COMMON_PARTNER_ERRORS, ...operation.errors])

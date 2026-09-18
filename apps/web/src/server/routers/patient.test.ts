@@ -172,6 +172,7 @@ function fakeDb(overrides: Partial<Db['patients']> = {}): Db {
       setStatus: async () => {
         throw new Error('not under test')
       },
+      lookup: async () => [],
       ...overrides,
     },
     staffUsers: {

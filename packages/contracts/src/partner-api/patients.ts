@@ -76,6 +76,21 @@ export const partnerPatientLookupInput = z
   })
 export type PartnerPatientLookupInput = z.infer<typeof partnerPatientLookupInput>
 
+/**
+ * What the repository returns for a lookup, and what the verify step reads:
+ * identity plus both verification factors. Server-side only; a partner sees
+ * the candidate shape below, never this.
+ */
+export const patientLookupRowSchema = z.object({
+  patientId: z.uuid(),
+  firstName: z.string(),
+  lastName: z.string(),
+  dateOfBirth: z.iso.date(),
+  phone: z.string().regex(/^\d{10}$/).nullable(),
+  locationId: locationSlugSchema.nullable(),
+})
+export type PatientLookupRow = z.infer<typeof patientLookupRowSchema>
+
 /** What the repository is asked for: the normalised identifiers plus the key's clinic restriction. */
 export interface PatientLookupCriteria {
   patientId?: string

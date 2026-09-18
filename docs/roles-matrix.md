@@ -89,6 +89,28 @@ Notes that carry weight:
 - Refused attempts are audited: the audit middleware is outermost precisely so
   a `FORBIDDEN` probe leaves a trace (ADR 10).
 
+## API clients (partner keys, ADR 36)
+
+A partner key is a fifth kind of actor, `api_client`, that never reaches a
+staff surface: `/api/v1` resolves no session, and `/api/trpc` accepts no
+key. Its permissions are **scopes** on the key row, checked by the partner
+chain against the operation registry in `packages/contracts/src/partner-api/operations.ts`,
+default deny. Patient-specific operations additionally require a
+verification token minted by the verify operation for that patient and that
+client. A key may be restricted to some clinics; then it is a boundary, not
+a filter (unlike a staff actor's, ADR 22).
+
+| Operation | Scope | Verification token |
+| --- | --- | :-: |
+| `POST /api/v1/patients/lookup` | `patients:lookup` | no |
+| `POST /api/v1/patients/{patientId}/verify` | `patients:verify` | no (issues one) |
+| `GET /api/v1/queue/count` | `queue:read` | no |
+| Planned: medications read, refill create, task create, appointments read and create, interaction writeback | `medications:read`, `refills:write`, `tasks:write`, `appointments:read`, `appointments:write`, `interactions:write` | yes, where a patient is named |
+
+Every call, refused or not, writes a `phi_audit_events` row (ADR 35).
+`apps/web/src/server/partner/scope-matrix.test.ts` runs every operation
+against every single-scope key.
+
 ## Client surfaces (presentation, not enforcement)
 
 `role-provider.tsx` renders from the **session's** role, supplied by the app
@@ -117,6 +139,7 @@ triggers a refused call.
 | Record sections and tabs | ADR 28, `apps/web/src/features/patients/patient-tabs.ts` |
 | Session + surface page guards | `apps/web/src/server/guards.ts`, `apps/web/src/lib/guard-page.ts` |
 | Audit chain ordering | ADR 10 |
+| Partner keys, scopes, verification tokens | ADR 36, `apps/web/src/server/partner/`, `docs/partner-api/` |
 | The audit trail: event shape, the append-only table, the two sinks | ADR 35, `packages/contracts/src/audit.ts`, `apps/web/src/server/audit-log.ts` |
 | Office scoping | ADR 22 |
 | Mockup surfaces | `apps/web/src/components/role-provider.tsx` |

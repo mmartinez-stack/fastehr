@@ -1,0 +1,70 @@
+import type { LocationSlug, PartnerScope } from '@fastehr/contracts'
+import { db as defaultDb, type Db } from '@fastehr/db'
+import { createAuditSink, type AuditSink } from '../audit-log.ts'
+import { createRateLimiter, type RateLimiter } from './rate-limit.ts'
+
+/**
+ * Request-scoped context for the partner API (ADR 36).
+ *
+ * Deliberately its own type rather than the tRPC `Context`: a partner call
+ * must never be able to satisfy `requireRole` or reach a staff procedure, so
+ * the actor shape does not overlap. What is shared is what should be: the
+ * repositories (`Db`) and the audit sink (ADR 35), so the two chains write
+ * one trail through one seam.
+ */
+
+/** An authenticated partner: the client row, minus anything secret. */
+export interface PartnerActor {
+  kind: 'api_client'
+  clientId: string
+  keyId: string
+  name: string
+  scopes: readonly PartnerScope[]
+  /** Empty means every active clinic; otherwise the key sees only these (ADR 36: a boundary for a key). */
+  locations: readonly LocationSlug[]
+}
+
+/** Facts the inner layers hand to the outermost audit layer. */
+export interface AuditScope {
+  patientId?: string
+  verificationId?: string
+  resourceKind?: string
+  resourceId?: string
+}
+
+export interface PartnerContext {
+  /** Null until the chain authenticates the key. */
+  actor: PartnerActor | null
+  db: Db
+  audit: AuditSink
+  requestId: string
+  ipAddress: string | null
+  userAgent: string | null
+  /** Injectable clock, so expiry and lockout tests need no waiting. */
+  now: () => Date
+  rateLimiter: RateLimiter
+  auditScope: AuditScope
+}
+
+/** One limiter per process: the buckets are what a single container can offer (ADR 36). */
+let sharedRateLimiter: RateLimiter | undefined
+
+export function createPartnerContext({
+  requestId,
+  ipAddress,
+  userAgent,
+  db = defaultDb,
+  audit = createAuditSink(db.audit),
+  now = () => new Date(),
+  rateLimiter = (sharedRateLimiter ??= createRateLimiter()),
+}: {
+  requestId: string
+  ipAddress: string | null
+  userAgent: string | null
+  db?: Db
+  audit?: AuditSink
+  now?: () => Date
+  rateLimiter?: RateLimiter
+}): PartnerContext {
+  return { actor: null, db, audit, requestId, ipAddress, userAgent, now, rateLimiter, auditScope: {} }
+}

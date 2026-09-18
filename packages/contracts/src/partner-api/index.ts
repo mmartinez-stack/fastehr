@@ -45,11 +45,13 @@ export {
   partnerPatientLookupInput,
   partnerPatientCandidateSchema,
   partnerPatientLookupOutput,
+  patientLookupRowSchema,
   partnerPatientParams,
   partnerVerifyPatientInput,
   partnerVerifyPatientOutput,
   type PartnerPatientLookupInput,
   type PatientLookupCriteria,
+  type PatientLookupRow,
   type PartnerPatientCandidate,
   type PartnerPatientLookupOutput,
   type PartnerPatientParams,
@@ -73,5 +75,9 @@ export {
   type PartnerOperations,
   type PartnerOperationId,
   type PartnerOperationById,
+  type PartnerSchema,
+  type SchemaInput,
+  type SchemaOutput,
+  type OptionalSchemaOutput,
 } from './operations.ts'
 export { buildPartnerOpenApiDocument, PARTNER_API_VERSION, PARTNER_API_BASE_PATH } from './openapi.ts'

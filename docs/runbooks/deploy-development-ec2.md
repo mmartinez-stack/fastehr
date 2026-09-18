@@ -367,6 +367,16 @@ Reading the trail is itself a PHI access: note who ran the query and why in
 the incident log. The table refuses `UPDATE`, `DELETE`, and `TRUNCATE`
 (ADR 35) and is kept for six years.
 
+**The proxy.** Before a partner key is live, the Caddy site block must
+have: `tls { protocols tls1.2 tls1.3 }`; `header Strict-Transport-Security
+"max-age=31536000; includeSubDomains"`; `request_body { max_size 256KB }`;
+`reverse_proxy web:3000 { header_up X-Forwarded-For {remote_host} transport
+http { response_header_timeout 30s } }` (overwrite the address, never
+append: the key's `--allow-ip` check and the audit trail's address read
+it); and an access `log` whose `format filter` deletes
+`request>headers>Authorization`, `request>headers>Cookie`, and
+`request>headers>X-Patient-Verification`. Port 3000 is never published.
+
 **Quarterly.** `pnpm partner-api-keys -- list`; revoke any key whose last use
 is older than 30 days. Never set `DEBUG=prisma*` or a Prisma `log: ['query']`
 option on this host: both print bound query parameters, which are PHI.

@@ -31,6 +31,7 @@ function fakeDb(overrides: Partial<Db['staffUsers']> = {}): Db {
       search: async () => [],
       suggest: async () => [],
       searchByName: async () => [],
+      lookup: async () => [],
       create: async () => {
         throw new Error('not under test')
       },

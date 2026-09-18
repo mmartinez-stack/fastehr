@@ -130,6 +130,14 @@ Everything outside imports from `src/server/index.ts`, never a file inside it.
   The sink is `ctx.audit` (ADR 35): the `[phi-audit]` stdout line plus a row
   in the append-only `phi_audit_events` table, whose event shape
   (`phiAuditEventSchema` in contracts) has no field for the request input.
+- The partner REST API (ADR 36) lives in `src/server/partner/` and is mounted
+  by `app/api/v1/[[...path]]/route.ts`: scoped API keys (hash-only rows,
+  issued by `packages/db/scripts/partner-api-keys.ts`), a patient
+  verification token, and a chain in the same order as tRPC's writing the
+  same audit sink. `PARTNER_OPERATIONS` in contracts is the one registry
+  (router, chain, OpenAPI, handler table); `docs/partner-api/openapi.json`
+  is generated from it and a test fails on drift. Off unless
+  `PARTNER_API_ENABLED=true`.
 - `officeScopedProcedure` checks the requested office against `ctx.actor.offices`.
   The office belongs to the actor, resolved server-side — never taken from a
   request or a client-side selection (ADR 22).

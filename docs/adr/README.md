@@ -46,6 +46,7 @@ first and produced a bug that type-checked.
 | [34](034-development-environment-cli-ghcr-ssm.md) | The development environment: CLI-built AWS resources, images in GHCR, deploys through SSM | `deploy/` · `.github/workflows/deploy-development.yml` · `docs/runbooks` |
 | [35](035-openapi-from-the-router.md) | The API documentation is generated from the router and viewed in a vendored Swagger UI | `apps/web/src/server` · `apps/web/src/app/api-docs` · `apps/web/public/swagger-ui` · `packages/contracts` |
 | [35](035-durable-phi-audit-trail.md) | The PHI audit trail is an append-only table, written through one sink | `packages/contracts` · `packages/db` · `apps/web/src/server` |
+| [36](036-partner-api-keys-scopes-verification.md) | The partner API: scoped keys, a verification token, one chain, one registry | `packages/contracts` · `packages/db` · `apps/web/src/server/partner` · `apps/web/src/app/api/v1` |
 
 ## Adding one
 

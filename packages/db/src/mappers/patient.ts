@@ -1,7 +1,9 @@
 import {
+  patientLookupRowSchema,
   patientSchema,
   patientSummarySchema,
   type Patient,
+  type PatientLookupRow,
   type PatientSummary,
 } from '@fastehr/contracts'
 import type {
@@ -113,4 +115,16 @@ export function toPatientSummary(row: PatientRow): PatientSummary {
  */
 export function toCalendarDate(value: Date): string {
   return value.toISOString().slice(0, 10)
+}
+
+/** The partner lookup row (ADR 36): identity and both verification factors, nothing else. */
+export function toPatientLookupRow(row: PatientRow): PatientLookupRow {
+  return patientLookupRowSchema.parse({
+    patientId: row.id,
+    firstName: row.firstName,
+    lastName: row.lastName,
+    dateOfBirth: toCalendarDate(row.dateOfBirth),
+    phone: row.phone,
+    locationId: row.locationId,
+  })
 }
