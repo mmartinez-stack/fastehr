@@ -19,5 +19,3 @@ export const officeSchema = z.enum(['Sylmar', 'Montebello', 'PennProgram', 'Tele
 
 export type Office = z.infer<typeof officeSchema>
 
-/** Input carried by any procedure that reads or writes for a single site. */
-export const officeScopedInput = z.object({ office: officeSchema })

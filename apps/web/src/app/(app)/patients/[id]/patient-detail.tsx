@@ -1,77 +1,78 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import {
   ArrowLeftIcon,
-  PhoneIcon,
-  MailIcon,
-  MapPinIcon,
   CalendarPlusIcon,
-  CalendarClockIcon,
-  MessageSquareIcon,
-  TicketPercentIcon,
-  DollarSignIcon,
-  FileTextIcon,
-  StethoscopeIcon,
-  CheckCircle2Icon,
+  CameraIcon,
   CircleAlertIcon,
+  ClipboardPlusIcon,
+  FileTextIcon,
+  HouseIcon,
+  MessageSquareIcon,
+  MessagesSquareIcon,
+  PackageCheckIcon,
+  PillIcon,
+  SaveIcon,
+  StethoscopeIcon,
 } from "lucide-react"
+import { toast } from "sonner"
 
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
+import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { Textarea } from "@/components/ui/textarea"
 import { useSurfaces } from "@/components/role-provider"
-import {
-  LanguageTag,
-  PatientStatusBadge,
-  SignedBadge,
-} from "@/components/status-badges"
+import { LanguageTag, PatientStatusBadge } from "@/components/status-badges"
 import { WaiversColumn } from "@/features/consents/waivers-column"
+import { formatHeight } from "@/features/patients/height"
+import { ROLE_LABEL } from "@/lib/staff-role-label"
 import {
-  CONSENT_TYPES,
   ageFromDob,
-  fmtDate,
+  bmi,
   fmtDateLong,
-  fmtTime,
   fullName,
   type Appointment,
   type Patient,
   type PendingWaiver,
   type Visit,
 } from "@/lib/mock-data"
-import { WeightChart } from "./weight-chart"
+import { AppointmentsPanel, BillingPanel, ConsentsPanel } from "./clerical-tabs"
+import { ConsultationForm } from "./consultation-form"
 import { RefillDialog } from "./refill-dialog"
-import { VisitRecords } from "./visit-records"
-
-const usd = (n: number) => `$${n.toLocaleString("en-US")}`
+import { VisitRecords, type CrossComment } from "./visit-records"
+import { WeightChart } from "./weight-chart"
 
 /**
- * The patient record, split by role.
+ * The patient record, split by role (the Aug 7 sync) and laid out per the
+ * Sep 7 review of the provider's view:
  *
- * The Aug 7 sync was specific about this screen: a provider opening a patient
- * should not have to read past contact details and consent-form status to
- * reach the chart, because none of it is theirs to act on. So the clerical
- * half — contact, consents, billing, coupons, scheduling — moves to the
- * administrative view, the clinical half stays with the provider, and an
- * administrator sees both.
+ * - The patient information sits top right, the current medication and the
+ *   weight bar chart beneath it, and the column is fixed so the provider
+ *   never scrolls to find them. Visit records take the left, 60/40.
+ * - Each fact is shown once (the 2026-09-13 review): age, date of birth,
+ *   height, office, weight, and BMI on the patient card; medication on its
+ *   own card; the visits as records, with no second table.
+ * - The medical history is a free text box the provider writes in; no file
+ *   upload. Nothing administrative (contact, billing) is on a provider's
+ *   screen, and no dispensing action ("Register new vial") is either.
+ * - One tab strip holds every section a role may see, and the records are
+ *   split by kind rather than colour-coded: Visit records (the clinical
+ *   notes) for the clinical surface; Administrative records (payment,
+ *   mailing, calls, and the front desk's comments on clinical visits),
+ *   Consents, Appointments, and Billing (coupons inside it, where the
+ *   legacy record applied them) for the clerical one. An administrator has
+ *   both surfaces and sees every tab.
  *
  * The role comes from a client-side switcher (see RoleProvider): this is a
- * mockup of the division, not an implementation of it. Both halves render from
- * the same fixtures and nothing here withholds data.
+ * mockup of the division on fixtures, not an implementation of it.
  */
 export function PatientDetail({
   patient,
-  visits,
+  visits: onFile,
   appointments,
   waivers,
 }: {
@@ -81,26 +82,31 @@ export function PatientDetail({
   waivers: PendingWaiver[]
 }) {
   const { role, clinical, clerical } = useSurfaces()
+  const currentUser = "Mauricio Martinez"
+
+  // A visit opened on this screen (the consultation form) joins the records
+  // at once, newest first; mockup state, gone on reload.
+  const [opened, setOpened] = useState<Visit[]>([])
+  const [composing, setComposing] = useState(false)
+  const visits = [...opened, ...onFile]
 
   const age = ageFromDob(patient.dob)
-  const feet = Math.floor(patient.heightIn / 12)
-  const inches = patient.heightIn % 12
   const latest = visits[0]
-  const earliest = visits[visits.length - 1]
-  const startWeight = earliest?.weight ?? 0
-  const currentWeight = latest?.weight ?? 0
-  const lost = startWeight - currentWeight
+  // A visit saved without a weight carries 0; that is no weight, not a weight.
+  const currentWeight = latest === undefined || latest.weight === 0 ? null : latest.weight
+  const currentBmi = currentWeight === null ? null : bmi(currentWeight, patient.heightIn)
 
-  const collected = visits.filter((v) => v.paid).reduce((s, v) => s + v.amount, 0)
-  const outstanding = visits.filter((v) => !v.paid).reduce((s, v) => s + v.amount, 0)
-  const byMethod = visits
-    .filter((v) => v.paid)
-    .reduce<Record<string, number>>((acc, v) => {
-      acc[v.paymentMethod] = (acc[v.paymentMethod] ?? 0) + v.amount
-      return acc
-    }, {})
-
-  const onFile = CONSENT_TYPES.filter((c) => !patient.missingConsents.includes(c))
+  // Records split by kind, each on its own tab (the 2026-09-13 review). A
+  // comment goes with the kind of its author, referencing the visit it is on.
+  const clinicalVisits = visits.filter((v) => v.author === "provider")
+  // Current medication is what the last clinical visit dispensed; an
+  // administrative entry in between does not change it.
+  const currentMeds = clinicalVisits[0]?.meds ?? []
+  const administrativeVisits = visits.filter((v) => v.author === "administrative")
+  const crossComments = (kind: "provider" | "administrative"): CrossComment[] =>
+    visits
+      .filter((v) => v.author !== kind)
+      .flatMap((visit) => visit.addenda.filter((a) => a.author === kind).map((addendum) => ({ visit, addendum })))
 
   return (
     <div>
@@ -116,31 +122,40 @@ export function PatientDetail({
       </Button>
 
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight text-balance">
-              {fullName(patient)}
-            </h1>
-            <LanguageTag language={patient.language} />
-            <PatientStatusBadge status={patient.status} />
-            {patient.atHome && (
-              <Badge className="bg-appt-athome text-appt-athome-foreground">At-Home</Badge>
-            )}
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {patient.gender} &middot; {age} yrs &middot; DOB {fmtDate(patient.dob)} &middot;{" "}
-            {feet}&apos;{inches}&quot; &middot; {patient.office}
-          </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight text-balance">{fullName(patient)}</h1>
+          <LanguageTag language={patient.language} size="lg" />
+          <PatientStatusBadge status={patient.status} size="lg" />
+          {patient.atHome && (
+            <Badge className="bg-appt-athome px-2.5 py-1 text-sm text-appt-athome-foreground">At-Home</Badge>
+          )}
         </div>
+        {/* The record's actions at `lg`: the four buttons a visit starts from,
+            sized to be found and hit without aiming (DIA-22). */}
         <div className="flex flex-wrap gap-2">
+          {(clinical || clerical) && (
+            <Button size="lg" onClick={() => setComposing(true)} disabled={composing}>
+              <ClipboardPlusIcon data-icon="inline-start" />
+              New visit
+            </Button>
+          )}
           {clinical && <RefillDialog patientName={fullName(patient)} />}
           {clerical && (
             <>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="lg">
                 <MessageSquareIcon data-icon="inline-start" />
                 Text
               </Button>
-              <Button size="sm">
+              <Button
+                variant="outline"
+                size="lg"
+                nativeButton={false}
+                render={<Link href="/sms" />}
+              >
+                <MessagesSquareIcon data-icon="inline-start" />
+                SMS chat
+              </Button>
+              <Button variant="outline" size="lg">
                 <CalendarPlusIcon data-icon="inline-start" />
                 Book Visit
               </Button>
@@ -149,439 +164,319 @@ export function PatientDetail({
         </div>
       </div>
 
-      <div
-        className={
-          clerical
-            ? "mt-6 grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)_300px] 3xl:grid-cols-[320px_minmax(0,1fr)_360px]"
-            : "mt-6 grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)] 3xl:grid-cols-[340px_minmax(0,1fr)]"
-        }
-      >
-        <aside className="flex flex-col gap-4">
-          {clinical && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Progress</CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-3 gap-2 text-center">
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-foreground">Start</span>
-                  <span className="text-lg font-semibold tabular-nums">{startWeight}</span>
-                  <span className="text-xs text-muted-foreground">lbs</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-foreground">Current</span>
-                  <span className="text-lg font-semibold tabular-nums">{currentWeight}</span>
-                  <span className="text-xs text-muted-foreground">lbs</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-foreground">Lost</span>
-                  <span className="text-lg font-semibold tabular-nums text-success">
-                    {lost.toFixed(0)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">lbs</span>
-                </div>
-              </CardContent>
-            </Card>
+      {/*
+        Left, 60%: the visits, the work. Right, 40%: the patient information
+        and the chart, fixed, so at 1080p neither scrolls away. The split is
+        proportional rather than a fixed side width so the chart grows with
+        the screen instead of the text.
+      */}
+      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <div className="flex min-w-0 flex-col gap-6">
+          {composing && (
+            <ConsultationForm
+              patient={patient}
+              visitCount={visits.length}
+              currentUser={currentUser}
+              onCancel={() => setComposing(false)}
+              onSave={(visit) => {
+                setOpened((prev) => [visit, ...prev])
+                setComposing(false)
+              }}
+            />
           )}
 
-          {clinical && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <StethoscopeIcon className="size-4 text-primary" />
-                  Clinical summary
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3 text-sm">
-                <p className="leading-relaxed text-pretty">{patient.medsHistory}</p>
-                <Separator />
-                <div className="flex justify-between gap-2">
-                  <span className="text-muted-foreground">Program</span>
-                  <span className="font-medium">{patient.program ?? "-"}</span>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <span className="text-muted-foreground">Last visit</span>
-                  <span className="font-medium">{fmtDateLong(patient.lastVisit)}</span>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <span className="text-muted-foreground">Current medication</span>
-                  <span className="font-medium">
-                    {latest?.meds.map((m) => m.name).join(", ") || "-"}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {clinical && <MedicalHistoryNotes initial={patient.medsHistory} />}
 
-          {clerical && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Contact</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3 text-sm">
-                <div className="flex items-center gap-2">
-                  <PhoneIcon className="size-4 text-muted-foreground" />
-                  <span>{patient.phone}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <MailIcon className="size-4 text-muted-foreground" />
-                  <span className="truncate">{patient.email}</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <MapPinIcon className="size-4 shrink-0 text-muted-foreground" />
-                  <span>
-                    {patient.address.street}, {patient.address.city},{" "}
-                    {patient.address.state} {patient.address.zip}
-                  </span>
-                </div>
-                <Separator />
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Referral</span>
-                  <span className="font-medium">{patient.referralSource}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Program</span>
-                  <span className="font-medium">{patient.program ?? "-"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Last visit</span>
-                  <span className="font-medium">{fmtDate(patient.lastVisit)}</span>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </aside>
-
-        <div className="min-w-0">
-          <Tabs defaultValue={clinical ? "visits" : "consents"}>
-            <TabsList>
-              {clinical && <TabsTrigger value="visits">Visits</TabsTrigger>}
-              {clinical && <TabsTrigger value="records">Records</TabsTrigger>}
-              {clinical && <TabsTrigger value="weight">Weight</TabsTrigger>}
+          {/* One strip for every section a role may see; each fact lives in one tab. */}
+          <Tabs defaultValue={clinical ? "records" : "administrative"}>
+            <TabsList className="flex-wrap">
+              {clinical && <TabsTrigger value="records">Visit records</TabsTrigger>}
+              {clerical && <TabsTrigger value="administrative">Administrative records</TabsTrigger>}
               {clerical && <TabsTrigger value="consents">Consents</TabsTrigger>}
               {clerical && <TabsTrigger value="appointments">Appointments</TabsTrigger>}
-              {clerical && <TabsTrigger value="finance">Billing</TabsTrigger>}
-              {clerical && <TabsTrigger value="coupons">Coupons</TabsTrigger>}
+              {clerical && <TabsTrigger value="billing">Billing</TabsTrigger>}
             </TabsList>
 
             {clinical && (
-              <TabsContent value="visits" className="mt-4">
-                <Card>
-                  <CardContent className="p-0">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Weight</TableHead>
-                          <TableHead>Medication</TableHead>
-                          <TableHead>Provider</TableHead>
-                          <TableHead className="text-right">Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {visits.map((v) => (
-                          <TableRow key={v.id}>
-                            <TableCell className="whitespace-nowrap">
-                              {fmtDateLong(v.date)}
-                            </TableCell>
-                            <TableCell>{v.type}</TableCell>
-                            <TableCell className="tabular-nums">{v.weight} lbs</TableCell>
-                            <TableCell>
-                              {v.meds.map((m) => `${m.name} ${m.dosage}`).join(", ") || "-"}
-                            </TableCell>
-                            <TableCell className="whitespace-nowrap">{v.provider}</TableCell>
-                            <TableCell className="text-right">
-                              <SignedBadge signed={v.signed} />
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            )}
-
-            {clinical && (
-              <TabsContent value="records" className="mt-4">
-                {visits.length === 0 ? (
+              <TabsContent value="records" className="mt-2">
+                {clinicalVisits.length === 0 ? (
                   <Card>
                     <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
                       <FileTextIcon className="size-6 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">
-                        No visit records on file.
-                      </p>
+                      <p className="text-sm text-muted-foreground">No visit records on file.</p>
                     </CardContent>
                   </Card>
                 ) : (
                   <VisitRecords
-                    visits={visits}
-                    heightIn={patient.heightIn}
-                    currentUser="Mauricio Martinez"
+                    kind="provider"
+                    visits={clinicalVisits}
+                    comments={crossComments("provider")}
+                    currentUser={currentUser}
                   />
                 )}
               </TabsContent>
             )}
-
-            {clinical && (
-              <TabsContent value="weight" className="mt-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Weight over time</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <WeightChart
-                      data={[...visits]
-                        .reverse()
-                        .map((v) => ({ date: v.date, weight: v.weight }))}
-                    />
-                  </CardContent>
-                </Card>
+            {clerical && (
+              <TabsContent value="administrative" className="mt-2">
+                <VisitRecords
+                  kind="administrative"
+                  visits={administrativeVisits}
+                  comments={crossComments("administrative")}
+                  currentUser={currentUser}
+                />
               </TabsContent>
             )}
-
             {clerical && (
-              <TabsContent value="consents" className="mt-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Consent forms</CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Form</TableHead>
-                          <TableHead className="text-right">Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {[...patient.missingConsents, ...onFile].map((c) => {
-                          const pending = patient.missingConsents.includes(c)
-                          return (
-                            <TableRow key={c}>
-                              <TableCell className="font-medium">{c}</TableCell>
-                              <TableCell className="text-right">
-                                {/* Icon and word, not colour alone — DIA-22. */}
-                                <span
-                                  className={
-                                    "inline-flex items-center gap-1.5 text-sm " +
-                                    (pending ? "text-warning-foreground" : "text-success")
-                                  }
-                                >
-                                  {pending ? (
-                                    <CircleAlertIcon className="size-4" />
-                                  ) : (
-                                    <CheckCircle2Icon className="size-4" />
-                                  )}
-                                  {pending ? "Pending" : "On file"}
-                                </span>
-                              </TableCell>
-                            </TableRow>
-                          )
-                        })}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
+              <TabsContent value="consents" className="mt-2">
+                <ConsentsPanel patient={patient} />
               </TabsContent>
             )}
-
             {clerical && (
-              <TabsContent value="appointments" className="mt-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Upcoming appointments</CardTitle>
-                  </CardHeader>
-                  <CardContent className={appointments.length === 0 ? undefined : "p-0"}>
-                    {appointments.length === 0 ? (
-                      <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <CalendarClockIcon className="size-4" />
-                        Nothing booked. Use Book Visit to schedule one.
-                      </p>
-                    ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Time</TableHead>
-                            <TableHead>Type</TableHead>
-                            <TableHead>Provider</TableHead>
-                            <TableHead>Notes</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {appointments.map((a) => (
-                            <TableRow key={a.id}>
-                              <TableCell className="whitespace-nowrap">
-                                {fmtDateLong(a.start)}
-                              </TableCell>
-                              <TableCell className="whitespace-nowrap tabular-nums">
-                                {fmtTime(a.start)}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline">{a.type}</Badge>
-                              </TableCell>
-                              <TableCell className="whitespace-nowrap">{a.provider}</TableCell>
-                              <TableCell className="text-muted-foreground">{a.notes}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
-                  </CardContent>
-                </Card>
+              <TabsContent value="appointments" className="mt-2">
+                <AppointmentsPanel appointments={appointments} />
               </TabsContent>
             )}
-
             {clerical && (
-              <TabsContent value="finance" className="mt-4">
-                <div className="flex flex-col gap-4">
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    <Card>
-                      <CardContent className="flex flex-col gap-1 py-4">
-                        <span className="text-xs text-muted-foreground">Collected</span>
-                        <span className="text-xl font-semibold tabular-nums text-success">
-                          {usd(collected)}
-                        </span>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="flex flex-col gap-1 py-4">
-                        <span className="text-xs text-muted-foreground">Outstanding</span>
-                        <span
-                          className={
-                            "text-xl font-semibold tabular-nums " +
-                            (outstanding > 0 ? "text-warning" : "text-foreground")
-                          }
-                        >
-                          {usd(outstanding)}
-                        </span>
-                      </CardContent>
-                    </Card>
-                    <Card className="col-span-2 sm:col-span-1">
-                      <CardContent className="flex flex-col gap-1 py-4">
-                        <span className="text-xs text-muted-foreground">Visits billed</span>
-                        <span className="text-xl font-semibold tabular-nums">
-                          {visits.length}
-                        </span>
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  {Object.keys(byMethod).length > 0 && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-base">Collected by method</CardTitle>
-                      </CardHeader>
-                      <CardContent className="flex flex-wrap gap-4 text-sm">
-                        {Object.entries(byMethod).map(([method, amt]) => (
-                          <div key={method} className="flex items-center gap-2">
-                            <DollarSignIcon className="size-4 text-muted-foreground" />
-                            <span className="text-muted-foreground">{method}</span>
-                            <span className="font-medium tabular-nums">{usd(amt)}</span>
-                          </div>
-                        ))}
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Billing history</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Type</TableHead>
-                            <TableHead>Method</TableHead>
-                            <TableHead>Tracking</TableHead>
-                            <TableHead className="text-right">Amount</TableHead>
-                            <TableHead className="text-right">Status</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {visits.map((v) => (
-                            <TableRow key={v.id}>
-                              <TableCell className="whitespace-nowrap">
-                                {fmtDateLong(v.date)}
-                              </TableCell>
-                              <TableCell>{v.type}</TableCell>
-                              <TableCell>{v.paymentMethod}</TableCell>
-                              <TableCell className="font-mono text-xs text-muted-foreground">
-                                {v.tracking ?? "-"}
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums">
-                                {usd(v.amount)}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <Badge
-                                  variant={v.paid ? "ghost" : "outline"}
-                                  className={
-                                    v.paid
-                                      ? "bg-success/15 text-success"
-                                      : "border-warning/40 text-warning"
-                                  }
-                                >
-                                  {v.paid ? "Paid" : "Due"}
-                                </Badge>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </CardContent>
-                  </Card>
-                </div>
-              </TabsContent>
-            )}
-
-            {clerical && (
-              <TabsContent value="coupons" className="mt-4">
-                <Card>
-                  <CardContent className="flex flex-col gap-3 py-4">
-                    {patient.coupons.length === 0 && (
-                      <p className="text-sm text-muted-foreground">No active coupons.</p>
-                    )}
-                    {patient.coupons.map((c, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center gap-3 rounded-md border border-border bg-accent/40 p-3"
-                      >
-                        <TicketPercentIcon className="size-5 text-primary" />
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium">{c.description}</span>
-                          <span className="text-xs text-muted-foreground">
-                            Valid until {fmtDateLong(c.validUntil)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
+              <TabsContent value="billing" className="mt-2">
+                <BillingPanel patient={patient} visits={visits} />
               </TabsContent>
             )}
           </Tabs>
         </div>
 
-        {clerical && (
-          <aside>
+        <aside className="flex flex-col gap-4 xl:sticky xl:top-20 xl:self-start">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <StethoscopeIcon className="size-4 text-primary" />
+                Patient information
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+              <Term>Gender</Term>
+              <Detail>{patient.gender}</Detail>
+              <Term>Age</Term>
+              <Detail>{age} yrs</Detail>
+              <Term>DOB</Term>
+              <Detail>{fmtDateLong(patient.dob)}</Detail>
+              <Term>Height</Term>
+              <Detail>{formatHeight(patient.heightIn)}</Detail>
+              {clinical && (
+                <>
+                  <Term>Weight</Term>
+                  <Detail>{currentWeight === null ? "-" : `${currentWeight} lbs`}</Detail>
+                  <Term>BMI</Term>
+                  <Detail>{currentBmi === null || currentBmi === 0 ? "-" : currentBmi}</Detail>
+                </>
+              )}
+              <Term>Office</Term>
+              <Detail>{patient.office}</Detail>
+              <Term>Program</Term>
+              <Detail>{patient.program ?? "-"}</Detail>
+              <Term>Last visit</Term>
+              <Detail>{fmtDateLong(patient.lastVisit)}</Detail>
+            </CardContent>
+          </Card>
+
+          {clinical && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <PillIcon className="size-4 text-primary" />
+                  Medication
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-2 text-sm">
+                {currentMeds.length === 0 ? (
+                  <p className="text-muted-foreground">No current medication.</p>
+                ) : (
+                  currentMeds.map((m, i) => (
+                    <div key={i} className="flex items-baseline justify-between gap-3">
+                      <span className="font-medium">{m.name}</span>
+                      <span className="tabular-nums text-muted-foreground">{m.dosage}</span>
+                    </div>
+                  ))
+                )}
+                {latest && (
+                  <p className="text-xs text-muted-foreground">As of the {fmtDateLong(latest.date)} visit.</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {clinical && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Weight by visit</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {visits.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No visits to chart.</p>
+                ) : (
+                  <WeightChart
+                    className="h-[220px] w-full 3xl:h-[280px]"
+                    data={[...visits]
+                      .filter((v) => v.weight > 0)
+                      .reverse()
+                      .map((v) => ({ date: v.date, weight: v.weight }))}
+                    exportName={`${patient.lastName}-${patient.firstName}-weight`}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {clinical && visits.some((v) => v.photo) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <CameraIcon className="size-4 text-primary" />
+                  Visit photos
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {/* Placeholders: the images wait for PHI file storage (DIA-68, DIA-71). */}
+                <div className="grid grid-cols-3 gap-2">
+                  {visits
+                    .filter((v) => v.photo)
+                    .map((v) => (
+                      <figure key={v.id} className="flex flex-col gap-1">
+                        <div className="flex aspect-[3/4] items-center justify-center rounded-md border border-dashed border-border bg-muted/40">
+                          <CameraIcon className="size-5 text-muted-foreground" />
+                        </div>
+                        <figcaption className="text-center text-xs text-muted-foreground">{fmtDateLong(v.date)}</figcaption>
+                      </figure>
+                    ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {clerical && patient.atHome && <AtHomeCard patient={patient} />}
+
+          {clerical && !clinical && (
             <WaiversColumn
               waivers={waivers}
               showPatient={false}
               emptyMessage="Every consent form on file for this patient."
             />
-          </aside>
-        )}
+          )}
+        </aside>
       </div>
 
       {!clinical && !clerical && (
         <p className="mt-6 text-sm text-muted-foreground">
-          The {role} view has no content on this screen.
+          The {ROLE_LABEL[role]} view has no content on this screen.
         </p>
       )}
     </div>
+  )
+}
+
+/**
+ * The At-Home program block the legacy chart kept beside the patient: the
+ * welcome package's tracking number and the text that tells the patient it
+ * shipped, and a warning when the program type the contract needs is
+ * missing. Front desk only.
+ */
+function AtHomeCard({ patient }: { patient: Patient }) {
+  const [tracking, setTracking] = useState(patient.trackingNumber ?? "")
+  const [sent, setSent] = useState(patient.welcomePackageSent)
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <HouseIcon className="size-4 text-appt-athome" />
+          At-Home program
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 text-sm">
+        {patient.program === undefined && (
+          <p className="flex items-center gap-2 text-warning-foreground">
+            <CircleAlertIcon className="size-4" />
+            Missing program type for the contract.
+          </p>
+        )}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="tracking-number" className="text-sm font-medium">
+            Welcome package tracking number
+          </label>
+          <Input
+            id="tracking-number"
+            value={tracking}
+            onChange={(event) => setTracking(event.target.value)}
+            placeholder="9405 5111 05…"
+            className="font-mono"
+          />
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-muted-foreground">
+            {sent ? "Package sent, patient texted." : "Not sent yet."}
+          </span>
+          <Button
+            size="sm"
+            variant={sent ? "outline" : "default"}
+            disabled={tracking.trim() === ""}
+            onClick={() => {
+              setSent(true)
+              toast.success(`Welcome package text sent to ${patient.firstName} with the tracking number`)
+            }}
+          >
+            <PackageCheckIcon data-icon="inline-start" />
+            {sent ? "Send again" : "Welcome package sent"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function Term({ children }: { children: React.ReactNode }) {
+  return <span className="text-muted-foreground">{children}</span>
+}
+
+function Detail({ children }: { children: React.ReactNode }) {
+  return <span className="font-medium">{children}</span>
+}
+
+/**
+ * The free text box the Sep 7 sync asked for: a place for the provider to
+ * write the medical history in their own words, and no file upload. Local
+ * state only in the mockup; the real save is the Medical tab's `historyOther`.
+ */
+function MedicalHistoryNotes({ initial }: { initial: string }) {
+  const [text, setText] = useState(initial)
+  const [saved, setSaved] = useState(initial)
+  const dirty = text !== saved
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Medical history</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <Textarea
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          rows={4}
+          aria-label="Medical history"
+          placeholder="Conditions, prior treatments, anything the next provider should read first."
+          className="text-sm leading-relaxed"
+        />
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            disabled={!dirty}
+            onClick={() => {
+              setSaved(text)
+              toast.success("Medical history saved")
+            }}
+          >
+            <SaveIcon data-icon="inline-start" />
+            Save
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }

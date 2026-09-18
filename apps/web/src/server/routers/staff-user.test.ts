@@ -1,5 +1,5 @@
 import type { Db } from '@fastehr/db'
-import { StaffUserEmailTakenError } from '@fastehr/db'
+import { StaffUserEmailTakenError, StaffUserReferencedError } from '@fastehr/db'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContext, type Actor } from '../context.ts'
 import { appRouter } from './root.ts'
@@ -19,21 +19,27 @@ const JUNE: ReturnType<Db['staffUsers']['list']> extends Promise<Array<infer U>>
   createdAt: '2020-01-15T00:00:00.000Z',
 }
 
-const ADMIN: Actor = { id: 'admin-1', roles: ['admin'], offices: ['Sylmar'] }
-const PROVIDER: Actor = { id: 'prov-1', roles: ['provider'], offices: ['Sylmar'] }
+const ADMIN: Actor = { id: 'admin-1', roles: ['admin'], locations: ['sylmar'] }
+const PROVIDER: Actor = { id: 'prov-1', roles: ['provider'], locations: ['sylmar'] }
 
 function fakeDb(overrides: Partial<Db['staffUsers']> = {}): Db {
   return {
     patients: {
       findById: async () => null,
-      listByLastName: async () => [],
       listRecent: async () => [],
       search: async () => [],
+      suggest: async () => [],
       searchByName: async () => [],
       create: async () => {
         throw new Error('not under test')
       },
-      update: async () => {
+      updateDemographics: async () => {
+        throw new Error('not under test')
+      },
+      updateClinical: async () => {
+        throw new Error('not under test')
+      },
+      updateBilling: async () => {
         throw new Error('not under test')
       },
       setStatus: async () => {
@@ -46,7 +52,42 @@ function fakeDb(overrides: Partial<Db['staffUsers']> = {}): Db {
       create: async () => JUNE,
       update: async () => JUNE,
       setActive: async () => JUNE,
+      delete: async () => JUNE,
       ...overrides,
+    },
+    intakes: {
+      create: async () => {
+        throw new Error('not under test')
+      },
+      findById: async () => null,
+      findByTokenHash: async () => null,
+      submit: async () => null,
+      listPending: async () => [],
+      accept: async () => null,
+      reject: async () => null,
+    },
+    reviews: {
+      lastRun: async () => null,
+      listEligible: async () => [],
+      recordSample: async () => {
+        throw new Error('not under test')
+      },
+      listQueue: async () => [],
+      findNote: async () => null,
+      signOff: async () => null,
+    },
+    locations: {
+      list: async () => [],
+      listActive: async () => [],
+    },
+    queue: {
+      arrive: async () => {
+        throw new Error('not under test')
+      },
+      room: async () => null,
+      remove: async () => null,
+      startFromRecordWrite: async () => 0,
+      listWaiting: async () => [],
     },
   }
 }
@@ -178,5 +219,52 @@ describe('setActive', () => {
     await expect(caller.staffUsers.setActive({ id: 'ghost', isActive: false })).rejects.toThrow(
       'NOT_FOUND',
     )
+  })
+})
+
+describe('delete', () => {
+  it('forwards the id and returns the removed account', async () => {
+    const del = vi.fn(async () => JUNE)
+    const caller = callerWith(fakeDb({ delete: del }))
+
+    expect(await caller.staffUsers.delete({ id: JUNE.id })).toEqual(JUNE)
+    expect(del).toHaveBeenCalledWith({ id: JUNE.id })
+  })
+
+  it('refuses to let an admin delete their own account', async () => {
+    const del = vi.fn(async () => JUNE)
+    const caller = callerWith(fakeDb({ delete: del }))
+
+    await expect(caller.staffUsers.delete({ id: ADMIN.id })).rejects.toThrow(
+      'cannot delete your own account',
+    )
+    expect(del).not.toHaveBeenCalled()
+  })
+
+  it('is admin-gated, before the repository', async () => {
+    const del = vi.fn(async () => JUNE)
+    const caller = callerWith(fakeDb({ delete: del }), PROVIDER)
+
+    await expect(caller.staffUsers.delete({ id: JUNE.id })).rejects.toThrow('FORBIDDEN')
+    expect(del).not.toHaveBeenCalled()
+  })
+
+  it('surfaces an unknown id as NOT_FOUND', async () => {
+    const caller = callerWith(fakeDb({ delete: async () => null }))
+    await expect(caller.staffUsers.delete({ id: 'ghost' })).rejects.toThrow('NOT_FOUND')
+  })
+
+  it('surfaces an account that signed clinical records as PRECONDITION_FAILED', async () => {
+    const caller = callerWith(
+      fakeDb({
+        delete: async () => {
+          throw new StaffUserReferencedError()
+        },
+      }),
+    )
+    await expect(caller.staffUsers.delete({ id: JUNE.id })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'account has signed clinical records',
+    })
   })
 })

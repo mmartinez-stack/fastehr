@@ -17,32 +17,39 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty"
 import { PageHeader } from "@/components/page-header"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  EMPTY_PATIENT_FORM,
-  PatientForm,
-} from "@/features/patients/patient-form"
+import { useSurfaces } from "@/components/role-provider"
+import { EMPTY_PATIENT_FORM, PatientForm } from "@/features/patients/patient-form"
+import { PATIENT_TABS } from "@/features/patients/patient-tabs"
 import { trpc } from "@/trpc/client"
 import { IntakeForm } from "./intake-form"
 
 /**
  * Create — two tabs, the legacy page's two jobs made explicit. "New patient"
- * is the shared legacy-parity form (features/patients/patient-form.tsx, the
- * reference implementation per docs/forms.md) wired to `patient.create`;
- * "Send intake form" is the legacy SMS side panel (see intake-form.tsx). The
- * page owns navigation: the back-guard dialog and the success redirect.
+ * is the shared three-tab form (features/patients/patient-form.tsx, the
+ * reference implementation per docs/forms.md) with every tab, wired to
+ * `patient.create`; "Send intake form" is the legacy SMS side panel (see
+ * intake-form.tsx). The page owns navigation: the back-guard dialog and the
+ * success redirect.
+ *
+ * Creating a record is clerical (ADR 28): it needs the demographics a
+ * provider never sees. The server refuses a provider's `patient.create`; this
+ * page says so first rather than rendering a form that cannot be submitted.
  */
 export default function NewPatientPage() {
   const router = useRouter()
   const utils = trpc.useUtils()
+  const { clerical } = useSurfaces()
   const [confirmingLeave, setConfirmingLeave] = React.useState(false)
   const dirtyRef = React.useRef(false)
 
   const createPatient = trpc.patient.create.useMutation({
     onSuccess: (created) => {
-      void utils.patient.list.invalidate()
       void utils.patient.recent.invalidate()
+      void utils.patient.search.invalidate()
+      void utils.patient.suggest.invalidate()
       toast.success(`${created.firstName} ${created.lastName} added`)
       router.push("/patients")
     },
@@ -55,32 +62,50 @@ export default function NewPatientPage() {
     }
   }
 
+  if (!clerical) {
+    return (
+      <Empty>
+        <EmptyTitle>Front desk only</EmptyTitle>
+        <EmptyDescription>
+          New patient records are created by the front desk.{" "}
+          <Link href="/patients" className="underline">Back to patients</Link>
+        </EmptyDescription>
+      </Empty>
+    )
+  }
+
   return (
     <div>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="mb-4"
-        nativeButton={false}
-        render={<Link href="/patients" onNavigate={guardLeave} />}
-      >
-        <ArrowLeft data-icon="inline-start" />
-        Back to patients
-      </Button>
+      {/* The back arrow shares the title row — a stacked back link above the
+          header spent a full row on it (the whitespace complaint). */}
+      <div className="mb-3 flex items-start gap-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Back to patients"
+          className="-ml-2"
+          nativeButton={false}
+          render={<Link href="/patients" onNavigate={guardLeave} />}
+        >
+          <ArrowLeft />
+        </Button>
+        <PageHeader
+          className="mb-0 flex-1"
+          title="New Patient"
+          description="Create a record directly, or text the person the self-service intake form."
+        />
+      </div>
 
-      <PageHeader
-        title="New Patient"
-        description="Create a record directly, or text the person the self-service intake form."
-      />
-
-      <Tabs defaultValue="new" className="mt-6">
+      <Tabs defaultValue="new">
         <TabsList>
           <TabsTrigger value="new">New patient</TabsTrigger>
           <TabsTrigger value="intake">Send intake form</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="new" className="mt-4">
+        <TabsContent value="new" className="mt-2">
           <PatientForm
+            // Creating takes every tab at once; the page is clerical-only above.
+            sections={PATIENT_TABS}
             defaultValues={EMPTY_PATIENT_FORM}
             submit={async (value) => {
               await createPatient.mutateAsync(value)
@@ -99,7 +124,7 @@ export default function NewPatientPage() {
           />
         </TabsContent>
 
-        <TabsContent value="intake" className="mt-4">
+        <TabsContent value="intake" className="mt-2">
           <IntakeForm />
         </TabsContent>
       </Tabs>

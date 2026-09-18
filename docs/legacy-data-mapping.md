@@ -123,7 +123,6 @@ place (`Patient` model, `patient.*` procedures, the shared form in
 | `dobStr` | `dateOfBirth` | `DateTime @db.Date` | The string was the legacy source of truth; `dob` (a timestamp) is derived and discarded. |
 | `gender` | `gender` | `PatientGender?` | Legacy enum `male/female`, kept as a PG enum. |
 | `height` | `heightInches` | `Float?` | Unit named in the column, as the legacy form labeled it. |
-| `healthyWeight` | `healthyWeight` | `Float?` | |
 | `language` | `language` | `PatientLanguage?` | Legacy enum `english/spanish`. |
 | `office` | `office` | `String?` | Free string on the entity so historical values import; the form input constrains to the current list. |
 | `email` | `email` | `String?` | Normalized by the contract on write. |
@@ -132,20 +131,22 @@ place (`Patient` model, `patient.*` procedures, the shared form in
 | `address.street/city/state/zip` | `addressStreet/City/State/Zip` | `String?` | Flattened. |
 | `referralSource` | `referralSource` | `String?` | Free string on the entity, pick-list on the input. |
 | `referredByPt` | `referredByPatientId` | self-relation | Resolved through patient `legacyId` at import time. |
-| `hx` | `historyNotes` | `String?` | "Current medications and pertinent history". |
+| `hx` | `historyOther` | `String?` | "Current medications and pertinent history", verbatim. Shown read-only under the Medical tab's history checklist (ADR 28 as amended) and written by nothing; the column was renamed, never parsed. The medication list (`patient_medications`) and checklist (`patient_conditions`) start empty for migrated records; `patient_allergies` exists but is dormant. |
 | `programType` | `programType` | `String?` | Pick-list on the input; `None` → NULL. |
 | `status` | `status` | `PatientStatus` | Legacy free string; `inactive` maps to `inactive`, anything else to `active` (matching the legacy UI's own check). |
-| `creditCardNumber`, `creditCardExpMonth/Year`, `creditCardZip` | same | `String?` | **Provisional** (2026-08-31): ported for billing continuity while the tokenized-processor design is pending; these columns are scheduled to be replaced by processor tokens, not to grow. The four fields are exactly what the legacy form rendered. |
+| `creditCardNumber`, `creditCardExpMonth/Year`, `creditCardZip` | same | `String?` | **Provisional** (2026-08-31): ported for billing continuity while the tokenized-processor design is pending; these columns are scheduled to be replaced by processor tokens, not to grow. The four fields are exactly what the legacy form rendered, except that the two expiration dropdowns became one "month/year" input (2026-09-07): the contract splits it into the two columns as `MM` and `YYYY`, and displays migrated rows of either convention (`1`/`01`, `25`/`2025`) the same way. |
 
 ### Transform decisions
 
 - There is no patient delete, here or in legacy (its route was disabled);
   deactivation is `patient.setStatus`.
-- Per-field match semantics reproduce legacy search: names
-  exact-but-case-insensitive, DOB by calendar day, phone by its ten digits; the
-  default roster view is the most recent 30. The *input* differs deliberately:
-  one search box whose format decides between name and phone, plus a separate
-  date-of-birth field (ADR 27), replacing the legacy four-field bar.
+- Match semantics diverge from legacy on purpose since the Aug 31 sync
+  (DIA-59): names match by substring, case-insensitive (legacy anchored an
+  exact match); DOB by calendar day and phone by its ten digits are unchanged;
+  a date of service finds any patient with a visit on that clinic day. The
+  default view is legacy's "30 most recent", now by last visit; there is no
+  unfiltered list beyond it. The *input* is one search box whose format decides between
+  name and phone, plus the two date fields (ADR 27).
 - **A row the importer writes must survive the mapper's read-back parse**, so
   every candidate is validated through the contracts entity schema before any
   write. A field the contract would reject imports as NULL with a note in the
@@ -169,10 +170,82 @@ place (`Patient` model, `patient.*` procedures, the shared form in
 | ------------ | ------------- |
 | `creditCardCVV` | Never stored, period — PCI DSS 3.2 forbids retaining a CVV after authorization, and the legacy form never rendered the control anyway (a dead field in its form group). |
 | `walletId`, `preferredPaymentId`, `last4Digits` | Payment-processor bookkeeping for an integration this system does not have; `last4Digits` is derivable. |
-| `visits`, `recentVisit`, `recentText`, `callLog`, `callAfter` | Visit/outreach domain — migrates with its own collections. |
+| `visits`, `recentText`, `callLog`, `callAfter` | Visit/outreach domain — migrates with its own collections (`visits` has, § visits). |
+| `recentVisit` | Recomputed, not copied: `patients.lastVisitAt` is backfilled by the visits importer as `max(visits.dateOfService)`, which is how the legacy visit hooks maintained it. |
 | `referrals[]` (credit bookkeeping), `lastVideoSent`, `videoOneSent` | Campaign features, not patient identity. |
 | consent blobs (`treatmentConsent*`, `liposhotConsent*`, `ozempicWaiver*`, `testimonialConsent`) | Consent management is its own module with signature handling; a free-string signature column is not it. |
 | `isAtHome` | Derived from `office` (`… Home` suffix) — derived data is computed, not stored twice. |
 | `preferredContactTime`, `cutoffDate`, `programPrice`, `weight` | Defined in the legacy form group but never rendered to users (dead fields), or programmatically patched only. |
+| `healthyWeight` | Imported on 2026-08-31, dropped on 2026-09-06 (DIA-52): the Vitals tab is height only, and no screen or report read it. |
 | `dob` | Derived from `dobStr` (see above). |
 
+
+---
+
+## `visits`
+
+Importer: `packages/db/scripts/migrate-visits.ts` (dry-run by default;
+`--apply` to write; JSON report per run — legacy ids, field names, and reasons
+only, never a note body or a name). Runs **after** `migrate-patients` and
+`migrate-users`: both references resolve through those tables' `legacyId`.
+
+The legacy `visits` collection was also the clinical note: one free-text
+`notes` body per visit, signed once by a provider (a second "review" signature
+existed for accounts flagged `reviewer`; it maps to the medical-director
+review columns when that ticket lands, DIA-74). What is modelled here is the
+identity, date, office, note, and signature. The dispensing block (a fixed
+object of product price/amount pairs), the per-visit billing fields, vitals
+(`weight`, `bmi`, `bloodPressure`), photos and attachments are **not**
+modelled yet; they migrate with the modules that read them.
+
+### Source collection → target table
+
+| Source | Target |
+| ------ | ------ |
+| `fastehr.visits` | `Visit` (`visits`) |
+
+### Field mapping
+
+| Source field | Target column | Type | Notes |
+| ------------ | ------------- | ---- | ----- |
+| `_id` | `legacyId` | `String? @unique` | Also the source of `createdAt` — the date of service is the only creation instant the export carries. |
+| `patient` | `patientId` | FK → `patients` | Resolved through `patients.legacyId`. A visit whose patient never migrated is skipped, reported. |
+| `created` | `dateOfService` | `DateTime` | The legacy schema had no separate visit-date field. Missing or invalid → skip. |
+| `office` | `office` | `String?` | Free string, as on the patient. |
+| `notes` | `notes` | `String?` | The note body, verbatim. |
+| `signature.user` | `signedById` | FK → `users`, `ON DELETE RESTRICT` | Resolved through `users.legacyId`. An `npdoc` signer (refused by the user migration) resolves to NULL, noted; the name snapshot below keeps the attribution. |
+| `signature.firstName` + `lastName` | `signedByName` | `String?` | The legacy signature block's own snapshot. |
+| `signature.signed` | `signedAt` | `DateTime?` | NULL means unsigned. |
+| (derived) | `patients.lastVisitAt` | `DateTime?` | `max(dateOfService)` per patient, recomputed for the whole table in one statement after every run. |
+| (derived) | `status`, `startedAt` | `VisitStatus`, `DateTime?` | ADR 33: signed → `closed`; unsigned → `in_progress` with `startedAt` = the date of service (the legacy "unsigned" queue). Imported history never enters the wait queue. |
+
+### Discarded fields
+
+| Source field | Why discarded |
+| ------------ | ------------- |
+| `seen` | Implied by `signedAt` in the legacy code path (`sign()` set it); no independent meaning. |
+| `digitalSignature`, `reviewDigitalSignature` | JWTs signed with the legacy server's secret — verifiable only by that server. |
+| `reviewSignature`, `addenda[]` | Review co-signatures and addenda return with DIA-74 (the review columns) and the charting module respectively. |
+| `medications.*`, `productId`, `rxNumber` | Dispensing — its own module. |
+| `subtotal`, `discount`, `coupon`, `fee`, `programFee`, `total`, `paid*`, `paymentMethod`, `split*` | Per-visit billing — its own module. |
+| `weight`, `bmi`, `bloodPressure`, `phoneVisit*`, `noShow`, `reported`, photos, `trackingNumber`, `welcomePackage`, `additionalFiles[]` | Visit charting detail; migrates when the charting screen reads it. |
+
+### Transform decisions
+
+- **The delete guard the legacy system lacked.** Legacy hard-deleted users and
+  left 38,047 signatures pointing at nothing. Here `signedById` is `ON DELETE
+  RESTRICT` and `staffUsers.delete` refuses by name first; the row keeps the
+  name snapshot regardless.
+- **`lastVisitAt` is derived, never copied.** Copying `recentVisit` would
+  trust a denormalization the legacy hooks only maintained on update and
+  remove, not on create. Recomputing from the rows is exact.
+- Idempotent on `legacyId`: new rows insert in bulk, existing rows refresh
+  field by field, and a re-run converges.
+
+## Locations (consolidation, DIA-47)
+
+Not a collection: the legacy system had no location table, only the free
+`office` string on patients and visits. The consolidation into the
+two-location model is a backfill migration plus a mapping in the two import
+scripts above, recorded in [ADR 32](adr/032-locations-and-visit-modality.md)
+with the mapping table and the expected counts.

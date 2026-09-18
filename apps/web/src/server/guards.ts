@@ -1,4 +1,4 @@
-import type { StaffRole } from '@fastehr/contracts'
+import { roleHasAccess, type RoleSurface, type StaffRole } from '@fastehr/contracts'
 import { actorFromHeaders } from './auth.ts'
 import type { Actor } from './context.ts'
 
@@ -51,8 +51,23 @@ export async function requireSession(
 }
 
 /**
- * The role guard. At least one role is required by the signature — there is
- * no way to call this that accidentally allows everyone.
+ * The surface guard: the page-side twin of `requireSurface` in the tRPC
+ * chain, asking the same `ROLE_ACCESS` matrix (ADR 31).
+ */
+export async function requireSurface(headers: Headers, surface: RoleSurface): Promise<Actor> {
+  const actor = await requireSession(headers)
+
+  if (!actor.roles.some((role) => roleHasAccess(role, surface))) {
+    throw new GuardDenied('FORBIDDEN')
+  }
+
+  return actor
+}
+
+/**
+ * The role guard, by name. At least one role is required by the signature —
+ * there is no way to call this that accidentally allows everyone. Pages use
+ * `requireSurface`; this stays for a check that really is about one role.
  */
 export async function requireRole(
   headers: Headers,

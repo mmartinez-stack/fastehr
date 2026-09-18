@@ -1,6 +1,6 @@
 # ADR 22 — The office is part of the actor, not of the request
 
-**Status:** accepted  
+**Status:** accepted, amended 2026-09-13  
 **Applies to:** `apps/web/src/server/procedures.ts` · `apps/web/src/components/office-provider.tsx` · `packages/contracts/src/office.ts`
 
 A clinic with several sites has an authorization boundary between them: a
@@ -69,3 +69,19 @@ site-owned data yet — `Patient` has no office column, and adding one is the
 persistence ticket's business. `src/server/office-scope.test.ts` exercises the
 procedure kind against a local router so the behaviour is pinned before the
 first real caller inherits it.
+
+## Amendment, 2026-09-13: offices became locations, and a filter
+
+The Aug 21 sync decided that nobody logs into a site and a location is a
+**filter** (queues, reports), not a permission boundary; ADR 32 made the
+sites rows. The mechanism here is kept with its names changed: the actor
+carries `locations` (every clinic, for every role), the input is
+`{ location }` where `location` is a clinic slug or `'all'`, and
+`locationFilteredProcedure` refuses a slug outside the actor's set. Today
+that refuses only a slug the contract does not know, because every actor
+holds every clinic. The check stays because the hazard has not moved: the
+value still arrives from a nav selector the browser controls, and a
+procedure must never take from its input which records the caller may see.
+`LocationProvider` replaces `OfficeProvider`, with the active clinics
+supplied by `location.listActive` and a remembered per-browser choice
+defaulting to all locations.

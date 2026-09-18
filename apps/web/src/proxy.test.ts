@@ -54,7 +54,7 @@ describe('proxy', () => {
       expect(covered(path)).toBe(true)
     })
 
-    it.each(['/login', '/api/auth/sign-in/email', '/api/trpc/patient.list', '/_smoke', '/favicon.ico'])(
+    it.each(['/login', '/api/auth/sign-in/email', '/api/trpc/patient.search', '/_smoke', '/intake/abc', '/favicon.ico'])(
       'leaves %s alone',
       (path) => {
         expect(covered(path)).toBe(false)

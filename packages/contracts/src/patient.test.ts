@@ -2,10 +2,17 @@ import { describe, expect, it } from 'vitest'
 import { describeValidationFailure } from './errors.ts'
 import {
   createPatientInput,
+  formatCardExpiry,
   interpretPatientSearch,
+  patientClinicalInput,
+  patientDemographicsInput,
+  patientSchema,
   searchPatientsInput,
   sendPatientIntakeInput,
-  updatePatientInput,
+  suggestPatientsInput,
+  updatePatientBillingInput,
+  updatePatientClinicalInput,
+  updatePatientDemographicsInput,
 } from './patient.ts'
 
 /**
@@ -16,14 +23,12 @@ import {
  * change becomes visible.
  */
 
-// The full legacy-form field set, as a browser form would submit it.
+// The full sectioned form, as a browser form would submit it.
 const SUBMITTED = {
   firstName: '  Ada ',
   lastName: ' Lovelace ',
   gender: 'female',
-  heightInches: '64.5',
   dateOfBirth: '1985-12-10',
-  healthyWeight: '135',
   language: 'english',
   office: 'Sylmar',
   email: ' Ada@Example.COM ',
@@ -35,11 +40,24 @@ const SUBMITTED = {
   phoneFollowUpAllowed: true,
   referralSource: 'word of mouth',
   referredByPatientId: '',
-  historyNotes: ' None pertinent. ',
   programType: '',
+  heightFeet: '5',
+  heightInchesPart: '4.5',
+  medications: [
+    { name: ' Metformin ', dose: '500 mg', frequency: 'twice daily' },
+    // The blank line the form adds to type into — not a row.
+    { name: '', dose: '', frequency: '' },
+  ],
+  conditions: [
+    { condition: 'diabetes', present: true, onset: '2019', treatedBy: 'Dr. Smith', medicated: true, medications: 'Metformin' },
+    // Answered "No", with stale detail text a hidden field kept in state.
+    { condition: 'thyroid', present: false, onset: 'stale', treatedBy: '', medicated: false, medications: '' },
+  ],
+  pcpName: 'Dr. Jones',
+  pcpAddress: '',
+  pcpPhone: '951-555-0001',
   creditCardNumber: '4111 1111 1111 1111',
-  creditCardExpMonth: '12',
-  creditCardExpYear: '2030',
+  creditCardExpiry: '12/2030',
   creditCardZip: '90210',
 }
 
@@ -47,9 +65,7 @@ const VALID = {
   firstName: 'Ada',
   lastName: 'Lovelace',
   gender: 'female',
-  heightInches: 64.5,
   dateOfBirth: '1985-12-10',
-  healthyWeight: 135,
   language: 'english',
   office: 'Sylmar',
   email: 'ada@example.com',
@@ -61,8 +77,13 @@ const VALID = {
   phoneFollowUpAllowed: true,
   referralSource: 'word of mouth',
   referredByPatientId: undefined,
-  historyNotes: 'None pertinent.',
   programType: undefined,
+  heightInches: 64.5,
+  medications: [{ name: 'Metformin', dose: '500 mg', frequency: 'twice daily' }],
+  conditions: [{ condition: 'diabetes', onset: '2019', treatedBy: 'Dr. Smith', medicated: true, medications: 'Metformin' }],
+  pcpName: 'Dr. Jones',
+  pcpAddress: undefined,
+  pcpPhone: '9515550001',
   creditCardNumber: '4111111111111111',
   creditCardExpMonth: '12',
   creditCardExpYear: '2030',
@@ -86,19 +107,104 @@ describe('createPatientInput', () => {
     const parsed = createPatientInput.parse({
       ...SUBMITTED,
       email: '',
-      healthyWeight: '  ',
       language: '',
       office: '',
       referralSource: '',
-      historyNotes: '',
+      pcpPhone: '',
     })
 
     expect(parsed.email).toBeUndefined()
-    expect(parsed.healthyWeight).toBeUndefined()
     expect(parsed.language).toBeUndefined()
     expect(parsed.office).toBeUndefined()
     expect(parsed.referralSource).toBeUndefined()
-    expect(parsed.historyNotes).toBeUndefined()
+    expect(parsed.pcpPhone).toBeUndefined()
+  })
+
+  it('round-trips a height typed as feet and inches through the stored total', () => {
+    // 5' 4" is 64 inches — the number patients confuse with 5' 4" when asked
+    // for a total, which is why the form never asks for one.
+    expect(createPatientInput.parse({ ...SUBMITTED, heightFeet: '5', heightInchesPart: '4' }).heightInches).toBe(64)
+  })
+
+  it('composes feet and inches into the stored total, rounded to hundredths', () => {
+    expect(createPatientInput.parse({ ...SUBMITTED, heightFeet: '6', heightInchesPart: '0' }).heightInches).toBe(72)
+    expect(createPatientInput.parse({ ...SUBMITTED, heightFeet: '5', heightInchesPart: '4.1' }).heightInches).toBe(64.1)
+    // Feet 0 is allowed so a migrated sub-foot typo can be opened and fixed.
+    expect(createPatientInput.parse({ ...SUBMITTED, heightFeet: '0', heightInchesPart: '11' }).heightInches).toBe(11)
+  })
+
+  it('rejects height parts outside their ranges as invalid_format', () => {
+    expect(codesFor({ ...SUBMITTED, heightFeet: '9' })).toEqual({ heightFeet: ['invalid_format'] })
+    expect(codesFor({ ...SUBMITTED, heightInchesPart: '12' })).toEqual({ heightInchesPart: ['invalid_format'] })
+    expect(codesFor({ ...SUBMITTED, heightFeet: '', heightInchesPart: '' })).toEqual({
+      heightFeet: ['invalid_format'],
+      heightInchesPart: ['invalid_format'],
+    })
+  })
+
+  it('drops blank list rows but validates a half-filled one', () => {
+    const parsed = createPatientInput.parse({
+      ...SUBMITTED,
+      medications: [{ name: '', dose: '', frequency: '' }],
+    })
+    expect(parsed.medications).toEqual([])
+
+    // A dose without a medication name is a mistake, not a blank line.
+    expect(codesFor({ ...SUBMITTED, medications: [{ name: '', dose: '10 mg', frequency: '' }] })).toEqual({
+      'medications.0.name': ['too_small'],
+    })
+  })
+
+  it('splits one month/year expiry into the two stored columns, padded and four-digit', () => {
+    const parse = (creditCardExpiry: string) => {
+      const { creditCardExpMonth, creditCardExpYear } = createPatientInput.parse({ ...SUBMITTED, creditCardExpiry })
+      return [creditCardExpMonth, creditCardExpYear]
+    }
+    expect(parse('12/2030')).toEqual(['12', '2030'])
+    expect(parse('9/30')).toEqual(['09', '2030'])
+    expect(parse(' 09 / 2030 ')).toEqual(['09', '2030'])
+    expect(parse('')).toEqual([undefined, undefined])
+    expect(createPatientInput.parse(SUBMITTED)).not.toHaveProperty('creditCardExpiry')
+
+    expect(codesFor({ ...SUBMITTED, creditCardExpiry: '13/2030' })).toEqual({ creditCardExpiry: ['invalid_format'] })
+    expect(codesFor({ ...SUBMITTED, creditCardExpiry: '122030' })).toEqual({ creditCardExpiry: ['invalid_format'] })
+    expect(codesFor({ ...SUBMITTED, creditCardExpiry: '12/' })).toEqual({ creditCardExpiry: ['invalid_format'] })
+  })
+
+  it('formats the stored columns back as month/year, whichever convention they hold', () => {
+    expect(formatCardExpiry('12', '2030')).toBe('12/2030')
+    expect(formatCardExpiry('1', '25')).toBe('01/2025')
+    expect(formatCardExpiry(null, null)).toBe('')
+    // A half-stored expiry shows what there is; the input refuses it until completed.
+    expect(formatCardExpiry('05', null)).toBe('05/')
+  })
+
+  it('stores only the checklist items answered Yes, without the hidden details of a No', () => {
+    expect(createPatientInput.parse(SUBMITTED).conditions).toEqual([
+      { condition: 'diabetes', onset: '2019', treatedBy: 'Dr. Smith', medicated: true, medications: 'Metformin' },
+    ])
+    // Every item "No" (the form's starting point) stores nothing.
+    expect(
+      createPatientInput.parse({ ...SUBMITTED, conditions: SUBMITTED.conditions.map((row) => ({ ...row, present: false })) })
+        .conditions,
+    ).toEqual([])
+    expect(codesFor({ ...SUBMITTED, conditions: [{ ...SUBMITTED.conditions[0], condition: 'hangnail' }] })).toEqual({
+      'conditions.0.condition': ['invalid_value'],
+    })
+    // The same item twice cannot be stored (unique per patient).
+    expect(
+      createPatientInput.safeParse({ ...SUBMITTED, conditions: [SUBMITTED.conditions[0], SUBMITTED.conditions[0]] })
+        .success,
+    ).toBe(false)
+  })
+
+  it('carries the history text, trimmed, blank as absent, and has no healthy weight', () => {
+    const parsed = createPatientInput.parse({ ...SUBMITTED, historyOther: '  HTN since 2019. ', healthyWeight: 150 })
+    expect(parsed.historyOther).toBe('HTN since 2019.')
+    expect(parsed).not.toHaveProperty('healthyWeight')
+    expect(patientClinicalInput.parse({ ...SUBMITTED, historyOther: '   ' }).historyOther).toBeUndefined()
+    expect(patientClinicalInput.parse({ ...SUBMITTED }).historyOther).toBeUndefined()
+    expect(Object.keys(patientSchema.shape)).not.toContain('healthyWeight')
   })
 
   it('rejects empty names as too_small', () => {
@@ -108,12 +214,11 @@ describe('createPatientInput', () => {
     })
   })
 
-  it('requires the legacy-required fields: gender, height, address, phone', () => {
+  it('requires the legacy-required fields: gender, address, phone', () => {
     expect(
       codesFor({
         ...SUBMITTED,
         gender: '',
-        heightInches: '',
         addressStreet: '',
         addressCity: '',
         addressState: '',
@@ -122,23 +227,11 @@ describe('createPatientInput', () => {
       }),
     ).toEqual({
       gender: ['invalid_value'],
-      heightInches: ['invalid_format'],
       addressStreet: ['too_small'],
       addressCity: ['too_small'],
       addressState: ['invalid_format'],
       addressZip: ['invalid_format'],
       phone: ['invalid_format'],
-    })
-  })
-
-  it('applies the legacy measurement patterns to height and weight', () => {
-    // Height is two integer digits (inches); weight two or three.
-    expect(codesFor({ ...SUBMITTED, heightInches: '5' })).toEqual({ heightInches: ['invalid_format'] })
-    expect(codesFor({ ...SUBMITTED, heightInches: '164' })).toEqual({ heightInches: ['invalid_format'] })
-    expect(codesFor({ ...SUBMITTED, healthyWeight: '1350' })).toEqual({ healthyWeight: ['invalid_format'] })
-    expect(createPatientInput.parse({ ...SUBMITTED, heightInches: '72', healthyWeight: '99.25' })).toMatchObject({
-      heightInches: 72,
-      healthyWeight: 99.25,
     })
   })
 
@@ -184,13 +277,40 @@ describe('createPatientInput', () => {
   })
 })
 
-describe('updatePatientInput', () => {
-  it('is the create input plus the record identity', () => {
-    const parsed = updatePatientInput.parse({
-      ...SUBMITTED,
-      id: '3e1e0a92-06b6-4b1e-9f3a-6d4c05f9a111',
-    })
-    expect(parsed).toEqual({ ...VALID, id: '3e1e0a92-06b6-4b1e-9f3a-6d4c05f9a111' })
+describe('the section inputs', () => {
+  const id = '3e1e0a92-06b6-4b1e-9f3a-6d4c05f9a111'
+
+  it('each takes its own slice of the form and ignores the rest', () => {
+    // A Zod object strips the keys it does not declare, which is what lets
+    // one form value feed three section schemas.
+    const demographics = updatePatientDemographicsInput.parse({ ...SUBMITTED, id })
+    expect(demographics).not.toHaveProperty('heightInches')
+    expect(demographics).not.toHaveProperty('creditCardNumber')
+    expect(demographics).toMatchObject({ id, firstName: 'Ada', phone: '9515550000' })
+
+    const clinical = updatePatientClinicalInput.parse({ ...SUBMITTED, id })
+    expect(clinical).not.toHaveProperty('phone')
+    expect(clinical).not.toHaveProperty('creditCardNumber')
+    expect(clinical).toMatchObject({ id, heightInches: 64.5, medications: VALID.medications })
+
+    const billing = updatePatientBillingInput.parse({ ...SUBMITTED, id })
+    expect(billing).toEqual({ id, creditCardNumber: '4111111111111111', creditCardExpMonth: '12', creditCardExpYear: '2030', creditCardZip: '90210' })
+  })
+
+  it('validate without an id for a client checking only the tabs it renders', () => {
+    expect(patientDemographicsInput.safeParse({ ...SUBMITTED, phone: '' }).success).toBe(false)
+    expect(patientClinicalInput.safeParse({ ...SUBMITTED, phone: '' }).success).toBe(true)
+  })
+
+  it('together they cover exactly what create takes', () => {
+    const created = createPatientInput.parse(SUBMITTED)
+    const union = {
+      ...updatePatientDemographicsInput.parse({ ...SUBMITTED, id }),
+      ...updatePatientClinicalInput.parse({ ...SUBMITTED, id }),
+      ...updatePatientBillingInput.parse({ ...SUBMITTED, id }),
+    }
+    const { id: _id, ...withoutId } = union
+    expect(withoutId).toEqual(created)
   })
 })
 
@@ -239,6 +359,23 @@ describe('interpretPatientSearch', () => {
   })
 })
 
+describe('suggestPatientsInput', () => {
+  it('interprets the query exactly as a search does', () => {
+    expect(suggestPatientsInput.parse({ query: ' Pe ' })).toEqual({
+      query: { kind: 'name', name: 'Pe' },
+    })
+    expect(suggestPatientsInput.parse({ query: 'Penn, Jo' })).toEqual({
+      query: { kind: 'fullName', firstName: 'Jo', lastName: 'Penn' },
+    })
+  })
+
+  it('refuses what a search refuses: one letter, a partial phone, a date', () => {
+    expect(suggestPatientsInput.safeParse({ query: 'P' }).success).toBe(false)
+    expect(suggestPatientsInput.safeParse({ query: '951555' }).success).toBe(false)
+    expect(suggestPatientsInput.safeParse({ query: '1985-12-10' }).success).toBe(false)
+  })
+})
+
 describe('sendPatientIntakeInput', () => {
   it('normalizes the phone and treats a blank language as absent', () => {
     expect(
@@ -263,6 +400,7 @@ describe('searchPatientsInput', () => {
     expect(searchPatientsInput.parse({ query: '(951) 555-0000', dateOfBirth: '' })).toEqual({
       query: { kind: 'phone', phone: '9515550000' },
       dateOfBirth: undefined,
+      serviceDate: undefined,
     })
   })
 
@@ -270,28 +408,48 @@ describe('searchPatientsInput', () => {
     expect(searchPatientsInput.parse({ query: '', dateOfBirth: '1985-12-10' })).toEqual({
       query: undefined,
       dateOfBirth: '1985-12-10',
+      serviceDate: undefined,
     })
     expect(searchPatientsInput.parse({ query: 'Lovelace', dateOfBirth: '1985-12-10' })).toEqual({
       query: { kind: 'name', name: 'Lovelace' },
       dateOfBirth: '1985-12-10',
+      serviceDate: undefined,
     })
   })
 
-  it('accepts the status filter alone, and combined with a query', () => {
-    expect(searchPatientsInput.parse({ query: '', dateOfBirth: '', status: 'inactive' })).toEqual({
+  it('accepts a service date alone, or combined with the others', () => {
+    expect(searchPatientsInput.parse({ serviceDate: '2026-09-01' })).toEqual({
       query: undefined,
       dateOfBirth: undefined,
-      status: 'inactive',
+      serviceDate: '2026-09-01',
     })
-    expect(searchPatientsInput.parse({ query: 'Lovelace', status: 'active' })).toEqual({
-      query: { kind: 'name', name: 'Lovelace' },
-      dateOfBirth: undefined,
-      status: 'active',
+    expect(
+      searchPatientsInput.parse({ query: 'pe', dateOfBirth: '1985-12-10', serviceDate: '2026-09-01' }),
+    ).toEqual({
+      query: { kind: 'name', name: 'pe' },
+      dateOfBirth: '1985-12-10',
+      serviceDate: '2026-09-01',
     })
+    expect(searchPatientsInput.safeParse({ serviceDate: '9/1/2026' }).success).toBe(false)
   })
 
-  it('refuses an entirely empty search', () => {
-    expect(searchPatientsInput.safeParse({ query: '', dateOfBirth: '', status: '' }).success).toBe(false)
+  it('has no status filter — status left the roster with DIA-50', () => {
+    // A stray status key is dropped, not honoured: the wire cannot ask for it.
+    expect(searchPatientsInput.parse({ query: 'Lovelace', status: 'inactive' })).toEqual({
+      query: { kind: 'name', name: 'Lovelace' },
+      dateOfBirth: undefined,
+      serviceDate: undefined,
+    })
+    expect(searchPatientsInput.safeParse({ query: '', dateOfBirth: '', status: 'inactive' }).success).toBe(
+      false,
+    )
+  })
+
+  it('refuses an entirely empty search — the roster never lists everyone', () => {
+    expect(searchPatientsInput.safeParse({ query: '', dateOfBirth: '', serviceDate: '' }).success).toBe(
+      false,
+    )
+    expect(searchPatientsInput.safeParse({}).success).toBe(false)
   })
 
   it('fails an uninterpretable query with issue code custom, no message of ours', () => {

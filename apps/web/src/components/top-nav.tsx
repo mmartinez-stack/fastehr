@@ -25,10 +25,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useOffice } from "@/components/office-provider"
+import { useLocation } from "@/components/location-provider"
 import { useRole, surfacesFor, type RoleSurfaces } from "@/components/role-provider"
 import { authClient } from "@/lib/auth-client"
-import type { Role } from "@/lib/mock-data"
+import { LOCATION_FILTER_ALL, type LocationFilter, type StaffRole } from "@fastehr/contracts"
+import { ROLE_LABEL } from "@/lib/staff-role-label"
 
 /**
  * `surface` is the half of the application an entry belongs to; an entry
@@ -55,8 +56,8 @@ const NAV: {
 
 export function TopNav() {
   const pathname = usePathname()
-  const { office, offices, setOffice } = useOffice()
-  const { role, roles, setRole } = useRole()
+  const { location, activeLocations, setLocation, labelFor } = useLocation()
+  const { role, roles, canSwitch, setRole } = useRole()
   const router = useRouter()
 
   async function signOut() {
@@ -106,15 +107,16 @@ export function TopNav() {
 
         <div className="ml-auto flex items-center gap-2 lg:ml-0">
           {/*
-            Mockup-only. A real session carries one role and does not offer to
-            change it; this exists so a walkthrough can show the same screen
-            from both sides without two logins. See RoleProvider.
+            Admin and medical director only: a preview of another role's view
+            for walkthroughs, never a way to gain one — the server enforces
+            the session's real role regardless. See RoleProvider.
           */}
+          {canSwitch ? (
           <div className="hidden items-center gap-2 xl:flex">
             <span className="text-xs font-medium text-primary-foreground/75">
               Viewing as
             </span>
-            <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+            <Select value={role} onValueChange={(v) => setRole(v as StaffRole)}>
               <SelectTrigger
                 aria-label="Viewing as role"
                 className="w-[170px] border-primary-foreground/25 bg-primary-foreground/10 text-primary-foreground"
@@ -125,23 +127,27 @@ export function TopNav() {
               <SelectContent>
                 {roles.map((r) => (
                   <SelectItem key={r} value={r}>
-                    {r}
+                    {ROLE_LABEL[r]}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <Select value={office} onValueChange={(v) => setOffice(v as typeof office)}>
+          ) : null}
+          {/* The clinic in view, or all of them: a filter, not a login (ADR 32). */}
+          <Select value={location} onValueChange={(v) => setLocation(v as LocationFilter)}>
             <SelectTrigger
-              className="w-[130px] border-primary-foreground/25 bg-primary-foreground/10 text-primary-foreground"
+              className="w-[150px] border-primary-foreground/25 bg-primary-foreground/10 text-primary-foreground"
               size="sm"
+              aria-label="Location"
             >
-              <SelectValue placeholder="Office" />
+              <SelectValue placeholder="Location">{labelFor(location)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {offices.map((o) => (
-                <SelectItem key={o} value={o}>
-                  {o}
+              <SelectItem value={LOCATION_FILTER_ALL}>{labelFor(LOCATION_FILTER_ALL)}</SelectItem>
+              {activeLocations.map((row) => (
+                <SelectItem key={row.slug} value={row.slug}>
+                  {row.legacyName}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -160,7 +166,7 @@ export function TopNav() {
 
       {/* Mobile / tablet nav */}
       <nav className="flex items-center gap-0.5 overflow-x-auto border-t border-primary-foreground/15 px-2 py-1 lg:hidden">
-        {NAV.map((item) => {
+        {nav.map((item) => {
           const active =
             pathname === item.href || pathname.startsWith(`${item.href}/`)
           const Icon = item.icon

@@ -1,6 +1,6 @@
 # ADR 27 — One roster search input; the format decides the field
 
-**Status:** accepted  
+**Status:** accepted, amended 2026-09-06 (substring names, date of service, no whole-table list)  
 **Applies to:** `packages/contracts/src/patient.ts` · `packages/db/src/repositories/patient.ts` · `apps/web/src/app/(app)/patients/page.tsx`
 
 The patient roster's search is a single text input for names and phone, plus a
@@ -80,3 +80,29 @@ A query cannot combine a name *and* a phone number in one search. The legacy
 bar technically allowed it; usage was overwhelmingly single-field, and either
 one alone identifies a patient. Name + date of birth — the combination that
 actually earns its keep — is expressible, via the separate date field.
+
+## Amendment, 2026-09-06 (DIA-59)
+
+Three of the "unchanged from legacy" semantics above changed at the Aug 31
+stakeholder sync, and this ADR now describes the result:
+
+- **Names match by substring**, case-insensitive, anywhere in the field:
+  typing `pe` finds Josh Penn and Maria Lopez alike. Legacy anchored an exact
+  match, and front-desk staff were typing whole names to find anyone. A
+  two-word query still checks both orientations, now with each part a
+  substring of its field. Phone stays exact and DOB stays by calendar day.
+- **The whole table is never served.** The unbounded `patient.list`
+  procedure is gone and an empty search is refused by the input. The recent-30
+  view stays as the roster's opening screen (the stakeholder's call on
+  review: the queue should open on the patients most recently seen, as the
+  legacy one did), now ordered by last visit. The 100-row search cap remains,
+  and the roster says so when it is hit.
+- **A third criterion, date of service**: any patient with a visit on that
+  calendar day, reckoned in the clinic's zone (`CLINIC_TIME_ZONE` in
+  contracts), ANDed with the others.
+
+The interpreter and its placement are unchanged; the same function now also
+drives a **type-ahead** (`patient.suggest`), which returns a handful of rows
+for the same interpretation after a client-side debounce. The interpreter's
+two-character minimum is what keeps a substring search from matching most of
+the table.

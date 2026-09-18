@@ -151,11 +151,12 @@ leaves, which follow one uniform pattern documented under `visits`.
 ### `texts`
 
 - **Documents:** 869,463 · **Logical:** 322.72 MiB · **Storage:** 66.66 MiB · **Indexes:** 2 (2.7 MiB)
-- **Purpose:** `UNKNOWN` — SMS-shaped records (direction, body, timestamp,
-  recipient). What sends them, and whether they are transactional or marketing,
-  is not determinable from data alone. *Resolution: legacy source, or the
-  owner of the SMS integration.*
-- **Owning module:** `UNKNOWN` — no application source available.
+- **Purpose:** SMS conversation history, per patient: staff-sent texts,
+  campaign texts, and inbound replies from the Twilio webhook. Resolved from
+  the legacy source in [`../legacy-sms-integration.md`](../legacy-sms-integration.md)
+  (DIA-73), which also lists what is *not* in this collection.
+- **Owning module:** the legacy server's SMS controller and campaign jobs;
+  see the document above.
 
 | Path | Type(s) | Presence | Notes |
 | --- | --- | --- | --- |

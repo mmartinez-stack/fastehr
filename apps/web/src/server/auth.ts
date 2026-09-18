@@ -2,7 +2,7 @@ import {
   betterAuthSecretSchema,
   betterAuthUrlSchema,
   isLegacyCredential,
-  officeSchema,
+  LOCATION_SLUGS,
   staffRoleSchema,
 } from '@fastehr/contracts'
 import { createAuthAdapter } from '@fastehr/db'
@@ -36,6 +36,11 @@ function requireAuthEnv(name: 'BETTER_AUTH_SECRET' | 'BETTER_AUTH_URL'): string 
   }
 
   return parsed.data
+}
+
+/** The application's public origin — what a texted link is built on. */
+export function getAppBaseUrl(): string {
+  return requireAuthEnv('BETTER_AUTH_URL')
 }
 
 let instance: ReturnType<typeof betterAuth> | undefined
@@ -204,7 +209,8 @@ export async function actorFromHeaders(headers: Headers): Promise<Actor | null> 
   return {
     id: user.id,
     roles: [role.data],
-    offices: officeSchema.options,
+    // Every clinic, for every role: a location is a filter (ADR 32).
+    locations: LOCATION_SLUGS,
     mustChangePassword: user.mustChangePassword === true,
   }
 }

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { getPrismaClient } from '../client.ts'
-import { db, StaffUserEmailTakenError } from '../index.ts'
+import { db, StaffUserEmailTakenError, StaffUserReferencedError } from '../index.ts'
 
 /**
  * The staff-user repository against real PostgreSQL. What only this level can
@@ -106,7 +106,74 @@ describe('staff-user repository', () => {
 
     const updated = await db.staffUsers.update({ id, name: 'Renamed', role: 'admin' })
     expect(updated).toMatchObject({ name: 'Renamed', role: 'admin' })
+    // The medical director is a role like any other (ADR 31), assigned here.
+    expect((await db.staffUsers.update({ id, role: 'medical_director' }))?.role).toBe('medical_director')
+    expect((await db.staffUsers.update({ id, name: 'Renamed again' }))?.role).toBe('medical_director')
     expect(await db.staffUsers.update({ id: 'ghost', name: 'X' })).toBeNull()
+  })
+
+  it('deletes the account with its sessions and credential, and misses return null', async () => {
+    const id = await seed('leaving-for-good@example.com')
+    await prisma.account.create({
+      data: {
+        id: 'acc-del',
+        userId: id,
+        accountId: id,
+        providerId: 'credential',
+        issuer: 'local:credential',
+        password: 'not-a-real-hash',
+        updatedAt: new Date(),
+      },
+    })
+    await prisma.session.create({
+      data: {
+        id: 'sess-del',
+        token: 'token-del',
+        userId: id,
+        expiresAt: new Date(Date.now() + 3_600_000),
+        updatedAt: new Date(),
+      },
+    })
+
+    const deleted = await db.staffUsers.delete({ id })
+    expect(deleted).toMatchObject({ email: 'leaving-for-good@example.com', hasCredential: true })
+
+    // The row and everything hanging off it are gone — the FK cascades.
+    expect(await prisma.user.count()).toBe(0)
+    expect(await prisma.account.count()).toBe(0)
+    expect(await prisma.session.count()).toBe(0)
+
+    expect(await db.staffUsers.delete({ id: 'ghost' })).toBeNull()
+  })
+
+  it('refuses to delete an account that signed a clinical record', async () => {
+    // The legacy failure this guards: 38,047 signatures left pointing at 22
+    // deleted accounts. The refusal is named so the screen can explain it,
+    // and the row is untouched afterwards.
+    const id = await seed('signer@example.com')
+    const patient = await prisma.patient.create({
+      data: {
+        id: 'a1b2c3d4-0000-4000-8000-000000000010',
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        dateOfBirth: new Date('1815-12-10T00:00:00.000Z'),
+      },
+    })
+    await prisma.visit.create({
+      data: {
+        patientId: patient.id,
+        dateOfService: new Date('2026-03-01T17:00:00Z'),
+        signedById: id,
+        signedByName: 'Dr Signer',
+        signedAt: new Date('2026-03-01T17:30:00Z'),
+      },
+    })
+
+    await expect(db.staffUsers.delete({ id })).rejects.toThrow(StaffUserReferencedError)
+    expect(await prisma.user.count({ where: { id } })).toBe(1)
+
+    await prisma.visit.deleteMany()
+    await prisma.patient.deleteMany()
   })
 
   it('deactivation kills live sessions in the same transaction', async () => {

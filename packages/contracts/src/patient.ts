@@ -5,12 +5,26 @@ import { officeSchema } from './office.ts'
  * Patient — the entity and its write inputs.
  *
  * The field set is the legacy patient form, reimplemented
- * (docs/legacy-data-mapping.md § patients): demographics, address, contact
- * permissions, referral provenance, and program enrolment. Requiredness on the
- * inputs mirrors the legacy Angular form — the legacy *backend* validated
- * almost nothing, so the form's reactive validators were the real contract and
- * they are what these schemas encode. The legacy credit-card block is
- * deliberately not ported.
+ * (docs/legacy-data-mapping.md § patients) and restructured into three tabs
+ * (DIA-52, ADR 28 as amended): Medical (vitals, medications, primary care
+ * doctor), Patient Info (demographics and contact details), and Billing.
+ * Requiredness on the inputs mirrors the legacy Angular form where a field
+ * existed there — the legacy *backend* validated almost nothing, so the
+ * form's reactive validators were the real contract and they are what these
+ * schemas encode.
+ *
+ * Sections are the unit of authorization (ADR 28): a provider reads and
+ * writes the clinical section and never sees demographics or billing; the
+ * front desk and admins see everything. Hence one read schema per section
+ * and one update input per section, rather than one record-wide update. The
+ * three read sections are the three tabs; `demographics` is the Patient Info
+ * tab's data, named for what it holds rather than for the tab.
+ *
+ * Medical history is a checklist (`conditions`) plus a free text box
+ * (`historyOther`, the Sep 7 sync: "History", written by whoever fills the
+ * form; the legacy combined "medications and pertinent history" text was
+ * migrated into it). Allergies are out of scope for now; the
+ * `patient_allergies` table exists from an earlier cut and is dormant.
  *
  * `createPatientInput` is deliberately not `patientSchema.omit(…)`: an input
  * schema normalizes (trims names, lowercases email, strips phone formatting)
@@ -96,10 +110,54 @@ export const PATIENT_PROGRAM_TYPES = [
 export const patientProgramTypeSchema = z.enum(PATIENT_PROGRAM_TYPES)
 export type PatientProgramType = z.infer<typeof patientProgramTypeSchema>
 
-/** The legacy expiration-month values, verbatim — unpadded month numbers. */
-export const CREDIT_CARD_EXP_MONTHS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'] as const
-export const creditCardExpMonthSchema = z.enum(CREDIT_CARD_EXP_MONTHS)
-export type CreditCardExpMonth = z.infer<typeof creditCardExpMonthSchema>
+/**
+ * The medical-history checklist: every item is asked, defaulting to "No",
+ * and a "Yes" opens when, who treats it, and whether it is medicated. The
+ * clinic gave no list of its own, so this is a working one — the common
+ * conditions a weight-management intake asks about — and the column stores
+ * the key as a plain string, so replacing an item is a change here, not a
+ * migration, and rows answered under an older list keep reading back.
+ */
+export const PATIENT_CONDITIONS = [
+  'hypertension',
+  'heart_disease',
+  'stroke',
+  'high_cholesterol',
+  'diabetes',
+  'thyroid',
+  'kidney_disease',
+  'liver_disease',
+  'sleep_apnea',
+  'asthma',
+  'seizures',
+  'glaucoma',
+  'depression_or_anxiety',
+  'pregnancy_or_breastfeeding',
+] as const
+export const patientConditionSchema = z.enum(PATIENT_CONDITIONS)
+export type PatientCondition = z.infer<typeof patientConditionSchema>
+
+/** One line of the medication list, as stored. */
+export const patientMedicationSchema = z.object({
+  name: z.string().min(1),
+  dose: z.string().nullable(),
+  frequency: z.string().nullable(),
+})
+export type PatientMedication = z.infer<typeof patientMedicationSchema>
+
+/**
+ * One checklist item the patient answered "Yes" to, as stored. Absence is
+ * "No". The key is a plain string on the entity (a row answered under an
+ * older list still reads back); the input constrains it to the list.
+ */
+export const patientConditionEntrySchema = z.object({
+  condition: z.string().min(1),
+  onset: z.string().nullable(),
+  treatedBy: z.string().nullable(),
+  medicated: z.boolean(),
+  medications: z.string().nullable(),
+})
+export type PatientConditionEntry = z.infer<typeof patientConditionEntrySchema>
 
 export const patientSchema = z.object({
   id: z.uuid(),
@@ -107,9 +165,6 @@ export const patientSchema = z.object({
   lastName: z.string().min(1),
   dateOfBirth: z.iso.date(),
   gender: patientGenderSchema.nullable(),
-  /** Inches, as the legacy form captured it. */
-  heightInches: z.number().nullable(),
-  healthyWeight: z.number().nullable(),
   language: patientLanguageSchema.nullable(),
   office: z.string().nullable(),
   email: z.email().nullable(),
@@ -123,10 +178,33 @@ export const patientSchema = z.object({
   addressZip: z.string().nullable(),
   referralSource: z.string().nullable(),
   referredByPatientId: z.uuid().nullable(),
-  /** Legacy `hx` — current medications and pertinent history, free text. */
-  historyNotes: z.string().nullable(),
   programType: z.string().nullable(),
+  // --- Clinical sections (DIA-52) ---
+  /** Total inches, as the legacy form captured it; the form shows feet and inches. */
+  heightInches: z.number().nullable(),
+  medications: z.array(patientMedicationSchema),
+  conditions: z.array(patientConditionEntrySchema),
+  /**
+   * The legacy `hx` ("current medications and pertinent history"), verbatim
+   * for migrated records. Read-only: shown in the Medical tab's history
+   * placeholder until the history section is built, and written by no input.
+   */
+  historyOther: z.string().nullable(),
+  pcpName: z.string().nullable(),
+  pcpAddress: z.string().nullable(),
+  pcpPhone: z.string().regex(/^\d{10}$/).nullable(),
+  /**
+   * Still on the entity, no longer on any screen: the Aug 31 sync replaced
+   * the badge with the last-visit date (DIA-50). It stays so the stored value
+   * keeps reading back; nothing filters or sorts on it.
+   */
   status: patientStatusSchema,
+  /**
+   * When the patient was last seen — `max(visits.dateOfService)`, the legacy
+   * `recentVisit`. Null for a patient with no visit on record. An instant
+   * (ISO datetime), because the roster compares it against "a year ago".
+   */
+  lastVisitAt: z.iso.datetime().nullable(),
   // The provisional credit-card block (see the header comment). Plain strings
   // like the other vocabulary fields — historical values import as they are;
   // the inputs carry the legacy form's validators.
@@ -137,6 +215,82 @@ export const patientSchema = z.object({
 })
 
 export type Patient = z.infer<typeof patientSchema>
+
+/**
+ * The sections a caller reads (ADR 28). `header` is what every role sees at
+ * the top of the record and on the roster; `clinical` is the provider's
+ * half; `demographics` and `billing` are clerical. The full entity above is
+ * what the repository speaks; procedures hand out these.
+ */
+export const patientHeaderSchema = patientSchema.pick({
+  id: true,
+  firstName: true,
+  lastName: true,
+  dateOfBirth: true,
+  office: true,
+  lastVisitAt: true,
+})
+export type PatientHeader = z.infer<typeof patientHeaderSchema>
+
+export const patientDemographicsSchema = patientSchema.pick({
+  gender: true,
+  language: true,
+  office: true,
+  email: true,
+  phone: true,
+  phoneFollowUpAllowed: true,
+  addressStreet: true,
+  addressCity: true,
+  addressState: true,
+  addressZip: true,
+  referralSource: true,
+  referredByPatientId: true,
+  programType: true,
+})
+export type PatientDemographics = z.infer<typeof patientDemographicsSchema>
+
+export const patientClinicalSchema = patientSchema.pick({
+  heightInches: true,
+  medications: true,
+  conditions: true,
+  historyOther: true,
+  pcpName: true,
+  pcpAddress: true,
+  pcpPhone: true,
+})
+export type PatientClinical = z.infer<typeof patientClinicalSchema>
+
+export const patientBillingSchema = patientSchema.pick({
+  creditCardNumber: true,
+  creditCardExpMonth: true,
+  creditCardExpYear: true,
+  creditCardZip: true,
+})
+export type PatientBilling = z.infer<typeof patientBillingSchema>
+
+/** What `patient.byId` returns to every role: the header and the clinical half. */
+export const patientChartSchema = patientHeaderSchema.extend(patientClinicalSchema.shape)
+export type PatientChart = z.infer<typeof patientChartSchema>
+
+/**
+ * A roster row. `phone` is a clerical detail: the procedures null it for a
+ * provider before it leaves the server, so the redaction is not a column the
+ * client chooses to hide.
+ */
+export const patientSummarySchema = patientHeaderSchema.extend({ phone: patientSchema.shape.phone })
+export type PatientSummary = z.infer<typeof patientSummarySchema>
+
+export function toPatientSummary(patient: Patient): PatientSummary {
+  return {
+    id: patient.id,
+    firstName: patient.firstName,
+    lastName: patient.lastName,
+    dateOfBirth: patient.dateOfBirth,
+    office: patient.office,
+    lastVisitAt: patient.lastVisitAt,
+    phone: patient.phone,
+  }
+}
 
 /**
  * A blank string means the user left the field empty, and an empty optional
@@ -184,13 +338,60 @@ const dateOfBirth = z.iso.date().pipe(
 )
 
 /**
- * Measurements arrive as form text and leave as numbers. The patterns are the
- * legacy form's, verbatim: height is two integer digits (inches, 10–99) and
- * weight two or three, each with optional hundredths. The regex runs before
+ * Height arrives as two form fields, feet and inches (DIA-52), and leaves as
+ * the total inches the column has always stored — so migrated heights are
+ * untouched and the edit form decomposes them for display. Feet allows 0 so a
+ * migrated value under a foot (a legacy typo) can still be opened and fixed;
+ * inches allows hundredths as the legacy pattern did. The regexes run before
  * the numeric conversion so a failure carries `invalid_format`, same as phone.
  */
-const heightInches = z.string().trim().regex(/^\d{2}(\.\d{1,2})?$/).transform(Number)
-const weightPounds = z.string().trim().regex(/^\d{2,3}(\.\d{1,2})?$/).transform(Number)
+const heightFeet = z.string().trim().regex(/^[0-8]$/)
+const heightInchesPart = z.string().trim().regex(/^(\d|1[01])(\.\d{1,2})?$/)
+
+/** Blank optional text → absent; present text → trimmed and length-capped. */
+const optionalText = (max: number) => blankAsAbsent(z.string().trim().max(max))
+
+/**
+ * A list row the user left entirely blank is not a row: the form adds an
+ * empty line to type into, and an untouched line must not fail `min(1)` on
+ * its name. Rows with anything in them validate in full.
+ */
+const droppingBlankRows = <Row extends z.ZodType>(row: Row, max: number) =>
+  z.preprocess(
+    (value) =>
+      Array.isArray(value)
+        ? value.filter(
+            (candidate) =>
+              typeof candidate !== 'object' ||
+              candidate === null ||
+              Object.values(candidate as Record<string, unknown>).some(
+                (field) => typeof field === 'string' && field.trim() !== '',
+              ),
+          )
+        : value,
+    z.array(row).max(max),
+  )
+
+const medicationRow = z.object({
+  name: z.string().trim().min(1).max(100),
+  dose: optionalText(50),
+  frequency: optionalText(50),
+})
+
+/**
+ * One checklist item as the form submits it: every item, with `present`
+ * false by default. Only the present ones are stored, and the details are
+ * dropped for an item answered "No" — a form that hides them keeps stale text
+ * in state, and that text must not be written.
+ */
+const conditionRow = z.object({
+  condition: patientConditionSchema,
+  present: z.boolean(),
+  onset: optionalText(100),
+  treatedBy: optionalText(100),
+  medicated: z.boolean(),
+  medications: optionalText(200),
+})
 
 /** Two-letter state/territory code, as the legacy state dropdown stored it. */
 const stateCode = z.string().trim().toUpperCase().pipe(z.string().regex(/^[A-Z]{2}$/))
@@ -210,24 +411,41 @@ const creditCardNumber = z
 /** Legacy billing-zip validator, verbatim: four to six digits. */
 const creditCardZip = z.string().trim().regex(/^\d{4,6}$/)
 
-/** A four-digit year; the form's dropdown constrains to the offered range. */
-const creditCardExpYear = z.string().trim().regex(/^\d{4}$/)
+/**
+ * The card expiration as one field, "month/year": 1 or 2 digits, a slash, 2
+ * or 4 digits ("9/30", "09/2030"). The legacy form had two dropdowns and the
+ * two columns stay; `composeBilling` splits this into them, padded month and
+ * four-digit year, and `formatCardExpiry` joins them back for display.
+ * Migrated rows hold both conventions (`1` and `01`, `25` and `2025`), so
+ * the display normalizes too.
+ */
+const CARD_EXPIRY = /^(0?[1-9]|1[0-2])\s*\/\s*(\d{2}|\d{4})$/
+const creditCardExpiry = z.string().trim().regex(CARD_EXPIRY)
+
+export function formatCardExpiry(month: string | null, year: string | null): string {
+  if (month === null && year === null) return ''
+  const mm = month === null ? '' : month.padStart(2, '0')
+  const yyyy = year === null ? '' : year.length === 2 ? `20${year}` : year
+  return `${mm}/${yyyy}`
+}
 
 /**
- * Requiredness and lengths follow the legacy form's reactive validators:
- * names, gender, height, the full address, and phone are required; email,
- * healthy weight, language, office, referral provenance, history, and program
- * are optional. `status` is not an input — a record is created active and
- * changes state only through `setPatientStatusInput`, mirroring the legacy
- * UI's separate activate/deactivate action.
+ * The three input sections. Requiredness and lengths follow the legacy form's
+ * reactive validators where the field existed there: names, gender, height,
+ * the full address, and phone are required; email, language, office,
+ * referral provenance, and program are optional. The new sections
+ * (medications, checklist, primary care doctor) are optional throughout — a
+ * patient with nothing to list has an empty list, a checklist all "No".
+ *
+ * `status` is not an input — a record is created active and changes state
+ * only through `setPatientStatusInput`.
  */
-export const createPatientInput = z.object({
+/** Exported for the intake contract (intake.ts), which reuses the sections. */
+export const demographicsFields = {
   firstName: z.string().trim().min(1).max(50),
   lastName: z.string().trim().min(1).max(100),
   gender: patientGenderSchema,
-  heightInches,
   dateOfBirth,
-  healthyWeight: blankAsAbsent(weightPounds),
   language: blankAsAbsent(patientLanguageSchema),
   office: blankAsAbsent(patientOfficeSchema),
   email: blankAsAbsent(normalizedEmail),
@@ -239,18 +457,92 @@ export const createPatientInput = z.object({
   phoneFollowUpAllowed: z.boolean(),
   referralSource: blankAsAbsent(patientReferralSourceSchema),
   referredByPatientId: blankAsAbsent(z.uuid()),
-  historyNotes: blankAsAbsent(z.string().trim().max(10000)),
   programType: blankAsAbsent(patientProgramTypeSchema),
-  creditCardNumber: blankAsAbsent(creditCardNumber),
-  creditCardExpMonth: blankAsAbsent(creditCardExpMonthSchema),
-  creditCardExpYear: blankAsAbsent(creditCardExpYear),
-  creditCardZip: blankAsAbsent(creditCardZip),
-})
+}
 
+export const clinicalFields = {
+  heightFeet,
+  heightInchesPart,
+  medications: droppingBlankRows(medicationRow, 50),
+  conditions: z
+    .array(conditionRow)
+    .max(PATIENT_CONDITIONS.length)
+    .refine((rows) => new Set(rows.map((row) => row.condition)).size === rows.length),
+  pcpName: optionalText(100),
+  pcpAddress: optionalText(200),
+  pcpPhone: blankAsAbsent(normalizedPhone),
+  historyOther: optionalText(10000),
+}
+
+const billingFields = {
+  creditCardNumber: blankAsAbsent(creditCardNumber),
+  creditCardExpiry: blankAsAbsent(creditCardExpiry),
+  creditCardZip: blankAsAbsent(creditCardZip),
+}
+
+/** The billing section's shape after parsing: the one expiry field split into the two stored columns. */
+export function composeBilling<Fields extends { creditCardExpiry?: string | undefined }>({
+  creditCardExpiry: expiry,
+  ...rest
+}: Fields) {
+  const match = expiry === undefined ? null : CARD_EXPIRY.exec(expiry)
+  const month = match?.[1]
+  const year = match?.[2]
+  return {
+    ...rest,
+    creditCardExpMonth: month === undefined ? undefined : month.padStart(2, '0'),
+    creditCardExpYear: year === undefined ? undefined : year.length === 2 ? `20${year}` : year,
+  }
+}
+
+/**
+ * The clinical section's shape after parsing: feet and inches composed into
+ * the stored total, the checklist reduced to the items answered "Yes".
+ */
+export function composeClinical<
+  Fields extends {
+    heightFeet: string
+    heightInchesPart: string
+    conditions: z.infer<typeof conditionRow>[]
+  },
+>({ heightFeet, heightInchesPart, conditions, ...rest }: Fields) {
+  return {
+    ...rest,
+    // Two decimals at most survive the regex, so the sum is exact enough;
+    // rounding keeps 5 ft 4.1 in from storing as 64.10000000000001.
+    heightInches: Math.round((Number(heightFeet) * 12 + Number(heightInchesPart)) * 100) / 100,
+    conditions: conditions
+      .filter((row) => row.present)
+      .map(({ present: _present, ...row }) => row),
+  }
+}
+
+/**
+ * The sections as standalone inputs, for a client validating only the tabs
+ * its role renders (a provider's form has no demographics to check). The
+ * update inputs below are these plus the record id.
+ */
+export const patientDemographicsInput = z.object(demographicsFields)
+export const patientClinicalInput = z.object(clinicalFields).transform(composeClinical)
+export const patientBillingInput = z.object(billingFields).transform(composeBilling)
+
+/** Create takes every section at once: the tabbed form submits as one record. */
+export const createPatientInput = z
+  .object({ ...demographicsFields, ...clinicalFields, ...billingFields })
+  .transform(composeClinical)
+  .transform(composeBilling)
 export type CreatePatientInput = z.infer<typeof createPatientInput>
 
-export const updatePatientInput = createPatientInput.extend({ id: z.uuid() })
-export type UpdatePatientInput = z.infer<typeof updatePatientInput>
+export const updatePatientDemographicsInput = z.object({ id: z.uuid(), ...demographicsFields })
+export type UpdatePatientDemographicsInput = z.infer<typeof updatePatientDemographicsInput>
+
+export const updatePatientClinicalInput = z
+  .object({ id: z.uuid(), ...clinicalFields })
+  .transform(composeClinical)
+export type UpdatePatientClinicalInput = z.infer<typeof updatePatientClinicalInput>
+
+export const updatePatientBillingInput = z.object({ id: z.uuid(), ...billingFields }).transform(composeBilling)
+export type UpdatePatientBillingInput = z.infer<typeof updatePatientBillingInput>
 
 export const setPatientStatusInput = z.object({
   id: z.uuid(),
@@ -264,10 +556,8 @@ export type SetPatientStatusInput = z.infer<typeof setPatientStatusInput>
  * intake page, and the person enters their own details from their phone. The
  * language picks which translation the text arrives in.
  *
- * Requiredness and lengths are the legacy panel's validators. The *send*
- * itself belongs to the messaging domain (not yet wired); this input is the
- * contract the form validates through today and the procedure will accept
- * when that domain lands.
+ * Requiredness and lengths are the legacy panel's validators. The request
+ * this creates, and what comes back through the link, are in intake.ts.
  */
 export const sendPatientIntakeInput = z.object({
   firstName: z.string().trim().min(1).max(50),
@@ -286,10 +576,12 @@ export type SendPatientIntakeInput = z.infer<typeof sendPatientIntakeInput>
  * "Last, First" convention). A date typed into the text box is refused with a
  * pointer at the date field, never guessed at.
  *
- * Match semantics per field are unchanged from the legacy queue: names exact
- * but case-insensitive, DOB by calendar day, phone by its ten digits. The
- * two-character name minimum stays — a one-letter exact match is always a
- * typo. Query and date combine as AND, so a common name narrows by birth day.
+ * Match semantics per field: names by substring, case-insensitive, anywhere
+ * in the name ("pe" finds Penn and Lopez alike — the Aug 31 sync, DIA-59,
+ * replacing the legacy queue's exact match); DOB by calendar day; phone by
+ * its ten digits, exact. The two-character name minimum stays — one letter
+ * matches too much of a 50k-row table to mean anything. Query and dates
+ * combine as AND, so a common name narrows by birth day.
  *
  * The interpreter is exported on its own so the roster form can classify as
  * the user types (to hint "needs all ten digits" before submit) with the same
@@ -364,37 +656,60 @@ export function interpretPatientSearch(
 }
 
 /**
- * The transform re-runs the interpreter server-side, so an uninterpretable
- * query fails validation (issue code `custom`, per ADR 12 — the client owns
- * the copy, keyed by the problem it already computed locally). Both filters
- * are optional individually, but an entirely empty search is refused — the
- * caller falls back to the recent list instead of asking for everyone.
+ * The zone a calendar day on the roster is reckoned in. Visits are stored as
+ * instants; "seen on Monday" means Monday where the clinic stands, and every
+ * clinic site is in one zone. Named here, once, rather than left to whichever
+ * server or browser happens to run the query (ADR 18's lesson, applied to
+ * a search).
+ */
+export const CLINIC_TIME_ZONE = 'America/Los_Angeles'
+
+/**
+ * The text query, interpreted. The transform re-runs the interpreter
+ * server-side, so an uninterpretable query fails validation (issue code
+ * `custom`, per ADR 12 — the client owns the copy, keyed by the problem it
+ * already computed locally).
+ */
+const interpretedQuery = z
+  .string()
+  .trim()
+  .min(2)
+  .max(150)
+  .transform((value, ctx) => {
+    const interpreted = interpretPatientSearch(value)
+    if (!interpreted.ok) {
+      ctx.addIssue({ code: 'custom', params: { problem: interpreted.problem } })
+      return z.NEVER
+    }
+    return interpreted.value
+  })
+
+/**
+ * The roster search. Three criteria, each optional, ANDed: the text query,
+ * a date of birth, and a date of service ("patients seen on Monday" — any
+ * visit on that clinic day, DIA-59). An entirely empty search is refused —
+ * the caller shows the capped recent list instead of asking for everyone.
+ * There is no status filter: status left the roster with DIA-50.
  */
 export const searchPatientsInput = z
   .object({
-    query: blankAsAbsent(
-      z
-        .string()
-        .trim()
-        .min(2)
-        .max(150)
-        .transform((value, ctx) => {
-          const interpreted = interpretPatientSearch(value)
-          if (!interpreted.ok) {
-            ctx.addIssue({ code: 'custom', params: { problem: interpreted.problem } })
-            return z.NEVER
-          }
-          return interpreted.value
-        }),
-    ),
+    query: blankAsAbsent(interpretedQuery),
     dateOfBirth: blankAsAbsent(z.iso.date()),
-    status: blankAsAbsent(patientStatusSchema),
+    serviceDate: blankAsAbsent(z.iso.date()),
   })
   .refine(
     (value) =>
-      value.query !== undefined || value.dateOfBirth !== undefined || value.status !== undefined,
+      value.query !== undefined || value.dateOfBirth !== undefined || value.serviceDate !== undefined,
   )
 export type SearchPatientsInput = z.infer<typeof searchPatientsInput>
+
+/**
+ * The type-ahead behind the roster's search box: the same interpretation as
+ * a search, a handful of rows back. The two-character minimum is the
+ * interpreter's; the debounce is the client's.
+ */
+export const suggestPatientsInput = z.object({ query: interpretedQuery })
+export type SuggestPatientsInput = z.infer<typeof suggestPatientsInput>
 
 /**
  * The referred-by-patient picker's query (legacy `/patients/search`):

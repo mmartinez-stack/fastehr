@@ -15,13 +15,11 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { cn } from "@/lib/utils"
 import { topMedications } from "@/lib/mock-data"
-import { PillIcon, CheckIcon } from "lucide-react"
+import { PillIcon } from "lucide-react"
 import { toast } from "sonner"
+import { DosePicker } from "./dose-picker"
 import { MedicationPicker } from "./medication-picker"
-
-const DOSES = ["0.25 mg", "0.5 mg", "1.0 mg", "1.7 mg", "2.4 mg", "5 mg", "7.5 mg"]
 
 /** The most-prescribed medication, which is the right thing to open on. */
 function defaultMedication(): string {
@@ -44,7 +42,7 @@ export function RefillDialog({ patientName }: { patientName: string }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="lg">
             <PillIcon data-icon="inline-start" />
             Request Refill
           </Button>
@@ -58,37 +56,7 @@ export function RefillDialog({ patientName }: { patientName: string }) {
         <FieldGroup>
           <MedicationPicker value={medication} onChange={setMedication} />
 
-          {/*
-            The dose list is short and fixed, so it is laid out rather than
-            hidden behind a second dropdown — the sync's complaint about this
-            flow was the number of menus it took to write a routine refill.
-          */}
-          <Field>
-            <FieldLabel>Dose</FieldLabel>
-            <div className="flex flex-wrap gap-1.5">
-              {DOSES.map((d) => {
-                const selected = d === dose
-                return (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setDose(d)}
-                    aria-pressed={selected}
-                    className={cn(
-                      "flex items-center gap-1 rounded-md border px-2.5 py-1 text-sm font-medium tabular-nums transition-colors",
-                      "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-                      selected
-                        ? "border-primary bg-accent text-accent-foreground ring-2 ring-primary"
-                        : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    {selected && <CheckIcon className="size-3.5" />}
-                    {d}
-                  </button>
-                )
-              })}
-            </div>
-          </Field>
+          <DosePicker value={dose} onChange={setDose} />
 
           <Field>
             <FieldLabel htmlFor="refill-qty">Quantity (weeks)</FieldLabel>

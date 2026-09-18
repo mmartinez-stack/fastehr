@@ -44,6 +44,51 @@ enum PatientLanguage {
   @@map("patient_language")
 }
 
+/// How a visit happened (ADR 32). The legacy system filed remote care under
+/// the pseudo-offices Telemedicine and At Home; here that is the modality,
+/// and `locationId` is the clinic the visit counts against, if any.
+enum VisitModality {
+  in_person
+  telemedicine
+  at_home
+
+  @@map("visit_modality")
+}
+
+/// ADR 33: where a visit is in the day. `arrived` and `roomed` are the wait
+/// queue; the provider's first write to the record moves it to `in_progress`
+/// (or the manual "Seen" action does), and the sign-off closes it.
+enum VisitStatus {
+  scheduled
+  arrived
+  roomed
+  in_progress
+  closed
+
+  @@map("visit_status")
+}
+
+/// The clinics (ADR 32, DIA-46). Seeded by migration, keyed by slug, no
+/// CRUD: adding one is a migration. `legacyName` is the office string the
+/// legacy system wrote on patients and visits, the consolidation key.
+/// `active` decides whether a filter offers it; history keeps it either way.
+model Location {
+  slug       String  @id
+  name       String
+  legacyName String  @unique
+  active     Boolean @default(true)
+  sortOrder  Int
+
+  patients       Patient[]
+  visits         Visit[]
+  intakeRequests IntakeRequest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("locations")
+}
+
 enum PatientStatus {
   active
   inactive
@@ -64,11 +109,33 @@ model Patient {
   // Demographics from the legacy patient form. Required on the form but
   // nullable here: records imported from the legacy collection predate the
   // form's validators and may lack any of them.
-  gender        PatientGender?
-  heightInches  Float?
-  healthyWeight Float?
-  language      PatientLanguage?
-  office        String?
+  gender   PatientGender?
+  language PatientLanguage?
+  office   String?
+  /// The clinic, derived from `office` on every write (ADR 32); null for a
+  /// remote-only or dead office value. `office` stays the legacy string.
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [slug], onDelete: Restrict)
+
+  // --- Clinical sections (DIA-52). The record is one row plus three child
+  // tables; which sections a caller may read or write is decided per role in
+  // the server layer, not here. ---
+
+  // Vitals. Total inches, as the legacy form captured it; the form shows feet
+  // and inches and composes them, so migrated heights are untouched. (Healthy
+  // weight was dropped with DIA-52: nothing read it.)
+  heightInches Float?
+  medications  PatientMedication[]
+  allergies    PatientAllergy[]
+  conditions   PatientCondition[]
+  // Medical history, "Other": free text at the end of the checklist. Holds
+  // the legacy `hx` ("current medications and pertinent history") verbatim —
+  // the column was renamed, never parsed, so nothing was lost.
+  historyOther String?
+  // Primary care doctor.
+  pcpName    String?
+  pcpAddress String?
+  pcpPhone   String?
 
   // Optional contact details. Stored normalized (lowercase email, ten bare
   // digits) — `createPatientInput` in @fastehr/contracts is the single place
@@ -91,11 +158,21 @@ model Patient {
   referredByPatient   Patient?  @relation("PatientReferrals", fields: [referredByPatientId], references: [id])
   referrals           Patient[] @relation("PatientReferrals")
 
-  // Legacy `hx` — current medications and pertinent history, free text.
-  historyNotes String?
-  programType  String?
+  programType String?
 
+  // Kept in the schema, no longer exposed: the Aug 31 sync replaced the
+  // active/inactive badge with the last-visit date (DIA-50). Nothing renders
+  // or filters on it; the column stays so no migrated value is lost.
   status PatientStatus @default(active)
+
+  // Denormalized `max(visits.dateOfService)` — the legacy `recentVisit`,
+  // which its visit hooks maintained the same way. It is what the roster sorts
+  // by and what the over-a-year flag reads, so it is a column rather than a
+  // per-row aggregate over a 50k-row table. Written by the visits import and
+  // by every visit write; never by the patient form.
+  lastVisitAt DateTime?
+  visits      Visit[]
+  intakes     IntakeRequest[]
 
   // The provisional credit-card block (contracts § patient header comment):
   // the fields the legacy form rendered, carried for billing continuity until
@@ -113,7 +190,155 @@ model Patient {
 
   // The legacy compound index, for the roster search's exact name matches.
   @@index([lastName, firstName, dateOfBirth])
+  @@index([locationId])
+  // The roster's default order: most recently seen first.
+  @@index([lastVisitAt])
   @@map("patients")
+}
+
+/**
+ * The medication list — one row per line item, in the order entered. Replaces
+ * the free-text half of the legacy `hx` field for records edited from now on.
+ */
+model PatientMedication {
+  id        String  @id @default(uuid())
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  name      String
+  dose      String?
+  frequency String?
+  position  Int
+
+  @@index([patientId, position])
+  @@map("patient_medications")
+}
+
+/** Medication allergies — name and reaction, free text per row. */
+model PatientAllergy {
+  id        String  @id @default(uuid())
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  name      String
+  reaction  String?
+  position  Int
+
+  @@index([patientId, position])
+  @@map("patient_allergies")
+}
+
+/**
+ * The medical-history checklist: one row per condition the patient answered
+ * "Yes" to. Absence is "No" — the checklist's vocabulary lives in contracts
+ * (`PATIENT_CONDITIONS`), and the column is a plain string so replacing the
+ * stub list with the final one is a vocabulary change, not a migration.
+ */
+model PatientCondition {
+  id          String  @id @default(uuid())
+  patientId   String
+  patient     Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  condition   String
+  onset       String?
+  treatedBy   String?
+  medicated   Boolean @default(false)
+  medications String?
+
+  @@unique([patientId, condition])
+  @@map("patient_conditions")
+}
+
+/**
+ * A clinic visit — the legacy `visits` collection, which was also the clinical
+ * note: one free-text `notes` body, signed once by a provider. The columns here
+ * are the identity, date, office, note, and signature; the legacy dispensing
+ * and billing sub-documents are not modelled (docs/legacy-data-mapping.md
+ * § visits).
+ *
+ * `dateOfService` is the legacy `created` — there was no separate visit-date
+ * field. `signedByName` snapshots the signer as the legacy signature block
+ * did, so a note stays attributed even when its signer's account never
+ * migrated (the `npdoc` accounts the user migration refused).
+ */
+model Visit {
+  id            String   @id @default(uuid())
+  patientId     String
+  patient       Patient  @relation(fields: [patientId], references: [id])
+  dateOfService DateTime
+  office        String?
+  /// ADR 32: the clinic the visit counts against (a remote visit is
+  /// attributed to its patient's clinic), and how it happened.
+  locationId String?
+  location   Location?     @relation(fields: [locationId], references: [slug], onDelete: Restrict)
+  modality   VisitModality @default(in_person)
+  notes         String?
+  /// ADR 33: the wait queue is a status on the visit, not a table of its
+  /// own. `arrivedAt` is the wait-time source; `startedAt` is when the
+  /// patient left the queue (the provider's first write, or "Seen").
+  status     VisitStatus @default(scheduled)
+  arrivedAt  DateTime?
+  roomedAt   DateTime?
+  startedAt  DateTime?
+  /// The provider the front desk expects to see the patient. An
+  /// assignment, not a record: `SetNull` on delete, unlike a signature.
+  providerId String?
+  provider   User?       @relation("VisitProviders", fields: [providerId], references: [id], onDelete: SetNull)
+  // `Restrict`, not the default `SetNull`: the legacy system hard-deleted
+  // users and left 38,047 signatures pointing at nothing. Here the delete is
+  // refused while a signature references the account.
+  signedById   String?
+  signedBy     User?     @relation("VisitSignatures", fields: [signedById], references: [id], onDelete: Restrict)
+  signedByName String?
+  signedAt     DateTime?
+
+  // Medical-director review (DIA-74, ADR 30). A note enters the queue when a
+  // sampling run picks it (`sampledAt`, `sampleRunId`) and leaves it when
+  // the reviewer signs off (`reviewedAt`); reviewer, comments, and timestamp
+  // stay on the note, as the legacy review co-signature did.
+  sampledAt      DateTime?
+  sampleRunId    String?
+  sampleRun      ReviewSampleRun? @relation(fields: [sampleRunId], references: [id])
+  reviewedById   String?
+  reviewedBy     User?     @relation("VisitReviews", fields: [reviewedById], references: [id], onDelete: Restrict)
+  reviewComments String?
+  reviewedAt     DateTime?
+
+  legacyId  String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([patientId, dateOfService])
+  @@index([locationId, dateOfService])
+  // The wait queue: a clinic's arrived and roomed visits, by arrival.
+  @@index([locationId, status, arrivedAt])
+  @@index([patientId, status])
+  @@index([signedAt])
+  // The queue: sampled and not yet reviewed.
+  @@index([sampledAt, reviewedAt])
+  @@map("visits")
+}
+
+/**
+ * One run of the review sampler (DIA-74): the window of signatures it
+ * considered and what it picked. The next run's window starts where this
+ * one's ended, which is what makes "signed since the last run" exact rather
+ * than "in the last seven days" — a late or manual run never skips a note
+ * and never samples one twice.
+ */
+model ReviewSampleRun {
+  id            String   @id @default(uuid())
+  ranAt         DateTime @default(now())
+  windowStart   DateTime
+  windowEnd     DateTime
+  eligibleCount Int
+  sampledCount  Int
+  /** "1 in N": 20 is the five percent the sync asked for. */
+  rate          Int
+  /** Null for the scheduled job; the admin who pressed "run now" otherwise. */
+  triggeredById String?
+  triggeredBy   User?    @relation(fields: [triggeredById], references: [id], onDelete: SetNull)
+  visits        Visit[]
+
+  @@index([windowEnd])
+  @@map("review_sample_runs")
 }
 
 // --- Authentication (Better Auth core tables) ---
@@ -141,6 +366,9 @@ enum StaffRole {
   admin
   provider
   frontdesk
+  // The administrator's access plus the note review queue (ADR 31). A role,
+  // not a flag: an account has exactly one role.
+  medical_director
 
   @@map("staff_role")
 }
@@ -160,6 +388,12 @@ model User {
   updatedAt          DateTime  @updatedAt
   sessions           Session[]
   accounts           Account[]
+  signedVisits       Visit[]   @relation("VisitSignatures")
+  sentIntakes        IntakeRequest[] @relation("IntakeSenders")
+  reviewedIntakes    IntakeRequest[] @relation("IntakeReviewers")
+  reviewedVisits     Visit[]   @relation("VisitReviews")
+  assignedVisits     Visit[]   @relation("VisitProviders")
+  triggeredSamples   ReviewSampleRun[]
 
   @@map("users")
 }
@@ -210,4 +444,67 @@ model Verification {
 
   @@index([identifier])
   @@map("verifications")
+}
+
+// --- Self-service intake (DIA-72, ADR 29) ---
+
+enum IntakeStatus {
+  sent
+  submitted
+  accepted
+  rejected
+
+  @@map("intake_status")
+}
+
+/**
+ * One texted intake link and what came back through it. The front desk
+ * creates the request (name, phone, language) and the person is texted a
+ * link carrying a single-use token; only the token's hash is stored, so a
+ * database read cannot mint a working link. The submission lands here as
+ * JSON — the parsed, normalized form (contracts `intakeSubmissionSchema`) —
+ * and becomes a patient row only when the front desk accepts it. The office
+ * is the person's own choice at submission and is the queue the request
+ * appears in.
+ */
+model IntakeRequest {
+  id        String           @id @default(uuid())
+  firstName String
+  lastName  String
+  phone     String
+  language  PatientLanguage?
+  tokenHash String           @unique
+  expiresAt DateTime
+  status    IntakeStatus     @default(sent)
+
+  office      String?
+  /// The clinic `office` names (ADR 32): the Pending queue it waits in.
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [slug], onDelete: Restrict)
+  submission  Json?
+  submittedAt DateTime?
+
+  // The treatment consent signed with the submission (ADR 29 as amended):
+  // the typed name, when, which text version, and the language it was shown
+  // in. Null until submitted. DIA-56's consent module takes these over.
+  consentSignature String?
+  consentSignedAt  DateTime?
+  consentVersion   String?
+  consentLanguage  PatientLanguage?
+
+  patientId String?
+  patient   Patient? @relation(fields: [patientId], references: [id])
+
+  createdById  String?
+  createdBy    User?     @relation("IntakeSenders", fields: [createdById], references: [id], onDelete: SetNull)
+  reviewedById String?
+  reviewedBy   User?     @relation("IntakeReviewers", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([status, office])
+  @@index([status, locationId])
+  @@map("intake_requests")
 }

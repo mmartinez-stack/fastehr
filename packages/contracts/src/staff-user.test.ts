@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { createStaffUserInput, searchStaffUsersInput, updateStaffUserInput } from './staff-user.ts'
+import {
+  createStaffUserInput,
+  deleteStaffUserInput,
+  searchStaffUsersInput,
+  updateStaffUserInput,
+} from './staff-user.ts'
 
 describe('createStaffUserInput', () => {
   it('normalizes the email and trims the name', () => {
@@ -22,6 +27,14 @@ describe('updateStaffUserInput', () => {
       role: 'provider',
     })
     expect(updateStaffUserInput.safeParse({ id: 'staff-1', name: '  ' }).success).toBe(false)
+  })
+})
+
+describe('deleteStaffUserInput', () => {
+  it('requires a non-empty id and nothing else', () => {
+    expect(deleteStaffUserInput.parse({ id: 'staff-1' })).toEqual({ id: 'staff-1' })
+    expect(deleteStaffUserInput.safeParse({ id: '' }).success).toBe(false)
+    expect(deleteStaffUserInput.safeParse({}).success).toBe(false)
   })
 })
 

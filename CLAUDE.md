@@ -188,7 +188,45 @@ same reason (ADR 19).
 read `src/lib/mock-data.ts`, except the patient roster, `/patients/new`, and
 `/patients/[id]/edit`, which are wired end to end (legacy-parity form and
 search — docs/legacy-data-mapping.md § patients; the `/patients/[id]` detail
-view is still mockup). Auth is real (Better Auth; migrated legacy credentials
+view is still mockup, reworked per the Sep 7 review (patient information and
+the weight bar chart fixed on the right, visit records centre and left, a
+height as "5 ft 4 in", a medical history text box, the records split by
+kind into role-gated tabs, Visit records for the clinical surface and
+Administrative records for the clerical one with a comment filed under its
+author's kind, where the legacy chart colour-coded one list, and the legacy
+chart's actions mocked in place: addenda, consent send and
+download, referral credits, coupon assignment, the At-Home package, chart
+export, visit photos, delete visit, and a New visit consultation form in
+the legacy form's four sections, Visit info and Prescription for the
+clinical surface, Billing and Admin for the clerical one;
+docs/provider-record-migrations.md lists what it needs from the schema);
+tabs everywhere are styled as distinct buttons through the slot attributes
+in `globals.css`; the record itself has three tabs, Medical, Patient
+Info, and Billing, each served by its own procedure per ADR 28 as amended,
+with Medical open to every role and the other two clerical; the medical
+history checklist defaults to No, the history text box beneath it is
+writable (the legacy text migrated into it), and allergies are out of scope). The self-service intake is wired end to end (ADR 29 as amended): a texted
+single-use link that lives 48 hours, a phone-first bilingual form at
+`/intake/[token]` that ends with a signed treatment consent (recorded on the
+request until DIA-56), and a per-office Pending tab on the roster; until
+`TWILIO_*` is set, text messages go to the server log and the send panel
+shows the link instead. The medical-director review queue (ADR 30) samples signed notes through
+`apps/web/scripts/sample-notes-for-review.ts` (weekly cron) or "run now";
+the `medical_director` role (ADR 31: an admin's access plus the queue, one
+access matrix `ROLE_ACCESS` in contracts read by server and client) sees the
+queue as a card on `/queues` and signs off at `/review/[visitId]`. Visits are imported (§ visits) and drive the roster's
+last-visit column, order, and service-date search (ADR 27 as amended);
+locations are rows (ADR 32: `sylmar`, `kanoga`, `montebello` inactive) with
+`locationId` on patients, visits, and intake requests and a visit
+`modality`, backfilled from the legacy office strings, which stay on the
+patient record; the nav selector is a location filter (a clinic or all of
+them, `LocationProvider`, `locationFilteredProcedure`) that the queues and
+the Pending intakes tab follow; the wait-time queue is a status on the visit
+(ADR 33: `arrived`/`roomed` are the queue, `arrivedAt` the wait-time source,
+`Db.queue` the transitions, `rankWaitQueue` in core the place in line and the
+"patients before you" count; imported history is `closed` or `in_progress`),
+with `/queues` still on the mockup until the next slice; patient `status` stays
+in the schema but is no longer exposed anywhere (DIA-50). Auth is real (Better Auth; migrated legacy credentials
 verify per ADR 26). `noUncheckedIndexedAccess` is on everywhere with no
 exceptions — the mockup's fixture lookups go through the checked `at()` helper
 rather than `!` (ADR 21).

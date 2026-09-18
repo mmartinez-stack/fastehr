@@ -44,6 +44,31 @@ export const betterAuthSecretSchema = z
 /** The absolute origin the auth server trusts for its own endpoints. */
 export const betterAuthUrlSchema = z.url()
 
+/**
+ * The SMS transport (DIA-72). All three Twilio values or none: with them the
+ * intake link is texted through Twilio; without them the server prints the
+ * message to its log (the console transport), which is how development and
+ * the credential-less dev environment run. A partial set is a configuration
+ * mistake, refused by name rather than silently falling back to the console.
+ */
+export const smsEnvSchema = z
+  .object({
+    TWILIO_ACCOUNT_SID: z.string().min(1).optional(),
+    TWILIO_AUTH_TOKEN: z.string().min(1).optional(),
+    /** E.164, the number the clinic texts from. */
+    TWILIO_FROM_NUMBER: z.string().regex(/^\+\d{8,15}$/).optional(),
+  })
+  .refine(
+    (env) => {
+      const set = [env.TWILIO_ACCOUNT_SID, env.TWILIO_AUTH_TOKEN, env.TWILIO_FROM_NUMBER].filter(
+        (value) => value !== undefined,
+      ).length
+      return set === 0 || set === 3
+    },
+    'TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER must be set together or not at all',
+  )
+export type SmsEnv = z.infer<typeof smsEnvSchema>
+
 /** Everything the server side of the workspace requires to run. */
 export const serverEnvSchema = z.object({
   DATABASE_URL: databaseUrlSchema,

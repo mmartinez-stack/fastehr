@@ -1,4 +1,5 @@
 import type { Db } from '@fastehr/db'
+import type { Patient } from '@fastehr/contracts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContext, type Actor } from '../context.ts'
 import { appRouter } from './root.ts'
@@ -12,44 +13,79 @@ import { appRouter } from './root.ts'
  * no client to mock, no query builder to stub, and nothing that knows what
  * PostgreSQL is. The database's own behaviour is covered where it belongs, in
  * `packages/db`'s integration suite.
+ *
+ * What this file is mostly about since DIA-52: the section split (ADR 28).
+ * The repository hands back the whole record; the procedures decide which
+ * part of it each role gets, and that decision is what these tests pin.
  */
 
-const ADA = {
+/** A full stored record, as the repository returns it. */
+const ADA: Patient = {
   id: '3f1a7a1e-8c9b-4d2a-9f10-6b2c5d4e7a81',
   firstName: 'Ada',
   lastName: 'Lovelace',
   dateOfBirth: '1815-12-10',
-  gender: null,
-  heightInches: null,
-  healthyWeight: null,
-  language: null,
-  office: null,
-  email: null,
-  phone: null,
+  gender: 'female',
+  language: 'english',
+  office: 'Sylmar',
+  email: 'ada@example.com',
+  phone: '9515550000',
   phoneFollowUpAllowed: true,
-  addressStreet: null,
-  addressCity: null,
-  addressState: null,
-  addressZip: null,
+  addressStreet: '10 Analytical Way',
+  addressCity: 'Pasadena',
+  addressState: 'CA',
+  addressZip: '91101',
   referralSource: null,
   referredByPatientId: null,
-  historyNotes: null,
   programType: null,
-  status: 'active' as const,
-  creditCardNumber: null,
-  creditCardExpMonth: null,
-  creditCardExpYear: null,
-  creditCardZip: null,
+  heightInches: 64.5,
+  medications: [{ name: 'Metformin', dose: '500 mg', frequency: 'twice daily' }],
+  conditions: [{ condition: 'diabetes', onset: '2019', treatedBy: null, medicated: true, medications: 'Metformin' }],
+  historyOther: 'None pertinent.',
+  pcpName: 'Dr. Jones',
+  pcpAddress: null,
+  pcpPhone: null,
+  status: 'active',
+  lastVisitAt: null,
+  creditCardNumber: '4111111111111111',
+  creditCardExpMonth: '12',
+  creditCardExpYear: '2030',
+  creditCardZip: '90210',
 }
 
-/** A full legacy-form submission, as the wire carries it (pre-normalization). */
+/** What every role gets from `byId`: the header and the clinical half. */
+const ADA_CHART = {
+  id: ADA.id,
+  firstName: 'Ada',
+  lastName: 'Lovelace',
+  dateOfBirth: '1815-12-10',
+  office: 'Sylmar',
+  lastVisitAt: null,
+  heightInches: 64.5,
+  medications: ADA.medications,
+  conditions: ADA.conditions,
+  historyOther: 'None pertinent.',
+  pcpName: 'Dr. Jones',
+  pcpAddress: null,
+  pcpPhone: null,
+}
+
+const ADA_SUMMARY = {
+  id: ADA.id,
+  firstName: 'Ada',
+  lastName: 'Lovelace',
+  dateOfBirth: '1815-12-10',
+  office: 'Sylmar',
+  lastVisitAt: null,
+  phone: '9515550000',
+}
+
+/** A full sectioned submission, as the wire carries it (pre-normalization). */
 const SUBMITTED = {
   firstName: '  Ada ',
   lastName: 'Lovelace',
   gender: 'female' as const,
-  heightInches: '64',
   dateOfBirth: '1985-12-10',
-  healthyWeight: '',
   language: '',
   office: 'Sylmar',
   email: ' Ada@Example.COM ',
@@ -61,8 +97,20 @@ const SUBMITTED = {
   phoneFollowUpAllowed: true,
   referralSource: '',
   referredByPatientId: '',
-  historyNotes: '',
   programType: '',
+  heightFeet: '5',
+  heightInchesPart: '4',
+  medications: [{ name: 'Metformin', dose: '', frequency: '' }],
+  conditions: [
+    { condition: 'diabetes' as const, present: true, onset: '', treatedBy: '', medicated: false, medications: '' },
+    { condition: 'thyroid' as const, present: false, onset: '', treatedBy: '', medicated: false, medications: '' },
+  ],
+  pcpName: '',
+  pcpAddress: '',
+  pcpPhone: '',
+  creditCardNumber: '',
+  creditCardExpiry: '',
+  creditCardZip: '',
 }
 
 /** What the contract emits for SUBMITTED — what a repository must receive. */
@@ -70,9 +118,7 @@ const NORMALIZED = {
   firstName: 'Ada',
   lastName: 'Lovelace',
   gender: 'female',
-  heightInches: 64,
   dateOfBirth: '1985-12-10',
-  healthyWeight: undefined,
   language: undefined,
   office: 'Sylmar',
   email: 'ada@example.com',
@@ -84,24 +130,42 @@ const NORMALIZED = {
   phoneFollowUpAllowed: true,
   referralSource: undefined,
   referredByPatientId: undefined,
-  historyNotes: undefined,
   programType: undefined,
+  heightInches: 64,
+  medications: [{ name: 'Metformin', dose: undefined, frequency: undefined }],
+  conditions: [{ condition: 'diabetes', onset: undefined, treatedBy: undefined, medicated: false, medications: undefined }],
+  pcpName: undefined,
+  pcpAddress: undefined,
+  pcpPhone: undefined,
+  creditCardNumber: undefined,
+  creditCardExpMonth: undefined,
+  creditCardExpYear: undefined,
+  creditCardZip: undefined,
 }
 
-const CLINICIAN: Actor = { id: 'user-1', roles: ['clinician'], offices: ['Sylmar'] }
+const PROVIDER: Actor = { id: 'user-1', roles: ['provider'], locations: ['sylmar'] }
+const FRONTDESK: Actor = { id: 'user-2', roles: ['frontdesk'], locations: ['sylmar'] }
+const ADMIN: Actor = { id: 'user-3', roles: ['admin'], locations: ['sylmar'] }
+const MEDICAL_DIRECTOR: Actor = { id: 'user-4', roles: ['medical_director'], locations: ['sylmar'] }
 
 function fakeDb(overrides: Partial<Db['patients']> = {}): Db {
   return {
     patients: {
       findById: async () => null,
-      listByLastName: async () => [],
       listRecent: async () => [],
       search: async () => [],
+      suggest: async () => [],
       searchByName: async () => [],
       create: async () => {
         throw new Error('not under test')
       },
-      update: async () => {
+      updateDemographics: async () => {
+        throw new Error('not under test')
+      },
+      updateClinical: async () => {
+        throw new Error('not under test')
+      },
+      updateBilling: async () => {
         throw new Error('not under test')
       },
       setStatus: async () => {
@@ -117,11 +181,46 @@ function fakeDb(overrides: Partial<Db['patients']> = {}): Db {
       },
       update: async () => null,
       setActive: async () => null,
+      delete: async () => null,
+    },
+    intakes: {
+      create: async () => {
+        throw new Error('not under test')
+      },
+      findById: async () => null,
+      findByTokenHash: async () => null,
+      submit: async () => null,
+      listPending: async () => [],
+      accept: async () => null,
+      reject: async () => null,
+    },
+    reviews: {
+      lastRun: async () => null,
+      listEligible: async () => [],
+      recordSample: async () => {
+        throw new Error('not under test')
+      },
+      listQueue: async () => [],
+      findNote: async () => null,
+      signOff: async () => null,
+    },
+    locations: {
+      list: async () => [],
+      listActive: async () => [],
+    },
+    queue: {
+      arrive: async () => {
+        throw new Error('not under test')
+      },
+      room: async () => null,
+      remove: async () => null,
+      startFromRecordWrite: async () => 0,
+      listWaiting: async () => [],
     },
   }
 }
 
-function callerWith(db: Db, actor: Actor | null = CLINICIAN) {
+function callerWith(db: Db, actor: Actor | null = PROVIDER) {
   return appRouter.createCaller(createContext({ actor, db }))
 }
 
@@ -133,11 +232,57 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('patient router', () => {
-  it('returns what the repository returns', async () => {
-    const caller = callerWith(fakeDb({ findById: async () => ADA }))
+describe('patient router: reads by section (ADR 28)', () => {
+  it('byId returns the chart — header and the Medical tab — to every role', async () => {
+    const db = fakeDb({ findById: async () => ADA })
 
-    expect(await caller.patient.byId({ id: ADA.id })).toEqual(ADA)
+    for (const actor of [PROVIDER, FRONTDESK, ADMIN]) {
+      const chart = await callerWith(db, actor).patient.byId({ id: ADA.id })
+      expect(chart).toEqual(ADA_CHART)
+      // The Patient Info and Billing columns never ride along, whoever asks.
+      expect(chart).not.toHaveProperty('phone')
+      expect(chart).not.toHaveProperty('email')
+      expect(chart).not.toHaveProperty('creditCardNumber')
+      expect(chart).not.toHaveProperty('healthyWeight')
+    }
+  })
+
+  it('serves every tab to an admin and to the medical director, each from its own procedure', async () => {
+    const db = fakeDb({ findById: async () => ADA })
+
+    for (const actor of [ADMIN, MEDICAL_DIRECTOR]) {
+      const caller = callerWith(db, actor)
+      expect(await caller.patient.byId({ id: ADA.id })).toEqual(ADA_CHART)
+      expect(await caller.patient.demographics({ id: ADA.id })).toMatchObject({ phone: '9515550000' })
+      expect(await caller.patient.billing({ id: ADA.id })).toEqual({
+        creditCardNumber: '4111111111111111',
+        creditCardExpMonth: '12',
+        creditCardExpYear: '2030',
+        creditCardZip: '90210',
+      })
+    }
+  })
+
+  it('opening a chart is a read: nothing is written, for the medical director as for a provider', async () => {
+    // DIA-42 / DIA-50: a chart view must never move queue state. There is no
+    // queue write to trip yet, so the test pins the property directly — the
+    // read touches `findById` and no mutating repository function at all.
+    const findById = vi.fn(async () => ADA)
+    const writes = {
+      create: vi.fn(),
+      updateDemographics: vi.fn(),
+      updateClinical: vi.fn(),
+      updateBilling: vi.fn(),
+      setStatus: vi.fn(),
+    }
+    const db = fakeDb({ findById, ...writes })
+
+    for (const actor of [MEDICAL_DIRECTOR, PROVIDER]) {
+      await callerWith(db, actor).patient.byId({ id: ADA.id })
+    }
+
+    expect(findById).toHaveBeenCalledTimes(2)
+    for (const write of Object.values(writes)) expect(write).not.toHaveBeenCalled()
   })
 
   it('passes the requested id through', async () => {
@@ -167,20 +312,70 @@ describe('patient router', () => {
     expect(findById).not.toHaveBeenCalled()
   })
 
-  it('lists through the repository', async () => {
-    const caller = callerWith(fakeDb({ listByLastName: async () => [ADA] }))
+  it('serves demographics and billing to the clerical roles only', async () => {
+    const findById = vi.fn(async () => ADA)
+    const db = fakeDb({ findById })
 
-    expect(await caller.patient.list()).toEqual([ADA])
+    expect(await callerWith(db, FRONTDESK).patient.demographics({ id: ADA.id })).toEqual({
+      gender: 'female',
+      language: 'english',
+      office: 'Sylmar',
+      email: 'ada@example.com',
+      phone: '9515550000',
+      phoneFollowUpAllowed: true,
+      addressStreet: '10 Analytical Way',
+      addressCity: 'Pasadena',
+      addressState: 'CA',
+      addressZip: '91101',
+      referralSource: null,
+      referredByPatientId: null,
+      programType: null,
+    })
+    expect(await callerWith(db, ADMIN).patient.billing({ id: ADA.id })).toEqual({
+      creditCardNumber: '4111111111111111',
+      creditCardExpMonth: '12',
+      creditCardExpYear: '2030',
+      creditCardZip: '90210',
+    })
+
+    // A provider is refused before the repository is read: the record never
+    // leaves the database for a caller who may not see it. FORBIDDEN is what
+    // the HTTP layer sends as 403.
+    findById.mockClear()
+    await expect(callerWith(db, PROVIDER).patient.demographics({ id: ADA.id })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
+    await expect(callerWith(db, PROVIDER).patient.billing({ id: ADA.id })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
+    expect(findById).not.toHaveBeenCalled()
   })
 
-  it('lists recent through the repository', async () => {
-    const caller = callerWith(fakeDb({ listRecent: async () => [ADA] }))
+  it('redacts the roster phone for a provider, server-side', async () => {
+    const db = fakeDb({
+      listRecent: async () => [ADA_SUMMARY],
+      search: async () => [ADA_SUMMARY],
+      suggest: async () => [ADA_SUMMARY],
+      searchByName: async () => [ADA_SUMMARY],
+    })
 
-    expect(await caller.patient.recent()).toEqual([ADA])
+    expect(await callerWith(db, FRONTDESK).patient.recent()).toEqual([ADA_SUMMARY])
+    expect(await callerWith(db, PROVIDER).patient.recent()).toEqual([{ ...ADA_SUMMARY, phone: null }])
+    expect(await callerWith(db, PROVIDER).patient.search({ query: 'lo' })).toEqual([{ ...ADA_SUMMARY, phone: null }])
+    expect(await callerWith(db, PROVIDER).patient.suggest({ query: 'lo' })).toEqual([{ ...ADA_SUMMARY, phone: null }])
+    expect(await callerWith(db, PROVIDER).patient.searchByName({ name: 'Love' })).toEqual([
+      { ...ADA_SUMMARY, phone: null },
+    ])
+  })
+
+  it('has no unfiltered list — only the capped recent view and searches', () => {
+    const paths = Object.keys(appRouter._def.procedures)
+    expect(paths).toContain('patient.recent')
+    expect(paths).not.toContain('patient.list')
   })
 
   it('searches with the query interpreted by format', async () => {
-    const search = vi.fn(async () => [ADA])
+    const search = vi.fn(async () => [ADA_SUMMARY])
     const caller = callerWith(fakeDb({ search }))
 
     await caller.patient.search({ query: '(951) 555-0000' })
@@ -188,36 +383,38 @@ describe('patient router', () => {
     expect(search).toHaveBeenCalledWith({ query: { kind: 'phone', phone: '9515550000' } })
   })
 
-  it('rejects an uninterpretable query before reaching the repository', async () => {
-    const search = vi.fn(async () => [])
+  it('refuses an empty or uninterpretable search before reaching the repository', async () => {
+    const search = vi.fn(async () => [ADA_SUMMARY])
     const caller = callerWith(fakeDb({ search }))
 
-    // A partial phone number: digits-only, but not ten of them.
+    await expect(caller.patient.search({ query: '', dateOfBirth: '', serviceDate: '' })).rejects.toThrow()
     await expect(caller.patient.search({ query: '951555' })).rejects.toThrow()
     expect(search).not.toHaveBeenCalled()
   })
+})
 
-  it('searches by name for the referred-by picker', async () => {
-    const searchByName = vi.fn(async () => [ADA])
-    const caller = callerWith(fakeDb({ searchByName }))
-
-    expect(await caller.patient.searchByName({ name: 'Love' })).toEqual([ADA])
-    expect(searchByName).toHaveBeenCalledWith({ name: 'Love' })
-  })
-
-  it('creates through the repository with the normalized input', async () => {
+describe('patient router: writes by section (ADR 28)', () => {
+  it('creates through the repository with the normalized input, for the clerical roles', async () => {
     const create = vi.fn(async () => ADA)
-    const caller = callerWith(fakeDb({ create }))
+    const caller = callerWith(fakeDb({ create }), FRONTDESK)
 
-    await caller.patient.create(SUBMITTED)
-
+    // The chart comes back — a created record's clerical half is not echoed.
+    expect(await caller.patient.create(SUBMITTED)).toEqual(ADA_CHART)
     // The repository sees what the contract emits, not what the wire carried.
     expect(create).toHaveBeenCalledWith(NORMALIZED)
   })
 
+  it('refuses a provider creating a record, before the repository', async () => {
+    const create = vi.fn(async () => ADA)
+    const caller = callerWith(fakeDb({ create }), PROVIDER)
+
+    await expect(caller.patient.create(SUBMITTED)).rejects.toThrow('FORBIDDEN')
+    expect(create).not.toHaveBeenCalled()
+  })
+
   it('rejects invalid input before reaching the repository', async () => {
     const create = vi.fn(async () => ADA)
-    const caller = callerWith(fakeDb({ create }))
+    const caller = callerWith(fakeDb({ create }), FRONTDESK)
 
     await expect(
       caller.patient.create({ ...SUBMITTED, firstName: '', dateOfBirth: '2999-01-01' }),
@@ -225,28 +422,91 @@ describe('patient router', () => {
     expect(create).not.toHaveBeenCalled()
   })
 
-  it('refuses an unauthenticated create without touching the repository', async () => {
-    const create = vi.fn(async () => ADA)
-    const caller = callerWith(fakeDb({ create }), null)
+  it('lets every role save the clinical section, with feet and inches composed', async () => {
+    const updateClinical = vi.fn(async () => ADA)
 
-    await expect(caller.patient.create(SUBMITTED)).rejects.toThrow('UNAUTHORIZED')
-    expect(create).not.toHaveBeenCalled()
+    for (const actor of [PROVIDER, FRONTDESK, ADMIN]) {
+      const caller = callerWith(fakeDb({ updateClinical }), actor)
+      expect(await caller.patient.updateClinical({ ...SUBMITTED, id: ADA.id })).toEqual(ADA_CHART)
+    }
+    expect(updateClinical).toHaveBeenLastCalledWith({
+      id: ADA.id,
+      heightInches: 64,
+      medications: NORMALIZED.medications,
+      conditions: NORMALIZED.conditions,
+      pcpName: undefined,
+      pcpAddress: undefined,
+      pcpPhone: undefined,
+    })
   })
 
-  it('updates through the repository with the normalized input and id', async () => {
-    const update = vi.fn(async () => ADA)
-    const caller = callerWith(fakeDb({ update }))
+  it('carries the history text through a clinical save', async () => {
+    const updateClinical = vi.fn<Db['patients']['updateClinical']>(async () => ADA)
+    const caller = callerWith(fakeDb({ updateClinical }), PROVIDER)
 
-    await caller.patient.update({ ...SUBMITTED, id: ADA.id })
+    await caller.patient.updateClinical({ ...SUBMITTED, id: ADA.id, historyOther: ' HTN since 2019. ' })
 
-    expect(update).toHaveBeenCalledWith({ ...NORMALIZED, id: ADA.id })
+    expect(updateClinical.mock.calls[0]?.[0]).toMatchObject({ historyOther: 'HTN since 2019.' })
+  })
+
+  it('keeps demographics and billing writes clerical', async () => {
+    const updateDemographics = vi.fn(async () => ADA)
+    const updateBilling = vi.fn(async () => ADA)
+    const db = fakeDb({ updateDemographics, updateBilling })
+
+    await expect(
+      callerWith(db, PROVIDER).patient.updateDemographics({ ...SUBMITTED, id: ADA.id }),
+    ).rejects.toThrow('FORBIDDEN')
+    await expect(callerWith(db, PROVIDER).patient.updateBilling({ ...SUBMITTED, id: ADA.id })).rejects.toThrow(
+      'FORBIDDEN',
+    )
+    expect(updateDemographics).not.toHaveBeenCalled()
+    expect(updateBilling).not.toHaveBeenCalled()
+
+    expect(await callerWith(db, FRONTDESK).patient.updateDemographics({ ...SUBMITTED, id: ADA.id })).toEqual(
+      ADA_CHART,
+    )
+    // Only the section's own fields reach the repository.
+    expect(updateDemographics).toHaveBeenCalledWith({
+      id: ADA.id,
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      gender: 'female',
+      dateOfBirth: '1985-12-10',
+      language: undefined,
+      office: 'Sylmar',
+      email: 'ada@example.com',
+      addressStreet: '10 Analytical Way',
+      addressCity: 'Pasadena',
+      addressState: 'CA',
+      addressZip: '91101',
+      phone: '9515550000',
+      phoneFollowUpAllowed: true,
+      referralSource: undefined,
+      referredByPatientId: undefined,
+      programType: undefined,
+    })
+    expect(await callerWith(db, ADMIN).patient.updateBilling({ ...SUBMITTED, id: ADA.id })).toEqual(ADA_CHART)
+  })
+
+  it('surfaces an unknown record as NOT_FOUND on every section update', async () => {
+    const db = fakeDb({
+      updateDemographics: async () => null,
+      updateClinical: async () => null,
+      updateBilling: async () => null,
+    })
+    const caller = callerWith(db, ADMIN)
+
+    await expect(caller.patient.updateClinical({ ...SUBMITTED, id: ADA.id })).rejects.toThrow('NOT_FOUND')
+    await expect(caller.patient.updateDemographics({ ...SUBMITTED, id: ADA.id })).rejects.toThrow('NOT_FOUND')
+    await expect(caller.patient.updateBilling({ ...SUBMITTED, id: ADA.id })).rejects.toThrow('NOT_FOUND')
   })
 
   it('sets status through the repository', async () => {
     const setStatus = vi.fn(async () => ({ ...ADA, status: 'inactive' as const }))
     const caller = callerWith(fakeDb({ setStatus }))
 
-    expect((await caller.patient.setStatus({ id: ADA.id, status: 'inactive' })).status).toBe('inactive')
+    expect(await caller.patient.setStatus({ id: ADA.id, status: 'inactive' })).toEqual(ADA_CHART)
     expect(setStatus).toHaveBeenCalledWith({ id: ADA.id, status: 'inactive' })
   })
 

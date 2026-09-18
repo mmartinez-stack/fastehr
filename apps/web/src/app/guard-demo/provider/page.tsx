@@ -1,13 +1,13 @@
 import { guardPage } from '@/lib/guard-page'
 
 /**
- * Guard demonstration only — proves `requireRole('provider')` end to end.
+ * Guard demonstration only — proves `requireSurface('clinical')` end to end.
  * Not a real screen; the visibility work replaces these.
  */
 export const dynamic = 'force-dynamic'
 
 export default async function ProviderGuardDemoPage() {
-  const gate = await guardPage('provider')
+  const gate = await guardPage('clinical')
 
   if (gate.status === 'forbidden') {
     return (

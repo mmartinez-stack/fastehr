@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "test:integration": "vitest run -c vitest.integration.config.ts"
+    "test:integration": "vitest run -c vitest.integration.config.ts",
+    "sample-notes-for-review": "node scripts/sample-notes-for-review.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

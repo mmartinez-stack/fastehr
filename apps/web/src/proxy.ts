@@ -17,6 +17,8 @@ import { NextResponse, type NextRequest } from 'next/server'
  *   - /api        — the auth mount and tRPC answer JSON, never redirects
  *   - /login      — the destination; matching it would loop
  *   - /_smoke     — probed unauthenticated by scripts/smoke.mjs
+ *   - /intake     — the self-service form a texted link opens; its token is
+ *                   the credential, and the person has no account (ADR 29)
  *   - /_next, dotted paths — build assets and files
  * /change-password stays covered: a temp credential holds a session cookie
  * and passes; an anonymous visitor is sent to /login one hop earlier than the
@@ -33,5 +35,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api|_next|_smoke|login|.*\\..*).*)'],
+  matcher: ['/((?!api|_next|_smoke|intake|login|.*\\..*).*)'],
 }

@@ -1,7 +1,8 @@
 import type React from "react"
-import { OfficeProvider } from "@/components/office-provider"
+import { LocationProvider } from "@/components/location-provider"
 import { RoleProvider } from "@/components/role-provider"
-import { permittedOffices } from "@/trpc/session"
+import { api } from "@/trpc/server"
+import { sessionIdentity } from "@/trpc/session"
 import { TopNav } from "@/components/top-nav"
 import { SmsBanner } from "@/components/sms-banner"
 
@@ -10,13 +11,18 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode
 }) {
-  // The server decides which sites this user may see; the provider only lets
-  // them pick among those. See ADR 22.
-  const offices = await permittedOffices()
+  // The server decides who this is and which role's view renders (ADR 28);
+  // the clinics on offer are rows read through a procedure, so the list
+  // passes auth like everything else (ADR 22, ADR 32). The providers only
+  // carry that down.
+  const identity = await sessionIdentity()
+  // Every clinic, inactive ones too: the filter offers the active ones, and
+  // a record from a closed clinic still shows that clinic's name.
+  const locations = identity === null ? [] : await api.location.list()
 
   return (
-    <RoleProvider>
-      <OfficeProvider offices={offices}>
+    <RoleProvider sessionRole={identity?.role ?? null}>
+      <LocationProvider locations={locations}>
         <div className="flex min-h-screen flex-col bg-background">
           <TopNav />
           <SmsBanner />
@@ -31,7 +37,7 @@ export default async function AppLayout({
             {children}
           </main>
         </div>
-      </OfficeProvider>
+      </LocationProvider>
     </RoleProvider>
   )
 }

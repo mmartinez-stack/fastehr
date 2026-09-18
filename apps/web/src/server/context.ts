@@ -1,5 +1,7 @@
-import type { Office } from '@fastehr/contracts'
+import type { LocationSlug } from '@fastehr/contracts'
 import { db, type Db } from '@fastehr/db'
+import { getAppBaseUrl } from './auth.ts'
+import { smsTransportFromEnv, type SmsTransport } from './sms.ts'
 
 /**
  * Request-scoped context: who is asking, and what they can ask of.
@@ -14,14 +16,16 @@ import { db, type Db } from '@fastehr/db'
 /**
  * The authenticated caller, resolved by `actorFromHeaders` in ./auth.ts.
  *
- * `offices` is the set of sites this actor may read or write. It is part of the
- * *identity*, resolved server-side from the session — never taken from a
- * request, and never from a client-side selection. See ADR 22.
+ * `locations` is the set of clinics this actor may filter by. It is part of
+ * the *identity*, resolved server-side — never taken from a request, and
+ * never from a client-side selection (ADR 22). Since the Aug 21 sync a
+ * location is a filter rather than a boundary, so every actor holds every
+ * clinic (ADR 32); the shape stays so the check has one place to live.
  */
 export interface Actor {
   id: string
   roles: readonly string[]
-  offices: readonly Office[]
+  locations: readonly LocationSlug[]
   /**
    * Set when the account holds an admin-issued temporary credential. The
    * session is real, but `requireSession` refuses to hand it out until the
@@ -39,6 +43,14 @@ export interface Context {
    * data — there is no `ctx.prisma` to reach past it with.
    */
   db: Db
+  /**
+   * Outbound text messages (the intake link). On the context for the same
+   * reason `db` is: a test hands in a fake and asserts what was sent, and
+   * the real transport is chosen from the environment at first use.
+   */
+  sms: SmsTransport
+  /** The origin public links are built on — resolved lazily, like the auth env. */
+  appBaseUrl: () => string
 }
 
 /**
@@ -57,9 +69,13 @@ export interface Context {
 export function createContext({
   actor,
   db: repositories = db,
+  sms = smsTransportFromEnv(),
+  appBaseUrl = getAppBaseUrl,
 }: {
   actor: Actor | null
   db?: Db
+  sms?: SmsTransport
+  appBaseUrl?: () => string
 }): Context {
-  return { actor, db: repositories }
+  return { actor, db: repositories, sms, appBaseUrl }
 }

@@ -146,3 +146,40 @@
   }
 }
 
+/*
+ * Tabs read as three distinct buttons (the Sep 7 sync: the record's tabs were
+ * too small to find and too faint to tell apart). Styled once against the
+ * slot attributes, like the table stripe, so `shadcn add` can keep
+ * overwriting `components/ui/tabs.tsx` (ADR 20). Unlayered on purpose: the
+ * component's own utilities (`h-8`, `text-sm`, `data-active:bg-background`)
+ * sit in the utilities layer and would beat a components-layer rule.
+ */
+[data-slot='tabs-list'] {
+  height: auto;
+  gap: 0.5rem;
+  padding: 0;
+  background-color: transparent;
+}
+[data-slot='tabs-list'] > [data-slot='tabs-trigger'] {
+  min-height: 2.5rem;
+  padding: 0.375rem 1.125rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: color-mix(in oklab, var(--foreground) 80%, transparent);
+  background-color: var(--card);
+  border-color: var(--border);
+  box-shadow: none;
+}
+[data-slot='tabs-list'] > [data-slot='tabs-trigger']:hover {
+  color: var(--foreground);
+  background-color: var(--muted);
+}
+[data-slot='tabs-list'] > [data-slot='tabs-trigger'][data-active] {
+  color: var(--primary-foreground);
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+[data-slot='tabs-list'] > [data-slot='tabs-trigger'][data-active]:hover {
+  background-color: color-mix(in oklab, var(--primary) 90%, var(--foreground));
+}
+
