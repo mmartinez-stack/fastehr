@@ -508,3 +508,77 @@ model IntakeRequest {
   @@index([status, locationId])
   @@map("intake_requests")
 }
+
+// ---------------------------------------------------------------------------
+// PHI audit trail (ADR 10, ADR 35)
+// ---------------------------------------------------------------------------
+
+enum AuditTransport {
+  trpc
+  rest
+  cli
+
+  @@map("audit_transport")
+}
+
+enum AuditActorKind {
+  staff
+  api_client
+  anonymous
+
+  @@map("audit_actor_kind")
+}
+
+enum AuditOutcome {
+  allowed
+  denied
+  error
+
+  @@map("audit_outcome")
+}
+
+/**
+ * One PHI access attempt: allowed, refused, or failed. Append-only, and the
+ * migration adds triggers that refuse UPDATE, DELETE, and TRUNCATE.
+ *
+ * No relations on purpose. A trail has to outlive the rows it names: a
+ * staff account can be deleted, a partner key revoked, and the record of
+ * what they reached must stay exactly as it was written.
+ *
+ * There is no column for the request input, and there must not be (ADR 10).
+ * `patientId` is the subject of the access, set by the server from a value
+ * it resolved itself, never copied from a request body. `routeTemplate` is
+ * the OpenAPI template, never the concrete URL.
+ */
+model PhiAuditEvent {
+  id             String         @id @default(uuid())
+  occurredAt     DateTime       @default(now())
+  transport      AuditTransport
+  actorKind      AuditActorKind
+  /// Staff user id or api client id; null when anonymous.
+  actorId        String?
+  /// The partner key's public id, never its hash.
+  apiKeyId       String?
+  verificationId String?
+  /// tRPC procedure path (`patient.byId`) or partner operation id (`patients.verify`).
+  action         String
+  /// `query` | `mutation` | `subscription`, or the HTTP verb.
+  method         String?
+  routeTemplate  String?
+  outcome        AuditOutcome
+  code           String?
+  httpStatus     Int?
+  patientId      String?
+  resourceKind   String?
+  resourceId     String?
+  requestId      String?
+  ipAddress      String?
+  userAgent      String?
+  durationMs     Int
+
+  @@index([occurredAt])
+  @@index([actorId, occurredAt])
+  @@index([patientId, occurredAt])
+  @@index([outcome, occurredAt])
+  @@map("phi_audit_events")
+}

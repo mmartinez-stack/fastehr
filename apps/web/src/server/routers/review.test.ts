@@ -2,6 +2,7 @@ import type { Db } from '@fastehr/db'
 import type { ReviewNote, ReviewQueueItem, ReviewSampleRun } from '@fastehr/contracts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContext, type Actor } from '../context.ts'
+import { recordingAuditRepository } from '../test-support/fake-db.ts'
 import { runReviewSample } from '../review-sampling.ts'
 import { appRouter } from './root.ts'
 
@@ -115,6 +116,7 @@ function fakeDb(overrides: Partial<Db['reviews']> = {}): Db {
       startFromRecordWrite: async () => 0,
       listWaiting: async () => [],
     },
+    audit: recordingAuditRepository(),
   }
 }
 

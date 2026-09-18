@@ -1,9 +1,10 @@
 import type { LocationFilter, LocationSlug } from '@fastehr/contracts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContext, type Actor } from './context.ts'
+import { fakeDb } from './test-support/fake-db.ts'
 import { locationFilteredProcedure } from './procedures.ts'
 import { router } from './trpc.ts'
-import type { AuditEvent } from './audit-log.ts'
+import type { PhiAuditEvent } from '@fastehr/contracts'
 
 /**
  * A request naming a clinic the actor does not hold must be refused, and the
@@ -22,17 +23,17 @@ function actor(locations: readonly LocationSlug[]): Actor {
 }
 
 function callFor(requested: LocationFilter, permitted: readonly LocationSlug[]) {
-  return probeRouter.createCaller(createContext({ actor: actor(permitted) })).queue({
+  return probeRouter.createCaller(createContext({ actor: actor(permitted), db: fakeDb() })).queue({
     location: requested,
   })
 }
 
-const recorded: AuditEvent[] = []
+const recorded: PhiAuditEvent[] = []
 
 beforeEach(() => {
   recorded.length = 0
   vi.spyOn(console, 'info').mockImplementation((...args: unknown[]) => {
-    if (args[0] === '[phi-audit]') recorded.push(JSON.parse(String(args[1])) as AuditEvent)
+    if (args[0] === '[phi-audit]') recorded.push(JSON.parse(String(args[1])) as PhiAuditEvent)
   })
 })
 
@@ -67,7 +68,7 @@ describe('location filtering', () => {
   })
 
   it('rejects a location outside the contract before authorization runs', async () => {
-    const caller = probeRouter.createCaller(createContext({ actor: actor(['sylmar']) }))
+    const caller = probeRouter.createCaller(createContext({ actor: actor(['sylmar']), db: fakeDb() }))
 
     // @ts-expect-error — the contract is a union of slugs; this is the runtime guard.
     await expect(caller.queue({ location: 'springfield' })).rejects.toThrow()

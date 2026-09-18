@@ -1,6 +1,7 @@
 import { ROLE_ACCESS, ROLE_SURFACES, STAFF_ROLES, type RoleSurface } from '@fastehr/contracts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContext } from './context.ts'
+import { fakeDb } from './test-support/fake-db.ts'
 import {
   adminProcedure,
   clericalProcedure,
@@ -33,7 +34,7 @@ const probe = router({
 const ENFORCED = ['clerical', 'staff', 'review'] as const satisfies readonly RoleSurface[]
 
 function call(procedure: keyof typeof probe._def.procedures, roles: readonly string[]) {
-  const caller = probe.createCaller(createContext({ actor: { id: 'probe', roles, locations: ['sylmar'] } }))
+  const caller = probe.createCaller(createContext({ actor: { id: 'probe', roles, locations: ['sylmar'] }, db: fakeDb() }))
   return caller[procedure]()
 }
 

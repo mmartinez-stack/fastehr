@@ -191,3 +191,17 @@ export {
   isLegacyCredential,
   type LegacyCredential,
 } from './legacy-credential.ts'
+export {
+  AUDIT_TRANSPORTS,
+  auditTransportSchema,
+  AUDIT_ACTOR_KINDS,
+  auditActorKindSchema,
+  AUDIT_OUTCOMES,
+  auditOutcomeSchema,
+  AUDIT_USER_AGENT_MAX_LENGTH,
+  phiAuditEventSchema,
+  type AuditTransport,
+  type AuditActorKind,
+  type AuditOutcome,
+  type PhiAuditEvent,
+} from './audit.ts'

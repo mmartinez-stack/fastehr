@@ -2,6 +2,7 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import superjson from 'superjson'
 import { describe, expect, it } from 'vitest'
 import { createContext } from './context.ts'
+import { fakeDb } from './test-support/fake-db.ts'
 import { publicProcedure } from './procedures.ts'
 import { router } from './trpc.ts'
 
@@ -26,7 +27,7 @@ async function callOverHttp(): Promise<{ result: { data: unknown } }> {
     endpoint: '/api/trpc',
     req: new Request('http://test.invalid/api/trpc/appointment'),
     router: probeRouter,
-    createContext: () => createContext({ actor: null }),
+    createContext: () => createContext({ actor: null, db: fakeDb() }),
   })
   return response.json() as Promise<{ result: { data: unknown } }>
 }

@@ -1,4 +1,5 @@
 import { getPrismaClient, type PrismaClient } from './client.ts'
+import { createAuditRepository, type AuditRepository } from './repositories/audit.ts'
 import { createIntakeRepository, type IntakeRepository } from './repositories/intake.ts'
 import { createLocationRepository, type LocationRepository } from './repositories/location.ts'
 import { createPatientRepository, type PatientRepository } from './repositories/patient.ts'
@@ -32,6 +33,8 @@ export interface Db {
   reviews: ReviewRepository
   locations: LocationRepository
   queue: QueueRepository
+  /** The PHI audit trail (ADR 35): append-only, `record` is its only method. */
+  audit: AuditRepository
 }
 
 /**
@@ -54,6 +57,7 @@ export function createDb(getClient: () => PrismaClient = getPrismaClient): Db {
     reviews: createReviewRepository(getClient),
     locations: createLocationRepository(getClient),
     queue: createQueueRepository(getClient),
+    audit: createAuditRepository(getClient),
   }
 }
 
@@ -63,6 +67,7 @@ export const db: Db = createDb()
 export { createAuthAdapter } from './auth-adapter.ts'
 export { StaffUserEmailTakenError, StaffUserReferencedError }
 export type {
+  AuditRepository,
   IntakeRepository,
   LocationRepository,
   PatientRepository,

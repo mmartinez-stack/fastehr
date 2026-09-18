@@ -117,6 +117,7 @@ triggers a refused call.
 | Record sections and tabs | ADR 28, `apps/web/src/features/patients/patient-tabs.ts` |
 | Session + surface page guards | `apps/web/src/server/guards.ts`, `apps/web/src/lib/guard-page.ts` |
 | Audit chain ordering | ADR 10 |
+| The audit trail: event shape, the append-only table, the two sinks | ADR 35, `packages/contracts/src/audit.ts`, `apps/web/src/server/audit-log.ts` |
 | Office scoping | ADR 22 |
 | Mockup surfaces | `apps/web/src/components/role-provider.tsx` |
 | Legacy role migration | `packages/db/scripts/migrate-users.ts`, docs/legacy-data-mapping.md § users |

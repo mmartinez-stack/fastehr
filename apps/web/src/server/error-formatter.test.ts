@@ -1,6 +1,7 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import { describe, expect, it } from 'vitest'
 import { createContext, type Actor } from './context.ts'
+import { fakeDb } from './test-support/fake-db.ts'
 import { appRouter } from './routers/root.ts'
 
 /**
@@ -23,7 +24,7 @@ async function callWithInput(input: unknown, actor: Actor | null = CLINICIAN) {
     endpoint: '/api/trpc',
     req: new Request(`http://test.invalid/api/trpc/patientDisplayName?input=${encoded}`),
     router: appRouter,
-    createContext: () => createContext({ actor }),
+    createContext: () => createContext({ actor, db: fakeDb() }),
   })
   return { status: response.status, body: await response.text() }
 }

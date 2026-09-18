@@ -81,7 +81,7 @@ src/server/
   procedures.ts   public / protected procedure composition
   middleware/     auth.ts (authn + RBAC), audit.ts (PHI trail)
   routers/        root.ts, plus one file per domain as they arrive
-  audit-log.ts    the audit event and its sink
+  audit-log.ts    the audit sink: stdout plus the phi_audit_events table (ADR 35)
 ```
 
 `trpc.ts` holds initialisation only, and `procedures.ts` composes the chain,

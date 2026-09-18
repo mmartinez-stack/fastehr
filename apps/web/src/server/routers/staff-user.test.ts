@@ -2,6 +2,7 @@ import type { Db } from '@fastehr/db'
 import { StaffUserEmailTakenError, StaffUserReferencedError } from '@fastehr/db'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContext, type Actor } from '../context.ts'
+import { recordingAuditRepository } from '../test-support/fake-db.ts'
 import { appRouter } from './root.ts'
 
 /**
@@ -89,6 +90,7 @@ function fakeDb(overrides: Partial<Db['staffUsers']> = {}): Db {
       startFromRecordWrite: async () => 0,
       listWaiting: async () => [],
     },
+    audit: recordingAuditRepository(),
   }
 }
 

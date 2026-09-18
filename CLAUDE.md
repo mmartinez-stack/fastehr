@@ -127,6 +127,9 @@ Everything outside imports from `src/server/index.ts`, never a file inside it.
 - Chain order is **audit → authenticate → authorize** (ADR 10). Audit is
   outermost on purpose: a refused probe is exactly the event an investigation
   goes looking for, and an innermost audit records only the legitimate reads.
+  The sink is `ctx.audit` (ADR 35): the `[phi-audit]` stdout line plus a row
+  in the append-only `phi_audit_events` table, whose event shape
+  (`phiAuditEventSchema` in contracts) has no field for the request input.
 - `officeScopedProcedure` checks the requested office against `ctx.actor.offices`.
   The office belongs to the actor, resolved server-side — never taken from a
   request or a client-side selection (ADR 22).
