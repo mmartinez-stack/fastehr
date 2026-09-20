@@ -43,6 +43,7 @@ first and produced a bug that type-checked.
 | [31](031-medical-director-role.md) | The medical director is a role with the administrator's access, and the queue lives on the Queues page | `packages/contracts` · `packages/db` · `apps/web/src/server` · `apps/web/src/components` · `apps/web/src/features/review` |
 | [32](032-locations-and-visit-modality.md) | Locations: two active clinics as rows, remote care as a visit modality | `packages/contracts` · `packages/db` |
 | [33](033-wait-queue-as-visit-status.md) | The wait-time queue is a status on the visit, and the place in line is derived | `packages/contracts` · `packages/core` · `packages/db` |
+| [34](034-development-environment-cli-ghcr-ssm.md) | The development environment: CLI-built AWS resources, images in GHCR, deploys through SSM | `deploy/` · `.github/workflows/deploy-development.yml` · `docs/runbooks` |
 
 ## Adding one
 

@@ -1,0 +1,71 @@
+# The on-instance runtime for one environment. Unpacked into /opt/fastehr by
+# the deploy workflow's Run Command; deploy.sh writes the .env this file
+# interpolates:
+#
+#   WEB_IMAGE    the GHCR image and tag being rolled
+#   AWS_REGION   for the log driver
+#   LOG_GROUP    the CloudWatch log group the web stack created
+#
+# This is a deployment artifact for one server, the same category as the
+# Dockerfile itself. Local development is still `pnpm dev` (ADR 23); nobody
+# is asked to run this file to work on the repository.
+name: fastehr
+
+services:
+  web:
+    image: ${WEB_IMAGE:?required}
+    restart: unless-stopped
+    # DATABASE_URL, BETTER_AUTH_*, optional TWILIO_*; root-owned, 0600,
+    # refreshed from Parameter Store by deploy.sh (ADR 24).
+    env_file: /etc/fastehr/app.env
+    volumes:
+      # sslmode=verify-full in DATABASE_URL points at this file.
+      - /etc/fastehr/rds-ca.pem:/etc/fastehr/rds-ca.pem:ro
+    expose:
+      - "3000"
+    # stdout is the PHI audit trail until the audit table exists
+    # (apps/web/src/server/audit-log.ts), so it goes somewhere durable rather
+    # than into a json-file on the root volume that log rotation would drop.
+    # The driver authenticates with the instance role.
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION:?required}
+        awslogs-group: ${LOG_GROUP:?required}
+        awslogs-stream: web
+    healthcheck:
+      # /api/trpc/health is the cheapest procedure and is what a load balancer
+      # would probe if one is added (ADR 16 keeps /health free for that).
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/trpc/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      APP_HOST: ${APP_HOST:?required}
+    depends_on:
+      - web
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION:?required}
+        awslogs-group: ${LOG_GROUP:?required}
+        awslogs-stream: caddy
+
+volumes:
+  # Certificates and ACME account. Losing it means re-issuing, which Let's
+  # Encrypt rate-limits; keep it across `compose down`.
+  caddy_data:
+  caddy_config:
