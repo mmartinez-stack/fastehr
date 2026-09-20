@@ -45,3 +45,7 @@ README.md
 packages/db/test/
 coverage/
 **/coverage/
+
+# Deployment artifacts for the instance and the AWS stacks; nothing in the
+# image reads them.
+deploy/

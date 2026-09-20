@@ -104,3 +104,6 @@ Thumbs.db
 *.ndjson.report.json
 
 packages/legacy/*
+
+# Per-developer AWS profile activation (direnv); never committed.
+.envrc

@@ -227,7 +227,11 @@ the Pending intakes tab follow; the wait-time queue is a status on the visit
 "patients before you" count; imported history is `closed` or `in_progress`),
 with `/queues` still on the mockup until the next slice; patient `status` stays
 in the schema but is no longer exposed anywhere (DIA-50). Auth is real (Better Auth; migrated legacy credentials
-verify per ADR 26). `noUncheckedIndexedAccess` is on everywhere with no
+verify per ADR 26). The development environment is the policy
+documents and instance files under `deploy/` (ADR 34: AWS resources created
+by the CLI calls in `docs/runbooks/deploy-development-ec2.md`, images in
+GHCR, deploys through SSM by `.github/workflows/deploy-development.yml`);
+the environment exists in the client's account since 2026-09-18 (us-west-1, `dev.fastehr.diagnosticpartners.net`). `noUncheckedIndexedAccess` is on everywhere with no
 exceptions — the mockup's fixture lookups go through the checked `at()` helper
 rather than `!` (ADR 21).
 

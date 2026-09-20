@@ -317,6 +317,16 @@ in them. Migrations do not run on start; `prisma migrate deploy` is its own
 deployment step. Details and the traps in
 [ADR 23](docs/adr/023-docker-image.md).
 
+## Deployment
+
+The development environment is one EC2 instance behind Caddy, an RDS
+PostgreSQL instance, and a Route53 name, created by the ordered CLI calls in
+`docs/runbooks/deploy-development-ec2.md` from the policy documents and
+instance files under `deploy/`. Every push to `development` is verified,
+built, pushed to GHCR, and rolled onto the instance through SSM by
+`.github/workflows/deploy-development.yml`. The map is `deploy/README.md`;
+the reasoning is [ADR 34](docs/adr/034-development-environment-cli-ghcr-ssm.md).
+
 ## Adding a new package
 
 Only add one if it earns the boundary — see [ADR 8](docs/adr/008-five-packages.md).

@@ -1,16 +1,19 @@
 name: CI
 
-# Runs on pull requests and on pushes to the long-lived branches. Nothing here
-# needs a database: `prisma generate` deliberately does not require DATABASE_URL
-# (see packages/db/prisma.config.ts), and no test touches a live connection yet.
-# The day one does, it gets a Postgres service container — not a shared instance.
+# Runs on pull requests and on pushes to main. Pushes to development are
+# verified through deploy-development.yml, which calls this workflow before it
+# builds anything, so there is one definition of "verified" and one run per
+# push. Nothing here needs a database beyond the integration job's own
+# service container: `prisma generate` deliberately does not require
+# DATABASE_URL (see packages/db/prisma.config.ts).
 #
 # `pull_request` is deliberately unfiltered: every PR is verified regardless of
 # the branch it targets.
 on:
   push:
-    branches: [main, development]
+    branches: [main]
   pull_request:
+  workflow_call:
 
 # A superseded run on the same ref tells you nothing.
 concurrency:
