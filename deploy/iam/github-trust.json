@@ -10,7 +10,7 @@
       "Condition": {
         "StringEquals": {
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-          "token.actions.githubusercontent.com:sub": "repo:${GITHUB_REPOSITORY}:environment:${GITHUB_ENVIRONMENT}"
+          "token.actions.githubusercontent.com:sub": "${GITHUB_SUB_PREFIX}:environment:${GITHUB_ENVIRONMENT}"
         }
       }
     }

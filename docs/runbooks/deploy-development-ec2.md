@@ -22,8 +22,8 @@ root. `envsubst` (package `gettext`) renders the placeholders in `deploy/`.
 - An IAM identity in the client's account with the permissions in
   `deploy/operator-policy.json` (EC2, RDS, Route53, CloudWatch Logs, SSM, and
   IAM limited to roles named `fastehr-*`), or `AdministratorAccess`.
-- AWS CLI v2, `envsubst`, and `dig` locally. Docker is not needed: images are
-  built by GitHub Actions.
+- AWS CLI v2, `envsubst`, `dig`, and the GitHub CLI (`gh`, signed in) locally.
+  Docker is not needed: images are built by GitHub Actions.
 - A domain whose DNS is a public hosted zone in Route53 in this account.
 - A GitHub token that can read packages, for the instance to pull from GHCR:
   a classic personal access token with only the `read:packages` scope, from a
@@ -177,7 +177,14 @@ aws iam list-open-id-connect-providers --query 'OpenIDConnectProviderList[].Arn'
   || aws iam create-open-id-connect-provider --url https://token.actions.githubusercontent.com \
        --client-id-list sts.amazonaws.com
 
-envsubst '$ACCOUNT_ID $GITHUB_REPOSITORY $GITHUB_ENVIRONMENT' < deploy/iam/github-trust.json > "$WORK/github-trust.json"
+# The token's subject. With GitHub's "immutable subject" setting (the default
+# for new repositories) it carries the owner and repository ids, so a renamed
+# or re-created repository cannot assume the role. The API gives the exact
+# prefix either way.
+export GITHUB_SUB_PREFIX=$(gh api "repos/$GITHUB_REPOSITORY/actions/oidc/customization/sub" --jq .sub_claim_prefix)
+echo "$GITHUB_SUB_PREFIX"     # repo:<owner>@<id>/<name>@<id>, or repo:<owner>/<name>
+
+envsubst '$ACCOUNT_ID $GITHUB_SUB_PREFIX $GITHUB_ENVIRONMENT' < deploy/iam/github-trust.json > "$WORK/github-trust.json"
 envsubst '$ACCOUNT_ID $AWS_REGION $FASTEHR_ENV' < deploy/iam/github-policy.json > "$WORK/github-policy.json"
 
 aws iam create-role --role-name "fastehr-$FASTEHR_ENV-github-deploy" \
@@ -297,15 +304,26 @@ psql "postgresql://fastehr:$DB_PASSWORD@localhost:15432/fastehr?sslmode=require"
   "INSERT INTO users (id, name, email, role, \"updatedAt\")
    VALUES (gen_random_uuid(), 'Your Name', 'you@diagnosticpartners.com', 'admin', now());"
 
+# Through the tunnel the host is localhost, so the certificate's name cannot
+# be verified; uselibpqcompat makes the Node driver encrypt without verifying,
+# which is what psql's sslmode=require above already does.
 cd packages/db
-DATABASE_URL="postgresql://fastehr:$DB_PASSWORD@localhost:15432/fastehr?sslmode=require" \
+DATABASE_URL="postgresql://fastehr:$DB_PASSWORD@localhost:15432/fastehr?uselibpqcompat=true&sslmode=require" \
   pnpm issue-temp-password -- --email you@diagnosticpartners.com
 ```
+
+The temporary password prints once, to your terminal. `aws ssm start-session`
+needs the Session Manager plugin installed locally (AWS documents the
+download per platform; on a distribution without a package, extracting the
+`.deb` and putting `session-manager-plugin` on `PATH` is enough).
 
 Sign in at `https://$APP_HOST/login`; the app forces `/change-password`
 first. Further users come from the Users screen. Staff and patient data
 arrive through the migration runbooks (`user-migration.md`,
 `docs/legacy-data-mapping.md`) over this same port-forward.
+
+Then prove the API end to end with `scripts/api-smoke.sh`
+(`docs/runbooks/test-development-api.md` explains every call).
 
 ## Operating it
 

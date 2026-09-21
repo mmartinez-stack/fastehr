@@ -2,6 +2,7 @@ import { describeValidationFailure } from '@fastehr/contracts'
 import { initTRPC } from '@trpc/server'
 import superjson from 'superjson'
 import type { Context } from './context.ts'
+import type { ProcedureMeta } from './procedure-meta.ts'
 
 /**
  * The tRPC instance: transformer, error shape, and the primitives everything
@@ -35,7 +36,7 @@ import type { Context } from './context.ts'
  * A caller built with `createCaller` — an Electron main process, a test —
  * never serialises at all and is unaffected.
  */
-const t = initTRPC.context<Context>().create({
+const t = initTRPC.context<Context>().meta<ProcedureMeta>().create({
   transformer: superjson,
 
   /**
@@ -77,4 +78,4 @@ const t = initTRPC.context<Context>().create({
 
 export { t }
 export const router = t.router
-export const publicProcedure = t.procedure
+export const publicProcedure = t.procedure.meta({ access: 'public' })
