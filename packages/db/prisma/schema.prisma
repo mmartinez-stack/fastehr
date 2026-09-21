@@ -241,6 +241,8 @@ model PatientCondition {
   treatedBy   String?
   medicated   Boolean @default(false)
   medications String?
+  /// The person's own description, from the intake form (the Sep 14 review).
+  details     String?
 
   @@unique([patientId, condition])
   @@map("patient_conditions")
@@ -469,8 +471,9 @@ enum IntakeStatus {
  */
 model IntakeRequest {
   id        String           @id @default(uuid())
-  firstName String
-  lastName  String
+  /// What the front desk typed when sending; null when only the phone was given (the Sep 14 decision).
+  firstName String?
+  lastName  String?
   phone     String
   language  PatientLanguage?
   tokenHash String           @unique

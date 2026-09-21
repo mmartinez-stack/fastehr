@@ -28,8 +28,9 @@ regex. That is what this design replaces.
   working link. The token exists in the text message and in the URL, nowhere
   else — the send procedure returns the request without it.
 - **Single-use and expiring.** A request is `sent` until it is `submitted`,
-  and a link works only in `sent` before `expiresAt` (48 hours,
-  `INTAKE_LINK_TTL_HOURS`; a week originally, see the amendment). The state
+  and a link works only in `sent` before `expiresAt` (one hour,
+  `INTAKE_LINK_TTL_HOURS`; a week originally, then 48 hours, see the
+  amendments). The state
   changes are conditional writes
   (`updateMany … where status = 'sent'`), so a double submit or two reviewers
   accepting at once resolve to one winner in the database, not in a check that
@@ -77,6 +78,21 @@ from code).
 - **The link lives 48 hours, not seven days.** The form is meant to be
   filled before the visit the link was sent for, and a shorter window is a
   shorter time a leaked link is worth anything. The message says "48 hours".
+  **Amended 2026-09-14: one hour.** The Sep 14 sync asked for a shorter
+  window still, for the same reason; the person fills the form when the text
+  arrives, and the front desk sends a fresh link when one lapses. The
+  message says "1 hour".
+- **Amended 2026-09-14: a phone is enough to send.** The front desk had to
+  type a first and last name to send a link, and the person retypes both on
+  the form anyway (the legacy side had already dropped the requirement).
+  `firstName` and `lastName` are optional on `intake.send`, nullable on the
+  request, and the form starts blank where nothing was typed; the queue
+  shows `-` until the submission names the person.
+- **Amended 2026-09-14: a "Yes" needs a description.** Every condition the
+  person marks carries `details`, their own words, required on the intake
+  form (a `custom` issue on `conditions.N.details`) and optional on the
+  staff form, where the clinician's note holds the detail. Conditions not on
+  the list go into the medical history text under "Other conditions".
 - **The link is handed back when it could not be sent.** `send` answers
   `{ request, link }`, and `link` is non-null only when the transport
   *logged* the message rather than delivered it (the console transport, in

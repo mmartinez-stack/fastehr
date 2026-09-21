@@ -162,8 +162,8 @@ function PendingIntakes() {
           <TableBody>
             {rows.map((request) => (
               <TableRow key={request.id}>
-                <TableCell className="font-medium">{request.firstName}</TableCell>
-                <TableCell>{request.lastName}</TableCell>
+                <TableCell className="font-medium">{request.firstName ?? "-"}</TableCell>
+                <TableCell>{request.lastName ?? "-"}</TableCell>
                 <TableCell className="text-muted-foreground">{formatPhone(request.phone)}</TableCell>
                 <TableCell>
                   {request.language === null ? "-" : request.language === "english" ? "English" : "Spanish"}

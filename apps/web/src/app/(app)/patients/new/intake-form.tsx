@@ -48,8 +48,8 @@ import { trpc } from "@/trpc/client"
  */
 
 const COPY: FormCopy = {
-  firstName: { too_small: "Enter the person's first name.", too_big: "First name can be at most 50 characters." },
-  lastName: { too_small: "Enter the person's last name.", too_big: "Last name can be at most 100 characters." },
+  firstName: { too_big: "First name can be at most 50 characters." },
+  lastName: { too_big: "Last name can be at most 100 characters." },
   phone: { invalid_format: "Enter a phone number with ten digits." },
   language: { invalid_value: "Select a language from the list." },
 }
@@ -78,11 +78,12 @@ export function IntakeForm() {
         try {
           const { request, link } = await send.mutateAsync(value)
           setSent({ to: request.phone, link })
-          toast.success(
-            link === null
-              ? `Intake link sent to ${request.firstName} ${request.lastName}`
-              : `Intake link created for ${request.firstName} ${request.lastName}`,
-          )
+          // A name when one was typed; the phone otherwise (the Sep 14 decision).
+          const who =
+            request.firstName === null && request.lastName === null
+              ? formatPhone(request.phone)
+              : `${request.firstName ?? ""} ${request.lastName ?? ""}`.trim()
+          toast.success(link === null ? `Intake link sent to ${who}` : `Intake link created for ${who}`)
           formApi.reset()
           return undefined
         } catch (error) {
@@ -157,8 +158,9 @@ export function IntakeForm() {
             </form.Subscribe>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 3xl:grid-cols-8">
-              {textField("firstName", "First name", { placeholder: "First name", required: true })}
-              {textField("lastName", "Last name", { placeholder: "Last name", required: true })}
+              {/* Optional (the Sep 14 decision): the person types their own name on the form. */}
+              {textField("firstName", "First name", { placeholder: "First name" })}
+              {textField("lastName", "Last name", { placeholder: "Last name" })}
               {textField("phone", "Phone", {
                 type: "tel",
                 placeholder: "(951) 555-0000",

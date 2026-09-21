@@ -40,7 +40,9 @@ const ADA: Patient = {
   programType: null,
   heightInches: 64.5,
   medications: [{ name: 'Metformin', dose: '500 mg', frequency: 'twice daily' }],
-  conditions: [{ condition: 'diabetes', onset: '2019', treatedBy: null, medicated: true, medications: 'Metformin' }],
+  conditions: [
+    { condition: 'diabetes', onset: '2019', treatedBy: null, medicated: true, medications: 'Metformin', details: null },
+  ],
   historyOther: 'None pertinent.',
   pcpName: 'Dr. Jones',
   pcpAddress: null,
@@ -102,8 +104,8 @@ const SUBMITTED = {
   heightInchesPart: '4',
   medications: [{ name: 'Metformin', dose: '', frequency: '' }],
   conditions: [
-    { condition: 'diabetes' as const, present: true, onset: '', treatedBy: '', medicated: false, medications: '' },
-    { condition: 'thyroid' as const, present: false, onset: '', treatedBy: '', medicated: false, medications: '' },
+    { condition: 'diabetes' as const, present: true, onset: '', treatedBy: '', medicated: false, medications: '', details: '' },
+    { condition: 'thyroid' as const, present: false, onset: '', treatedBy: '', medicated: false, medications: '', details: '' },
   ],
   pcpName: '',
   pcpAddress: '',
@@ -133,7 +135,9 @@ const NORMALIZED = {
   programType: undefined,
   heightInches: 64,
   medications: [{ name: 'Metformin', dose: undefined, frequency: undefined }],
-  conditions: [{ condition: 'diabetes', onset: undefined, treatedBy: undefined, medicated: false, medications: undefined }],
+  conditions: [
+    { condition: 'diabetes', onset: undefined, treatedBy: undefined, medicated: false, medications: undefined, details: undefined },
+  ],
   pcpName: undefined,
   pcpAddress: undefined,
   pcpPhone: undefined,
