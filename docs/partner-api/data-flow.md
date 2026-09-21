@@ -1,7 +1,7 @@
 # Partner API data flow
 
 What protected health information crosses the partner API, in which
-direction, and what the trail keeps (ADR 36, ADR 37). One row per
+direction, and what the trail keeps (ADR 37, ADR 38). One row per
 operation; extend it in the same commit as any new operation.
 
 | Operation | PHI in (from the vendor) | PHI out (to the vendor) | Stored by us | Lawful basis |

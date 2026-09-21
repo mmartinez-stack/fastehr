@@ -1,6 +1,6 @@
 # FastEHR Partner API
 
-Server-to-server access for an approved partner (ADR 37). The reference is
+Server-to-server access for an approved partner (ADR 38). The reference is
 the OpenAPI document in this directory, `openapi.json`, also served at
 `/api/v1/openapi.json` and rendered at `/api/v1/docs` on any environment
 where the API is enabled. Regenerate it after any contract change:
@@ -12,10 +12,10 @@ pnpm --filter @fastehr/contracts openapi:write
 ## Calling the API
 
 - Base URL: `https://<host>/api/v1`. TLS only, terminated at the clinic's proxy, with HSTS.
-- Authentication: `Authorization: Bearer fehr_<env>_<keyId>_<secret>`. The key
-  is issued by the clinic, shown once, and never sent by email. Keys expire
-  (ninety days by default); rotation hands you a new key while the old one
-  keeps working for 24 hours.
+- Authentication: `Authorization: Bearer <key>`. A key starts with
+  `fehr_live_` or `fehr_dev_`, is issued by the clinic, shown once, and never
+  sent by email. Keys expire (ninety days by default); rotation hands you a
+  new key while the old one keeps working for 24 hours.
 - Scopes: each operation names the scope the key must carry (`x-scope` in
   the document). Today: `patients:lookup`, `patients:verify`, `queue:read`.
 - Bodies are JSON (`Content-Type: application/json`), at most 16 KiB.

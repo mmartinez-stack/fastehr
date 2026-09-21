@@ -1,7 +1,7 @@
-# ADR 37 — The partner API: scoped keys, a verification token, one chain, one registry
+# ADR 38 — The partner API: scoped keys, a verification token, one chain, one registry
 
 **Status:** accepted 2026-09-17 (the vendor's Patient Lookup and Patient Verification, plus the queue count)  
-**Applies to:** `packages/contracts/src/partner-api/` · `packages/contracts/src/env.ts` · `packages/db/prisma/migrations/20260917130000_partner_api_clients` · `packages/db/src/repositories/api-client.ts` · `packages/db/src/repositories/verification.ts` · `packages/db/scripts/partner-api-keys.ts` · `apps/web/src/server/partner/` · `apps/web/src/app/api/v1/[[...path]]/route.ts` · `apps/web/next.config.mjs` · `docs/partner-api/`
+**Applies to:** `packages/contracts/src/partner-api/` · `packages/contracts/src/env.ts` · `packages/db/prisma/migrations/20260917130000_integration_keys` · `packages/db/src/repositories/integration.ts` · `packages/db/src/repositories/verification.ts` · `apps/web/scripts/partner-api-keys.ts` · `apps/web/src/server/partner/` · `apps/web/src/app/api/v1/[[...path]]/route.ts` · `apps/web/next.config.mjs` · `docs/partner-api/`
 
 An external vendor (an AI phone assistant, a business associate under HIPAA)
 needs to reach patient records from its own servers: find the caller's
@@ -21,21 +21,23 @@ identity, the wrong permissions, and the wrong audit line.
    fences, which key on `src/server/**`. It never resolves a staff session,
    and a partner key means nothing on `/api/trpc`. Not a sixth package
    (ADR 8): there is one consumer.
-2. **Scoped API keys, hash-only.** A key is `fehr_<env>_<keyId>_<secret>`:
-   the id in clear and indexed so a request is matched without a secret
-   touching an index, the secret 32 random bytes whose SHA-256 is all that
-   is stored (ADR 29's rule), compared in constant time inside the
-   repository. A key carries scopes, an expiry (required, ninety days by
-   default, a year at most), an optional source-address allowlist, and an
-   optional clinic restriction. Keys are issued only from an operator CLI
-   that prints the key once; a `live` key is refused without the date the
-   business associate agreement was signed. Every way authentication can
-   fail answers one `401 unauthenticated`. A static key is acceptable for
+2. **Scoped keys, through the mechanism ADR 36 chose.** A key is a Better
+   Auth `apiKey` row owned by an integration principal, prefixed
+   `fehr_<env>_` for a human reading one; the plugin stores its hash,
+   enforces its expiry (required, ninety days by default, a year at most)
+   and its `enabled` flag, and counts its requests. The scopes ride on the
+   row's permissions, the clinic's settings on its metadata: an optional
+   source-address allowlist and an optional clinic restriction, the
+   environment, the date the business associate agreement was signed, and
+   the issuer. Keys are issued only from an operator script that prints
+   the key once; a `live` key is refused without the agreement date. Every
+   way authentication can fail answers one `401 unauthenticated`, except a
+   key over its own limit, which is `429`. A static key is acceptable for
    one partner over TLS with these controls; mTLS at the proxy, or OAuth2
    client credentials, is the hardening for a second partner.
 3. **Verification issues a token, and lookup never returns a factor.** The
    caller proves identity with the date of birth and the phone on file, both
-   exact; on a match the API mints a token bound to that client and that
+   exact; on a match the API mints a token bound to that integration and that
    patient, honoured for fifteen minutes, presented in
    `X-Patient-Verification` on every patient-specific call. Only its hash is
    stored. The lookup response carries names, the last four digits of the
@@ -51,7 +53,7 @@ identity, the wrong permissions, and the wrong audit line.
    authorize (scope), rate limit, verification, validate, handle, and shape
    the output through the operation's strict schema so nothing the contract
    does not describe leaves. Every refusal writes a row through the same
-   sink the tRPC chain uses (ADR 36), with the route template and never the
+   sink the tRPC chain uses (ADR 37), with the route template and never the
    URL, and the patient as the subject when the route names one.
 5. **One registry.** `PARTNER_OPERATIONS` in contracts is read by the
    router, the chain, the OpenAPI builder, the scope-matrix test, and the
@@ -82,17 +84,20 @@ identity, the wrong permissions, and the wrong audit line.
    unset means every `/api/v1` path is 404, documents included. Keys are
    rows, so an environment has only the keys issued in it, and no key
    material is ever configured.
-9. **Rate limits in memory, lockouts in the database.** Token buckets per
-   client, per client on the identity operations, per identifier set, and
-   per address on failed authentication keep a broken integration from
-   becoming load; they reset on deploy. The verification lockouts are rows
-   and survive anything.
+9. **The overall limit on the key row, the finer ones in memory, lockouts
+   in the database.** The per-key limit (120 a minute) is the plugin's own
+   counter on the row, so it survives a deploy and is shared by every
+   container. Token buckets per integration on the identity operations,
+   per identifier set, and per address on failed authentication keep a
+   broken integration from becoming load; they reset on deploy. The
+   verification lockouts are rows and survive anything.
 
 ## What was given up
 
-- The in-memory limiter is per container. The deployment is one container
-  today; a second one shares the database and therefore the lockouts, and
-  would need a shared store only for the buckets.
+- The finer limiter is per container. The deployment is one container
+  today; a second one shares the database and therefore the per-key
+  counter and the lockouts, and would need a shared store only for the
+  finer buckets.
 - Accent-insensitive name matching: Postgres `unaccent` is not installed, so
   "Muñoz" and "Munoz" are different last names to lookup. A caller who is
   not found by name is found by phone.

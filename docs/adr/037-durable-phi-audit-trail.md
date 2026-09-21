@@ -1,11 +1,11 @@
-# ADR 36 — The PHI audit trail is an append-only table, written through one sink
+# ADR 37 — The PHI audit trail is an append-only table, written through one sink
 
 **Status:** accepted 2026-09-17 (the partner API foundation; amends the reading of ADR 10)  
 **Applies to:** `packages/contracts/src/audit.ts` · `packages/db/prisma/schema.prisma` · `packages/db/prisma/migrations/20260917120000_phi_audit_events` · `packages/db/src/repositories/audit.ts` · `apps/web/src/server/audit-log.ts` · `apps/web/src/server/context.ts` · `apps/web/src/server/middleware/audit.ts`
 
 ADR 10 put the audit outermost in the procedure chain so a refused probe
 leaves a trace, and left the sink as a placeholder: one line of JSON on
-stdout, "until the audit table exists". A partner API (ADR 37) is the point
+stdout, "until the audit table exists". A partner API (ADR 38) is the point
 at which that placeholder stops being acceptable. A business associate's
 reads of patient records need a record that survives a container restart,
 that nobody can quietly edit, and that an investigation can query by
