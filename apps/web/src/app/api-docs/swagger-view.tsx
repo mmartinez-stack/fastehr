@@ -1,7 +1,7 @@
 'use client'
 
 import Script from 'next/script'
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 
 /**
  * Mounts the vendored Swagger UI (public/swagger-ui, ADR 35) on the
@@ -26,7 +26,20 @@ declare global {
   }
 }
 
+const STYLESHEET = '/swagger-ui/swagger-ui.css'
+
 export function SwaggerView({ documentUrl }: { documentUrl: string }) {
+  // The stylesheet is a static asset, not a module, so it is attached from
+  // here rather than imported; Next's global-CSS import cannot reach public/.
+  useEffect(() => {
+    if (document.querySelector(`link[href="${STYLESHEET}"]`) !== null) return
+    const link = document.createElement('link')
+    link.rel = 'stylesheet'
+    link.href = STYLESHEET
+    document.head.append(link)
+    return () => link.remove()
+  }, [])
+
   const mount = useCallback(() => {
     window.SwaggerUIBundle?.({
       url: documentUrl,
@@ -45,7 +58,6 @@ export function SwaggerView({ documentUrl }: { documentUrl: string }) {
 
   return (
     <>
-      <link rel="stylesheet" href="/swagger-ui/swagger-ui.css" />
       <Script src="/swagger-ui/swagger-ui-bundle.js" strategy="afterInteractive" onLoad={mount} />
       <div id="swagger-ui" />
     </>
