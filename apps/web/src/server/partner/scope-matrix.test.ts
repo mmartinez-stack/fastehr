@@ -1,6 +1,6 @@
 import { API_SCOPES, PARTNER_OPERATIONS } from '@fastehr/contracts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ADA, partnerHarness, testClient } from '../test-support/partner-fakes.ts'
+import { ADA, partnerHarness, testKey } from '../test-support/partner-fakes.ts'
 
 /**
  * Every operation against a key holding exactly one scope: the call gets
@@ -32,7 +32,7 @@ describe('scope matrix', () => {
     for (const scope of API_SCOPES) {
       const expected = operation.scope === null || operation.scope === scope ? 'passes' : 'is forbidden'
       it(`${operation.id} with only ${scope} ${expected}`, async () => {
-        const harness = partnerHarness({ clients: [testClient({ scopes: [scope] })] })
+        const harness = partnerHarness({ keys: [testKey({ scopes: [scope] })] })
         const { status, body } = await harness.send(minimalRequest(operation.id))
         const code = (body as { error?: { code: string } }).error?.code
         if (expected === 'passes') {

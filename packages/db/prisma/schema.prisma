@@ -194,7 +194,7 @@ model Patient {
   @@index([locationId])
   // The roster's default order: most recently seen first.
   @@index([lastVisitAt])
-  // Partner lookup and verification by phone (ADR 37): without this each
+  // Partner lookup and verification by phone (ADR 38): without this each
   // call is a sequential scan, which is both a load lever and a timing signal.
   @@index([phone])
   @@map("patients")
@@ -373,6 +373,9 @@ enum StaffRole {
   // The administrator's access plus the note review queue (ADR 31). A role,
   // not a flag: an account has exactly one role.
   medical_director
+  // The principal behind a partner API key (ADR 36): a row so the audit
+  // trail names it, with no surface, no credential, and no session.
+  integration
 
   @@map("staff_role")
 }
@@ -398,6 +401,9 @@ model User {
   reviewedVisits     Visit[]   @relation("VisitReviews")
   assignedVisits     Visit[]   @relation("VisitProviders")
   triggeredSamples   ReviewSampleRun[]
+  apiKeys            ApiKey[]
+  verifications      PatientVerification[]
+  verificationAttempts PatientVerificationAttempt[]
 
   @@map("users")
 }
@@ -514,7 +520,7 @@ model IntakeRequest {
 }
 
 // ---------------------------------------------------------------------------
-// PHI audit trail (ADR 10, ADR 36)
+// PHI audit trail (ADR 10, ADR 37)
 // ---------------------------------------------------------------------------
 
 enum AuditTransport {
@@ -527,7 +533,7 @@ enum AuditTransport {
 
 enum AuditActorKind {
   staff
-  api_client
+  integration
   anonymous
 
   @@map("audit_actor_kind")
@@ -588,74 +594,70 @@ model PhiAuditEvent {
 }
 
 // ---------------------------------------------------------------------------
-// Partner API clients and patient verifications (ADR 37)
+// Integration keys and patient verifications (ADR 36, ADR 38)
 // ---------------------------------------------------------------------------
 
-enum ApiClientStatus {
-  active
-  revoked
-
-  @@map("api_client_status")
-}
-
 /**
- * One partner integration holding one key. `keyId` is the key's public
- * half, in clear and unique, so a request is matched to a row without a
- * secret ever touching an index; `keyHash` is the SHA-256 of the secret,
- * and the mapper never maps it. `expiresAt` is required: a key must end.
+ * Better Auth's `apikey` model (`@better-auth/api-key`), one column per
+ * field the plugin declares, so the plugin reads and writes it through the
+ * same adapter as sessions. `key` is the hash; the plugin never stores the
+ * key itself. `referenceId` is the owner: an integration principal's
+ * `users` row. `permissions` carries the scopes and `metadata` the clinic's
+ * settings, both as JSON text the contracts parse (`keys.ts`).
  */
-model ApiClient {
-  id          String          @id @default(uuid())
-  name        String
-  vendor      String?
-  /// `live` or `dev`, for humans; not a control (keys are rows per environment).
-  environment String
-  keyId       String          @unique
-  keyHash     String          @unique
-  scopes      String[]
-  /// Source addresses or CIDRs; empty means any.
-  allowedIps  String[]
-  /// Clinic slugs the key may see; empty means every active clinic.
-  locationIds String[]
-  status      ApiClientStatus @default(active)
-  expiresAt   DateTime
-  lastUsedAt  DateTime?
-  /// When the business associate agreement was signed; a live key needs one.
-  baaSignedAt DateTime?       @db.Date
-  /// The operator who issued it, as typed at the CLI.
-  issuedBy    String
-  createdAt   DateTime        @default(now())
-  revokedAt   DateTime?
+model ApiKey {
+  id                  String    @id
+  configId            String    @default("default")
+  name                String?
+  start               String?
+  prefix              String?
+  key                 String
+  referenceId         String
+  user                User      @relation(fields: [referenceId], references: [id], onDelete: Cascade)
+  refillInterval      Int?
+  refillAmount        Int?
+  lastRefillAt        DateTime?
+  enabled             Boolean   @default(true)
+  rateLimitEnabled    Boolean   @default(true)
+  rateLimitTimeWindow Int?
+  rateLimitMax        Int?
+  requestCount        Int       @default(0)
+  remaining           Int?
+  lastRequest         DateTime?
+  expiresAt           DateTime?
+  createdAt           DateTime
+  updatedAt           DateTime
+  permissions         String?
+  metadata            String?
 
-  verifications PatientVerification[]
-  attempts      PatientVerificationAttempt[]
-
-  @@index([status])
-  @@map("api_clients")
+  @@index([configId])
+  @@index([referenceId])
+  @@index([key])
+  @@map("api_keys")
 }
 
 /**
- * A verification token the verify endpoint minted: bound to one client and
- * one patient, honoured until `expiresAt`. Only the token's SHA-256 is
+ * A verification token the verify endpoint minted: bound to one integration
+ * and one patient, honoured until `expiresAt`. Only the token's SHA-256 is
  * stored (ADR 29's rule); `useCount` and `lastUsedAt` are bookkeeping, not
  * a single-use gate, because a bot makes several calls per conversation.
  */
 model PatientVerification {
-  id          String    @id @default(uuid())
-  apiClientId String
-  apiClient   ApiClient @relation(fields: [apiClientId], references: [id], onDelete: Restrict)
-  patientId   String
-  patient     Patient   @relation(fields: [patientId], references: [id], onDelete: Restrict)
-  tokenHash   String    @unique
-  method      String
-  expiresAt   DateTime
-  useCount    Int       @default(0)
-  lastUsedAt  DateTime?
-  requestId   String?
-  ipAddress   String?
-  createdAt   DateTime  @default(now())
+  id            String    @id @default(uuid())
+  integrationId String
+  integration   User      @relation(fields: [integrationId], references: [id], onDelete: Restrict)
+  patientId     String
+  patient       Patient   @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  tokenHash     String    @unique
+  method        String
+  expiresAt     DateTime
+  useCount      Int       @default(0)
+  lastUsedAt    DateTime?
+  requestId     String?
+  ipAddress     String?
+  createdAt     DateTime  @default(now())
 
-  @@index([apiClientId, patientId, expiresAt])
+  @@index([integrationId, patientId, expiresAt])
   @@map("patient_verifications")
 }
 
@@ -665,15 +667,15 @@ model PatientVerification {
  * that does not exist is recorded like any other.
  */
 model PatientVerificationAttempt {
-  id          String    @id @default(uuid())
-  apiClientId String
-  apiClient   ApiClient @relation(fields: [apiClientId], references: [id], onDelete: Restrict)
-  patientId   String
-  succeeded   Boolean
-  ipAddress   String?
-  occurredAt  DateTime  @default(now())
+  id            String    @id @default(uuid())
+  integrationId String
+  integration   User      @relation(fields: [integrationId], references: [id], onDelete: Restrict)
+  patientId     String
+  succeeded     Boolean
+  ipAddress     String?
+  occurredAt    DateTime  @default(now())
 
-  @@index([apiClientId, patientId, occurredAt])
-  @@index([apiClientId, occurredAt])
+  @@index([integrationId, patientId, occurredAt])
+  @@index([integrationId, occurredAt])
   @@map("patient_verification_attempts")
 }

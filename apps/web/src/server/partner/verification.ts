@@ -9,14 +9,14 @@ import type { PartnerContext } from './context.ts'
 import { PartnerApiError } from './errors.ts'
 
 /**
- * Patient verification tokens and the lockout (ADR 37).
+ * Patient verification tokens and the lockout (ADR 38).
  *
  * The token is 32 random bytes, base64url; only its SHA-256 is stored, as
- * with the intake token (ADR 29). It is bound to one client and one
+ * with the intake token (ADR 29). It is bound to one integration and one
  * patient and honoured for a short window; a bot makes several calls per
  * conversation, so it is reusable within that window rather than single
  * use. Every way a presented token can be wrong (absent, unknown, expired,
- * another client's, another patient's) answers the same
+ * another integration's, another patient's) answers the same
  * `verification_required`, and it is decided before any patient row is
  * read, so it reveals nothing about the patient.
  */
@@ -30,24 +30,24 @@ function minutesAgo(now: Date, minutes: number): Date {
 }
 
 /**
- * Refuses when the patient, or the whole client, has failed too often.
+ * Refuses when the patient, or the whole integration, has failed too often.
  * Failures are counted over the lock period (which contains the window),
  * and a success resets the patient's count: the first wrong answer after a
  * verified call is one, not six.
  */
 export async function assertNotLockedOut(
   ctx: PartnerContext,
-  { clientId, patientId }: { clientId: string; patientId: string },
+  { integrationId, patientId }: { integrationId: string; patientId: string },
 ): Promise<void> {
   const now = ctx.now()
-  const { perPatient, perClient } = VERIFICATION_LOCKOUT
+  const { perPatient, perIntegration } = VERIFICATION_LOCKOUT
 
-  const lastSuccess = await ctx.db.verifications.lastSuccessAt({ apiClientId: clientId, patientId })
+  const lastSuccess = await ctx.db.verifications.lastSuccessAt({ integrationId, patientId })
   const patientWindowStart = minutesAgo(now, perPatient.lockMinutes)
   const patientSince =
     lastSuccess !== null && lastSuccess.getTime() > patientWindowStart.getTime() ? lastSuccess : patientWindowStart
   const patientFailures = await ctx.db.verifications.countFailedAttempts({
-    apiClientId: clientId,
+    integrationId,
     patientId,
     since: patientSince,
   })
@@ -56,13 +56,13 @@ export async function assertNotLockedOut(
   }
 
   const clientFailures = await ctx.db.verifications.countFailedAttempts({
-    apiClientId: clientId,
-    since: minutesAgo(now, perClient.lockMinutes),
+    integrationId,
+    since: minutesAgo(now, perIntegration.lockMinutes),
   })
-  if (clientFailures >= perClient.maxFailures) {
+  if (clientFailures >= perIntegration.maxFailures) {
     // The signature of a key being used to enumerate: worth its own line.
-    console.warn('[partner-api] verify paused for client', ctx.actor?.keyId ?? clientId, ctx.requestId)
-    throw new PartnerApiError('verification_locked', { retryAfterSeconds: perClient.lockMinutes * 60 })
+    console.warn('[partner-api] verify paused for integration', ctx.actor?.keyId ?? integrationId, ctx.requestId)
+    throw new PartnerApiError('verification_locked', { retryAfterSeconds: perIntegration.lockMinutes * 60 })
   }
 }
 
@@ -86,12 +86,12 @@ export function factorsMatch(
 
 export async function issueVerificationToken(
   ctx: PartnerContext,
-  { clientId, patientId }: { clientId: string; patientId: string },
+  { integrationId, patientId }: { integrationId: string; patientId: string },
 ): Promise<{ token: string; expiresAt: Date; verification: PatientVerification }> {
   const token = randomBytes(32).toString('base64url')
   const expiresAt = new Date(ctx.now().getTime() + PATIENT_VERIFICATION_TTL_MINUTES * 60 * 1000)
   const verification = await ctx.db.verifications.create({
-    apiClientId: clientId,
+    integrationId,
     patientId,
     tokenHash: hashToken(token),
     method: 'dob_phone',
@@ -104,7 +104,7 @@ export async function issueVerificationToken(
 
 export async function resolveVerification(
   ctx: PartnerContext,
-  { clientId, patientId, headers }: { clientId: string; patientId: string; headers: Headers },
+  { integrationId, patientId, headers }: { integrationId: string; patientId: string; headers: Headers },
 ): Promise<PatientVerification> {
   const refuse = () => new PartnerApiError('verification_required')
 
@@ -115,7 +115,7 @@ export async function resolveVerification(
   if (verification === null) throw refuse()
   const now = ctx.now()
   if (new Date(verification.expiresAt).getTime() <= now.getTime()) throw refuse()
-  if (verification.apiClientId !== clientId || verification.patientId !== patientId) throw refuse()
+  if (verification.integrationId !== integrationId || verification.patientId !== patientId) throw refuse()
 
   await ctx.db.verifications.markUsed(verification.id, now)
   return verification

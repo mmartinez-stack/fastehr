@@ -19,7 +19,7 @@ const probeRouter = router({
 })
 
 function actor(locations: readonly LocationSlug[]): Actor {
-  return { id: 'user-1', roles: ['front-desk'], locations }
+  return { id: 'user-1', roles: ['frontdesk'], locations }
 }
 
 function callFor(requested: LocationFilter, permitted: readonly LocationSlug[]) {

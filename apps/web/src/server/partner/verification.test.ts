@@ -28,44 +28,44 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-const CLIENT = 'client-1'
+const INTEGRATION = 'integration-1'
 
 describe('verification tokens', () => {
   it('issues a token whose hash alone is stored, honoured for fifteen minutes', async () => {
-    const issued = await issueVerificationToken(ctx, { clientId: CLIENT, patientId: ADA.patientId })
+    const issued = await issueVerificationToken(ctx, { integrationId: INTEGRATION, patientId: ADA.patientId })
     expect(issued.token.length).toBeGreaterThanOrEqual(43)
     expect(issued.expiresAt.toISOString()).toBe('2026-09-17T12:15:00.000Z')
     expect(verifications.rows[0]?.tokenHash).toBe(hashToken(issued.token))
     expect(JSON.stringify(verifications.rows)).not.toContain(issued.token)
 
     const headers = new Headers({ [PATIENT_VERIFICATION_HEADER]: issued.token })
-    const resolved = await resolveVerification(ctx, { clientId: CLIENT, patientId: ADA.patientId, headers })
+    const resolved = await resolveVerification(ctx, { integrationId: INTEGRATION, patientId: ADA.patientId, headers })
     expect(resolved.id).toBe(issued.verification.id)
     expect(verifications.rows[0]?.useCount).toBe(1)
 
     clock = new Date('2026-09-17T12:15:00.000Z')
-    await expect(resolveVerification(ctx, { clientId: CLIENT, patientId: ADA.patientId, headers })).rejects.toMatchObject({
+    await expect(resolveVerification(ctx, { integrationId: INTEGRATION, patientId: ADA.patientId, headers })).rejects.toMatchObject({
       code: 'verification_required',
     })
   })
 
   it('refuses an absent, unknown, other-client, or other-patient token with one code', async () => {
-    const issued = await issueVerificationToken(ctx, { clientId: CLIENT, patientId: ADA.patientId })
+    const issued = await issueVerificationToken(ctx, { integrationId: INTEGRATION, patientId: ADA.patientId })
     const cases: Array<[string, Headers]> = [
       ['absent', new Headers()],
       ['unknown', new Headers({ [PATIENT_VERIFICATION_HEADER]: 'x'.repeat(43) })],
-      ['other client', new Headers({ [PATIENT_VERIFICATION_HEADER]: issued.token })],
+      ['other integration', new Headers({ [PATIENT_VERIFICATION_HEADER]: issued.token })],
     ]
     for (const [label, headers] of cases) {
-      const clientId = label === 'other client' ? 'client-2' : CLIENT
+      const integrationId = label === 'other integration' ? 'integration-2' : INTEGRATION
       await expect(
-        resolveVerification(ctx, { clientId, patientId: ADA.patientId, headers }),
+        resolveVerification(ctx, { integrationId, patientId: ADA.patientId, headers }),
         label,
       ).rejects.toMatchObject({ code: 'verification_required' })
     }
     await expect(
       resolveVerification(ctx, {
-        clientId: CLIENT,
+        integrationId: INTEGRATION,
         patientId: '5c2b8d3f-1a4e-4f6b-8c7d-9e0f1a2b3c4d',
         headers: new Headers({ [PATIENT_VERIFICATION_HEADER]: issued.token }),
       }),
@@ -86,34 +86,34 @@ describe('factorsMatch', () => {
 describe('lockout', () => {
   async function fail(patientId: string = ADA.patientId, times = 1) {
     for (let i = 0; i < times; i += 1) {
-      await verifications.recordAttempt({ apiClientId: CLIENT, patientId, succeeded: false, ipAddress: null })
+      await verifications.recordAttempt({ integrationId: INTEGRATION, patientId, succeeded: false, ipAddress: null })
     }
   }
 
   it('locks a patient after five failures for thirty minutes', async () => {
     await fail(ADA.patientId, 4)
-    await expect(assertNotLockedOut(ctx, { clientId: CLIENT, patientId: ADA.patientId })).resolves.toBeUndefined()
+    await expect(assertNotLockedOut(ctx, { integrationId: INTEGRATION, patientId: ADA.patientId })).resolves.toBeUndefined()
     await fail()
-    await expect(assertNotLockedOut(ctx, { clientId: CLIENT, patientId: ADA.patientId })).rejects.toMatchObject({
+    await expect(assertNotLockedOut(ctx, { integrationId: INTEGRATION, patientId: ADA.patientId })).rejects.toMatchObject({
       code: 'verification_locked',
       retryAfterSeconds: 1800,
     })
     clock = new Date(NOW.getTime() + 31 * 60 * 1000)
-    await expect(assertNotLockedOut(ctx, { clientId: CLIENT, patientId: ADA.patientId })).resolves.toBeUndefined()
+    await expect(assertNotLockedOut(ctx, { integrationId: INTEGRATION, patientId: ADA.patientId })).resolves.toBeUndefined()
   })
 
   it('a success resets the patient count', async () => {
     await fail(ADA.patientId, 4)
     clock = new Date(NOW.getTime() + 60 * 1000)
-    await verifications.recordAttempt({ apiClientId: CLIENT, patientId: ADA.patientId, succeeded: true, ipAddress: null })
+    await verifications.recordAttempt({ integrationId: INTEGRATION, patientId: ADA.patientId, succeeded: true, ipAddress: null })
     clock = new Date(NOW.getTime() + 120 * 1000)
     await fail(ADA.patientId, 4)
-    await expect(assertNotLockedOut(ctx, { clientId: CLIENT, patientId: ADA.patientId })).resolves.toBeUndefined()
+    await expect(assertNotLockedOut(ctx, { integrationId: INTEGRATION, patientId: ADA.patientId })).resolves.toBeUndefined()
   })
 
-  it('pauses the whole client after fifty failures across patients', async () => {
+  it('pauses the whole integration after fifty failures across patients', async () => {
     for (let i = 0; i < 50; i += 1) await fail(`patient-${i}`)
-    const error = await assertNotLockedOut(ctx, { clientId: CLIENT, patientId: 'fresh' }).catch((e: unknown) => e)
+    const error = await assertNotLockedOut(ctx, { integrationId: INTEGRATION, patientId: 'fresh' }).catch((e: unknown) => e)
     expect(error).toBeInstanceOf(PartnerApiError)
     expect((error as PartnerApiError).retryAfterSeconds).toBe(600)
     expect(console.warn).toHaveBeenCalled()

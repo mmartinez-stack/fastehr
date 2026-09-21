@@ -79,7 +79,7 @@ export const serverEnvSchema = z.object({
 export type ServerEnv = z.infer<typeof serverEnvSchema>
 
 /**
- * The partner API kill switch (ADR 37). Unset or anything but `true`/`1`
+ * The partner API kill switch (ADR 38). Unset or anything but `true`/`1`
  * means off: every `/api/v1/*` path answers 404, the spec and the docs
  * included. Keys are rows in each environment's database, so this is also
  * the statement that the surface stays dark until an operator turns it on

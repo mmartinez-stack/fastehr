@@ -9,7 +9,7 @@ import type { PatientVerification as PatientVerificationRow } from '../generated
 export function toPatientVerification(row: PatientVerificationRow): PatientVerification {
   return patientVerificationSchema.parse({
     id: row.id,
-    apiClientId: row.apiClientId,
+    integrationId: row.integrationId,
     patientId: row.patientId,
     method: row.method,
     expiresAt: row.expiresAt.toISOString(),

@@ -53,7 +53,7 @@ export interface Context {
   /** The origin public links are built on — resolved lazily, like the auth env. */
   appBaseUrl: () => string
   /**
-   * The PHI audit sink (ADR 36): stdout plus the audit table. On the context
+   * The PHI audit sink (ADR 37): stdout plus the audit table. On the context
    * so the tRPC middleware and the partner chain write through one seam, and
    * so a test hands in a recording sink and reads the trail back.
    */

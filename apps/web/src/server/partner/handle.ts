@@ -7,12 +7,13 @@ import { DOCS_CONTENT_SECURITY_POLICY, DOCS_HTML } from './docs-page.ts'
 import { errorResponse, PartnerApiError } from './errors.ts'
 import { PARTNER_HANDLERS, type PartnerHandlers } from './handlers/index.ts'
 import { jsonResponse, parsePartnerRequest, standardHeaders } from './http.ts'
+import type { KeyVerifier } from './keys.ts'
 import type { RateLimiter } from './rate-limit.ts'
 import { logPartnerRequest } from './request-log.ts'
 import { matchRoute } from './router.ts'
 
 /**
- * The partner API entry point (ADR 37): a `Request` in, a `Response` out,
+ * The partner API entry point (ADR 38): a `Request` in, a `Response` out,
  * with nothing from `next/*` (ADR 9). The Next route handler at
  * `app/api/v1/[[...path]]/route.ts` calls this and nothing else; a test
  * calls it with a hand-built `Request` and fakes.
@@ -25,6 +26,8 @@ export interface PartnerHostOptions {
   audit?: AuditSink
   now?: () => Date
   rateLimiter?: RateLimiter
+  /** The key verifier; tests pass a fake, the host uses Better Auth's plugin. */
+  keys?: KeyVerifier
   handlers?: PartnerHandlers
   /** Overrides the environment read; tests pass `true`. */
   enabled?: boolean
@@ -87,6 +90,7 @@ export async function handlePartnerRequest(request: Request, options: PartnerHos
     audit: options.audit,
     now: options.now,
     rateLimiter: options.rateLimiter,
+    keys: options.keys,
   })
   const handlers = options.handlers ?? PARTNER_HANDLERS
   // The registry and the handler table are typed against each other (the

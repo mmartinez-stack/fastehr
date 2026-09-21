@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ADA, GRACE, LOOKUP_BODY, partnerHarness, testClient, VERIFY_BODY } from '../../test-support/partner-fakes.ts'
+import { ADA, GRACE, LOOKUP_BODY, partnerHarness, testKey, VERIFY_BODY } from '../../test-support/partner-fakes.ts'
 
 beforeEach(() => {
   vi.spyOn(console, 'info').mockImplementation(() => {})
@@ -61,7 +61,7 @@ describe('patient lookup', () => {
   })
 
   it('a key restricted to a clinic sees only that clinic', async () => {
-    const harness = partnerHarness({ clients: [testClient({ locationIds: ['kanoga'] })] })
+    const harness = partnerHarness({ keys: [testKey({ metadata: { locationIds: ['kanoga'] } })] })
     const { body } = await harness.send({ path: '/patients/lookup', body: LOOKUP_BODY })
     expect(body).toEqual({ candidates: [], truncated: false })
   })
@@ -91,7 +91,7 @@ describe('patient verification', () => {
   })
 
   it('refuses a wrong date of birth, a wrong phone, an unknown patient, a patient without a phone, and a patient outside the key\'s clinics with one code', async () => {
-    const harness = partnerHarness({ clients: [testClient({ locationIds: ['sylmar'] })] })
+    const harness = partnerHarness({ keys: [testKey({ metadata: { locationIds: ['sylmar'] } })] })
     const cases: Array<[string, unknown]> = [
       [`/patients/${ADA.patientId}/verify`, { ...VERIFY_BODY, dateOfBirth: '1985-12-11' }],
       [`/patients/${ADA.patientId}/verify`, { ...VERIFY_BODY, phone: '9515550001' }],

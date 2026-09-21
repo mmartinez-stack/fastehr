@@ -23,7 +23,7 @@ import { resolveVerification } from './verification.ts'
  *   audit -> authenticate -> authorize -> rate limit -> verification -> validate -> handle -> shape
  *
  * Audit is outermost, so a refused key, a missing scope, a locked-out
- * patient, and a bad body all leave a row (ADR 36) with the outcome the
+ * patient, and a bad body all leave a row (ADR 37) with the outcome the
  * investigation wants: `denied` for a refusal, `error` for a failure. The
  * handler's result is parsed through the operation's output schema on the
  * way out, so nothing the contract does not describe reaches the wire.
@@ -97,16 +97,12 @@ export async function runOperation<Op extends PartnerOperation>(
 
     if (operation.scope !== null && !actor.scopes.includes(operation.scope)) throw new PartnerApiError('forbidden')
 
-    const general = ctx.rateLimiter.take(
-      `client:${actor.clientId}`,
-      perMinute(PARTNER_RATE_LIMITS.perClientPerMinute),
-      ctx.now(),
-    )
-    if (!general.allowed) throw new PartnerApiError('rate_limited', { retryAfterSeconds: general.retryAfterSeconds })
+    // The overall per-key limit is the key row's own counter, checked by the
+    // verifier above; what remains here are the finer buckets.
     if (isIdentityOperation(operation)) {
       const identity = ctx.rateLimiter.take(
-        `identity:${actor.clientId}`,
-        perMinute(PARTNER_RATE_LIMITS.identityPerClientPerMinute),
+        `identity:${actor.integrationId}`,
+        perMinute(PARTNER_RATE_LIMITS.identityPerIntegrationPerMinute),
         ctx.now(),
       )
       if (!identity.allowed) throw new PartnerApiError('rate_limited', { retryAfterSeconds: identity.retryAfterSeconds })
@@ -119,7 +115,11 @@ export async function runOperation<Op extends PartnerOperation>(
     if (operation.requiresVerification) {
       const patientId = (params as { patientId?: unknown }).patientId
       if (typeof patientId !== 'string') throw new PartnerApiError('verification_required')
-      const verification = await resolveVerification(ctx, { clientId: actor.clientId, patientId, headers: parsed.headers })
+      const verification = await resolveVerification(ctx, {
+        integrationId: actor.integrationId,
+        patientId,
+        headers: parsed.headers,
+      })
       ctx.auditScope.patientId = verification.patientId
       ctx.auditScope.verificationId = verification.id
     }
@@ -144,8 +144,8 @@ export async function runOperation<Op extends PartnerOperation>(
   const durationMs = Date.now() - startedAt
   ctx.audit.record({
     transport: 'rest',
-    actorKind: ctx.actor === null ? 'anonymous' : 'api_client',
-    actorId: ctx.actor?.clientId ?? null,
+    actorKind: ctx.actor === null ? 'anonymous' : 'integration',
+    actorId: ctx.actor?.integrationId ?? null,
     apiKeyId: ctx.actor?.keyId ?? null,
     verificationId: ctx.auditScope.verificationId ?? null,
     action: operation.id,

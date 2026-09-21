@@ -24,7 +24,7 @@ type SeededUser = { id: string; email: string }
 
 async function seedUser(
   label: string,
-  role: 'admin' | 'provider' | 'frontdesk' | 'medical_director',
+  role: 'admin' | 'provider' | 'frontdesk' | 'medical_director' | 'integration',
   overrides: { isActive?: boolean; mustChangePassword?: boolean } = {},
 ): Promise<SeededUser> {
   const ctx = await getAuth().$context
@@ -235,6 +235,15 @@ describe('guards', () => {
     await expect(requireSession(headersWithCookie(cookie))).rejects.toMatchObject({
       code: 'UNAUTHENTICATED',
     })
+  })
+
+  it('never resolves an integration principal to an actor, even with a session (ADR 36)', async () => {
+    // A principal has no credential in practice; give it one here to prove
+    // the refusal is by role, not by the accident of having no password.
+    const integration = await seedUser('integration', 'integration')
+    const cookie = await signInCookie(integration.email)
+    expect(await actorFromHeaders(new Headers({ cookie }))).toBeNull()
+    await expect(requireSession(new Headers({ cookie }))).rejects.toMatchObject({ code: 'UNAUTHENTICATED' })
   })
 })
 

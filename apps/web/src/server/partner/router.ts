@@ -2,7 +2,7 @@ import { PARTNER_OPERATIONS, type PartnerOperations } from '@fastehr/contracts'
 import { PartnerApiError } from './errors.ts'
 
 /**
- * Matches a method and path to a registry entry (ADR 37). The registry's
+ * Matches a method and path to a registry entry (ADR 38). The registry's
  * `path` is an OpenAPI template; a `{name}` segment matches one path
  * segment and lands in `params` under that name, still a string, for the
  * chain to validate through the operation's `params` schema.

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { PATIENT_VERIFICATION_HEADER } from './api-client.ts'
+import { PATIENT_VERIFICATION_HEADER } from './keys.ts'
 import { PARTNER_ERROR_STATUS, partnerErrorSchema } from './errors.ts'
 import { documentedErrors, PARTNER_OPERATIONS, type PartnerOperation } from './operations.ts'
 import { partnerPatientCandidateSchema } from './patients.ts'
@@ -8,7 +8,7 @@ import { API_SCOPES } from './scopes.ts'
 
 /**
  * The OpenAPI 3.1 document for the partner API, built from the registry and
- * the Zod schemas (ADR 37). Zod 4 emits JSON Schema 2020-12 natively, which
+ * the Zod schemas (ADR 38). Zod 4 emits JSON Schema 2020-12 natively, which
  * is the dialect OpenAPI 3.1 consumes, so there is no generator dependency:
  * this module lives in contracts because it is the one package that may
  * import Zod (ADR 5).

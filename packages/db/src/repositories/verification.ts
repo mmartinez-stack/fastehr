@@ -4,7 +4,7 @@ import { toPatientVerification } from '../mappers/verification.ts'
 
 /**
  * Patient verification tokens and the attempt counter behind the lockout
- * (ADR 37).
+ * (ADR 38).
  *
  * The token itself is minted and hashed in the server layer; only the hash
  * arrives here, and only the hash is looked up, as with the intake token
@@ -13,7 +13,7 @@ import { toPatientVerification } from '../mappers/verification.ts'
  */
 export interface VerificationRepository {
   create(input: {
-    apiClientId: string
+    integrationId: string
     patientId: string
     /** SHA-256 of the token; the token itself is never stored. */
     tokenHash: string
@@ -25,15 +25,15 @@ export interface VerificationRepository {
   findByTokenHash(tokenHash: string): Promise<PatientVerification | null>
   markUsed(id: string, at: Date): Promise<void>
   recordAttempt(input: {
-    apiClientId: string
+    integrationId: string
     patientId: string
     succeeded: boolean
     ipAddress: string | null
   }): Promise<void>
-  /** Failed attempts since `since`, for one patient of the client or for the whole client. */
-  countFailedAttempts(input: { apiClientId: string; patientId?: string; since: Date }): Promise<number>
+  /** Failed attempts since `since`, for one patient of the integration or for the whole integration. */
+  countFailedAttempts(input: { integrationId: string; patientId?: string; since: Date }): Promise<number>
   /** The most recent successful attempt for the patient, after which earlier failures no longer count. */
-  lastSuccessAt(input: { apiClientId: string; patientId: string }): Promise<Date | null>
+  lastSuccessAt(input: { integrationId: string; patientId: string }): Promise<Date | null>
 }
 
 export function createVerificationRepository(getClient: () => PrismaClient): VerificationRepository {
@@ -41,7 +41,7 @@ export function createVerificationRepository(getClient: () => PrismaClient): Ver
     async create(input) {
       const row = await getClient().patientVerification.create({
         data: {
-          apiClientId: input.apiClientId,
+          integrationId: input.integrationId,
           patientId: input.patientId,
           tokenHash: input.tokenHash,
           method: input.method,
@@ -68,7 +68,7 @@ export function createVerificationRepository(getClient: () => PrismaClient): Ver
     async recordAttempt(input) {
       await getClient().patientVerificationAttempt.create({
         data: {
-          apiClientId: input.apiClientId,
+          integrationId: input.integrationId,
           patientId: input.patientId,
           succeeded: input.succeeded,
           ipAddress: input.ipAddress,
@@ -76,10 +76,10 @@ export function createVerificationRepository(getClient: () => PrismaClient): Ver
       })
     },
 
-    async countFailedAttempts({ apiClientId, patientId, since }) {
+    async countFailedAttempts({ integrationId, patientId, since }) {
       return getClient().patientVerificationAttempt.count({
         where: {
-          apiClientId,
+          integrationId,
           ...(patientId === undefined ? {} : { patientId }),
           succeeded: false,
           occurredAt: { gte: since },
@@ -87,9 +87,9 @@ export function createVerificationRepository(getClient: () => PrismaClient): Ver
       })
     },
 
-    async lastSuccessAt({ apiClientId, patientId }) {
+    async lastSuccessAt({ integrationId, patientId }) {
       const row = await getClient().patientVerificationAttempt.findFirst({
-        where: { apiClientId, patientId, succeeded: true },
+        where: { integrationId, patientId, succeeded: true },
         orderBy: { occurredAt: 'desc' },
         select: { occurredAt: true },
       })

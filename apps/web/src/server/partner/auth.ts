@@ -1,27 +1,21 @@
-import { createHash } from 'node:crypto'
-import { bearerToken, parseApiKey, partnerScopeSchema, locationSlugSchema } from '@fastehr/contracts'
+import { apiKeyMetadataSchema, bearerToken, permissionsToScopes } from '@fastehr/contracts'
 import type { PartnerActor, PartnerContext } from './context.ts'
 import { PartnerApiError } from './errors.ts'
 
 /**
- * Partner key authentication (ADR 37).
+ * Partner key authentication (ADR 36, ADR 38).
  *
- * The bearer token is parsed into its key id and secret; the secret is
- * hashed and handed to the repository, which compares it in constant time
- * against the stored hash and returns the client only on a match. Every way
- * this can fail answers the same `unauthenticated`: an absent header, a
- * malformed key, an unknown id, a wrong secret, an expired or revoked key,
- * or a source address outside the allowlist. A probe learns nothing from
- * the code, and the audit trail records the attempt either way.
+ * The bearer token goes to the key verifier (Better Auth's api key plugin
+ * behind `ctx.keys`), which answers valid, invalid, or over its limit. A
+ * valid key is then bound to its owner, an active integration principal,
+ * and to the settings the clinic attached: the source-address allowlist
+ * and the clinics it may see. Every way this can fail short of the rate
+ * limit answers the same `unauthenticated`: an absent header, an unknown
+ * or wrong key, an expired or disabled one, a principal switched off, a
+ * row whose settings no longer parse, or an address outside the allowlist.
+ * A probe learns nothing from the code, and the audit trail records the
+ * attempt either way.
  */
-
-export function hashSecret(secret: string): string {
-  return createHash('sha256').update(secret).digest('hex')
-}
-
-/** Writes `lastUsedAt` at most this often per client, not once a request. */
-const LAST_USED_WRITE_INTERVAL_MS = 60 * 1000
-const lastUsedWrittenAt = new Map<string, number>()
 
 function ipv4ToInt(address: string): number | null {
   const parts = address.split('.')
@@ -72,32 +66,28 @@ export async function authenticateApiKey(headers: Headers, ctx: PartnerContext):
 
   const token = bearerToken(headers.get('authorization'))
   if (token === null) throw refuse()
-  const parsed = parseApiKey(token)
-  if (parsed === null) throw refuse()
 
-  const client = await ctx.db.apiClients.findByCredential({ keyId: parsed.keyId, secretHash: hashSecret(parsed.secret) })
-  if (client === null) throw refuse()
+  const verification = await ctx.keys.verify(token)
+  if (verification.status === 'rate_limited') throw new PartnerApiError('rate_limited', { retryAfterSeconds: 60 })
+  if (verification.status !== 'valid') throw refuse()
+  const key = verification.key
 
-  const now = ctx.now()
-  if (new Date(client.expiresAt).getTime() <= now.getTime()) throw refuse()
-  if (!ipAllowed(client.allowedIps, ctx.ipAddress)) throw refuse()
+  // Re-parsed rather than trusted: settings on a row that no longer fit the
+  // contract, or a scope retired from the vocabulary, must not become live.
+  const metadata = apiKeyMetadataSchema.safeParse(key.metadata)
+  if (!metadata.success) throw refuse()
 
-  const lastWritten = lastUsedWrittenAt.get(client.id) ?? 0
-  if (now.getTime() - lastWritten >= LAST_USED_WRITE_INTERVAL_MS) {
-    lastUsedWrittenAt.set(client.id, now.getTime())
-    void ctx.db.apiClients.touchLastUsed(client.id, now).catch((error: unknown) => {
-      console.error('[partner-api] lastUsedAt write failed', ctx.requestId, error)
-    })
-  }
+  const integration = await ctx.db.integrations.findActive(key.referenceId)
+  if (integration === null) throw refuse()
+
+  if (!ipAllowed(metadata.data.allowedIps, ctx.ipAddress)) throw refuse()
 
   return {
-    kind: 'api_client',
-    clientId: client.id,
-    keyId: client.keyId,
-    name: client.name,
-    // Re-parsed rather than trusted: a scope or slug retired from the
-    // vocabulary but still on a row must not become a live permission.
-    scopes: client.scopes.filter((scope) => partnerScopeSchema.safeParse(scope).success),
-    locations: client.locationIds.filter((slug) => locationSlugSchema.safeParse(slug).success),
+    kind: 'integration',
+    integrationId: integration.id,
+    keyId: key.id,
+    name: integration.name,
+    scopes: permissionsToScopes(key.permissions),
+    locations: metadata.data.locationIds,
   }
 }

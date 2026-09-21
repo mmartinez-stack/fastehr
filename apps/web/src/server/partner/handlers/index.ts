@@ -4,7 +4,7 @@ import { lookupPatients, verifyPatient } from './patients.ts'
 import { queueCount } from './queue.ts'
 
 /**
- * The handler table (ADR 37). The mapped type ties it to the registry both
+ * The handler table (ADR 38). The mapped type ties it to the registry both
  * ways: an operation registered without a handler, or a handler for an id
  * the registry does not know, fails typecheck rather than 404ing in
  * production.

@@ -1,8 +1,13 @@
+import { apiKey } from '@better-auth/api-key'
 import {
+  API_KEY_DEFAULT_TTL_DAYS,
+  API_KEY_MAX_TTL_DAYS,
+  API_KEY_PREFIX,
   betterAuthSecretSchema,
   betterAuthUrlSchema,
   isLegacyCredential,
   LOCATION_SLUGS,
+  PARTNER_RATE_LIMITS,
   staffRoleSchema,
 } from '@fastehr/contracts'
 import { createAuthAdapter } from '@fastehr/db'
@@ -88,6 +93,29 @@ export function createAuthOptions(env: { secret: string; baseURL: string }): Bet
       },
     },
 
+    /**
+     * Partner API keys (ADR 36): Better Auth's `apiKey` plugin owns the key
+     * rows, the hashing, the expiry, and the per-key request counter. The
+     * partner chain verifies a bearer token through `verifyApiKey`; a key
+     * never becomes a session (`enableSessionForAPIKeys` stays off), so it
+     * cannot reach `/api/trpc` or a page, and `actorFromHeaders` refuses the
+     * `integration` role besides.
+     */
+    plugins: [
+      apiKey({
+        enableMetadata: true,
+        defaultPrefix: API_KEY_PREFIX,
+        startingCharactersConfig: { charactersLength: 14 },
+        keyExpiration: {
+          defaultExpiresIn: API_KEY_DEFAULT_TTL_DAYS * 24 * 60 * 60 * 1000,
+          maxExpiresIn: API_KEY_MAX_TTL_DAYS,
+        },
+        rateLimit: { enabled: true, timeWindow: 60 * 1000, maxRequests: PARTNER_RATE_LIMITS.perKeyPerMinute },
+        // The Prisma model is `ApiKey` (client property `apiKey`, table `api_keys`).
+        schema: { apikey: { modelName: 'apiKey' } },
+      }),
+    ],
+
     session: {
       // Provisional until the session-policy question in
       // docs/auth-and-rbac-proposal.md is decided: 12 hours covers a clinic
@@ -159,6 +187,18 @@ export function createAuthOptions(env: { secret: string; baseURL: string }): Bet
   }
 }
 
+/**
+ * The api key plugin's endpoints, for the partner chain and the issuance
+ * script. `getAuth()` is typed on the option interface, so plugin endpoints
+ * are not on `api`'s type; this is the one cast that names them, against the
+ * plugin's own declared endpoint types.
+ */
+export type ApiKeyEndpoints = ReturnType<typeof apiKey>['endpoints']
+
+export function apiKeyEndpoints(): ApiKeyEndpoints {
+  return getAuth().api as unknown as ApiKeyEndpoints
+}
+
 export function getAuth(): ReturnType<typeof betterAuth> {
   if (instance !== undefined) return instance
 
@@ -205,6 +245,10 @@ export async function actorFromHeaders(headers: Headers): Promise<Actor | null> 
 
   const role = staffRoleSchema.safeParse(user.role)
   if (!role.success) return null
+  // An integration principal (ADR 36) is a key's owner, not a person: it has
+  // no surface and no session of its own, and a session claiming the role is
+  // refused outright rather than admitted with nothing to reach.
+  if (role.data === 'integration') return null
 
   return {
     id: user.id,

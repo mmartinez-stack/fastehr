@@ -1,6 +1,6 @@
 import type { WaitQueueRow } from '@fastehr/contracts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ADA, GRACE, partnerHarness, testClient } from '../../test-support/partner-fakes.ts'
+import { ADA, GRACE, partnerHarness, testKey } from '../../test-support/partner-fakes.ts'
 
 beforeEach(() => {
   vi.spyOn(console, 'info').mockImplementation(() => {})
@@ -49,7 +49,7 @@ describe('queue count', () => {
     expect((await harness.send({ path: '/queue/count?location=kanoga' })).body).toMatchObject({ location: 'kanoga', waiting: 0 })
     expect((await harness.send({ path: '/queue/count?location=montebello' })).status).toBe(404)
 
-    const restricted = partnerHarness({ waiting: ROWS, clients: [testClient({ locationIds: ['kanoga'] })] })
+    const restricted = partnerHarness({ waiting: ROWS, keys: [testKey({ metadata: { locationIds: ['kanoga'] } })] })
     expect((await restricted.send({ path: '/queue/count?location=sylmar' })).status).toBe(404)
     expect((await restricted.send({ path: '/queue/count' })).body).toMatchObject({ byLocation: [{ location: 'kanoga', waiting: 0 }] })
   })

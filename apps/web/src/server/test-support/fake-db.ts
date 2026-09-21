@@ -44,7 +44,7 @@ export function fakeDb(overrides: Partial<Db> = {}): Db {
     locations: stubRepository('locations'),
     queue: stubRepository('queue'),
     audit: recordingAuditRepository(),
-    apiClients: stubRepository('apiClients'),
+    integrations: stubRepository('integrations'),
     verifications: stubRepository('verifications'),
     ...overrides,
   }

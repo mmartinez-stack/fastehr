@@ -197,7 +197,7 @@ function fakeDb(overrides: Partial<Db['intakes']> = {}): Db {
       listWaiting: async () => [],
     },
     audit: recordingAuditRepository(),
-    apiClients: stubRepository('apiClients'),
+    integrations: stubRepository('integrations'),
     verifications: stubRepository('verifications'),
   }
 }

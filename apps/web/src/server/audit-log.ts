@@ -2,7 +2,7 @@ import type { PhiAuditEvent } from '@fastehr/contracts'
 import type { Db } from '@fastehr/db'
 
 /**
- * The PHI audit sink (ADR 10, ADR 36).
+ * The PHI audit sink (ADR 10, ADR 37).
  *
  * Two producers hand events here, the tRPC middleware and the partner REST
  * chain, and every event goes to two places:

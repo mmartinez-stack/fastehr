@@ -1,26 +1,23 @@
-import { createHash } from 'node:crypto'
-import type {
-  ApiClient,
-  Location,
-  PatientLookupRow,
-  PatientVerification,
-  WaitQueueRow,
-} from '@fastehr/contracts'
-import { formatApiKey } from '@fastehr/contracts'
-import type { ApiClientRepository, Db, LocationRepository, PatientRepository, QueueRepository, VerificationRepository } from '@fastehr/db'
+import type { ApiKeyMetadata, Location, PartnerScope, PatientLookupRow, PatientVerification, WaitQueueRow } from '@fastehr/contracts'
+import { scopesToPermissions } from '@fastehr/contracts'
+import type { Db, IntegrationRepository, LocationRepository, PatientRepository, QueueRepository, VerificationRepository } from '@fastehr/db'
 import { handlePartnerRequest, type PartnerHostOptions } from '../partner/handle.ts'
+import type { KeyVerifier } from '../partner/keys.ts'
 import { createRateLimiter } from '../partner/rate-limit.ts'
 import { fakeDb, recordingAuditRepository, stubRepository, type RecordingAuditRepository } from './fake-db.ts'
 
 /**
- * Fakes for the partner chain: a key the fake client repository accepts,
- * in-memory verifications and attempts, a few invented patients, and a
- * request builder. No database, no environment, no Next.
+ * Fakes for the partner chain: a key verifier that stands in for Better
+ * Auth's plugin, an integration principal, in-memory verifications and
+ * attempts, a few invented patients, and a request builder. No database,
+ * no environment, no Next.
  */
 
-export const TEST_SECRET = 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG'
-export const TEST_KEY_ID = 'TESTKEY1'
-export const OTHER_KEY_ID = 'OTHERKEY'
+export const INTEGRATION_ID = 'integration-1'
+export const INACTIVE_INTEGRATION_ID = 'integration-off'
+export const TEST_KEY_ID = 'key-1'
+export const TEST_TOKEN = 'fehr_dev_testtoken0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN'
+export const OTHER_TOKEN = 'fehr_dev_othertoken123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN'
 
 export const ADA: PatientLookupRow = {
   patientId: '3f1a7a1e-8c9b-4d2a-9f10-6b2c5d4e7a81',
@@ -41,48 +38,70 @@ export const GRACE: PatientLookupRow = {
 
 export const NOW = new Date('2026-09-17T12:00:00.000Z')
 
-export function testClient(overrides: Partial<ApiClient> = {}): ApiClient {
+/** A key as the fake verifier knows it: the token it answers to, and what the plugin would return. */
+export interface TestKey {
+  token: string
+  id: string
+  referenceId: string
+  name: string
+  scopes: readonly PartnerScope[]
+  metadata: Partial<ApiKeyMetadata> | null
+  expiresAt: Date | null
+  enabled: boolean
+  /** The key row's own counter is exhausted: the plugin answers rate limited. */
+  rateLimited: boolean
+}
+
+export function testKey(overrides: Partial<TestKey> = {}): TestKey {
   return {
-    id: 'client-1',
+    token: TEST_TOKEN,
+    id: TEST_KEY_ID,
+    referenceId: INTEGRATION_ID,
     name: 'Voice assistant',
-    vendor: null,
-    environment: 'dev',
-    keyId: TEST_KEY_ID,
     scopes: ['patients:lookup', 'patients:verify', 'queue:read'],
-    allowedIps: [],
-    locationIds: [],
-    status: 'active',
-    expiresAt: '2027-01-01T00:00:00.000Z',
-    lastUsedAt: null,
-    baaSignedAt: null,
-    issuedBy: 'ops@example.com',
-    createdAt: '2026-09-01T00:00:00.000Z',
-    revokedAt: null,
+    metadata: {},
+    expiresAt: new Date('2027-01-01T00:00:00.000Z'),
+    enabled: true,
+    rateLimited: false,
     ...overrides,
   }
 }
 
-export function testKey(keyId: string = TEST_KEY_ID, secret: string = TEST_SECRET): string {
-  return formatApiKey({ environment: 'dev', keyId, secret })
+/** Answers exactly the keys given, the way the plugin would: by token, honouring expiry, `enabled`, and the counter. */
+export function fakeKeys(keys: readonly TestKey[] = [testKey()], clock: () => Date = () => NOW): KeyVerifier {
+  return {
+    async verify(token) {
+      const key = keys.find((candidate) => candidate.token === token)
+      if (key === undefined || !key.enabled) return { status: 'invalid' }
+      if (key.expiresAt !== null && key.expiresAt.getTime() <= clock().getTime()) return { status: 'invalid' }
+      if (key.rateLimited) return { status: 'rate_limited' }
+      return {
+        status: 'valid',
+        key: {
+          id: key.id,
+          referenceId: key.referenceId,
+          name: key.name,
+          permissions: scopesToPermissions(key.scopes),
+          metadata: key.metadata === null ? null : { environment: 'dev', issuedBy: 'ops@example.com', ...key.metadata },
+        },
+      }
+    },
+  }
 }
 
-const hash = (value: string) => createHash('sha256').update(value).digest('hex')
-
-/** Accepts exactly the clients given, by key id and the test secret. */
-export function fakeApiClients(clients: readonly ApiClient[] = [testClient()]): ApiClientRepository {
+/** One active principal and one switched off; anything else is unknown. */
+export function fakeIntegrations(): IntegrationRepository {
   return {
-    ...stubRepository<ApiClientRepository>('apiClients'),
-    async findByCredential({ keyId, secretHash }) {
-      const client = clients.find((candidate) => candidate.keyId === keyId && candidate.status === 'active')
-      return client !== undefined && secretHash === hash(TEST_SECRET) ? client : null
+    ...stubRepository<IntegrationRepository>('integrations'),
+    async findActive(id) {
+      return id === INTEGRATION_ID ? { id, name: 'Voice assistant' } : null
     },
-    async touchLastUsed() {},
   }
 }
 
 export interface FakeVerifications extends VerificationRepository {
   readonly rows: Array<PatientVerification & { tokenHash: string }>
-  readonly attempts: Array<{ apiClientId: string; patientId: string; succeeded: boolean; at: Date }>
+  readonly attempts: Array<{ integrationId: string; patientId: string; succeeded: boolean; at: Date }>
 }
 
 export function fakeVerifications(clock: () => Date = () => NOW): FakeVerifications {
@@ -94,7 +113,7 @@ export function fakeVerifications(clock: () => Date = () => NOW): FakeVerificati
     async create(input) {
       const row = {
         id: `verification-${rows.length + 1}`,
-        apiClientId: input.apiClientId,
+        integrationId: input.integrationId,
         patientId: input.patientId,
         method: input.method,
         expiresAt: input.expiresAt.toISOString(),
@@ -123,17 +142,17 @@ export function fakeVerifications(clock: () => Date = () => NOW): FakeVerificati
     async recordAttempt(input) {
       attempts.push({ ...input, at: clock() })
     },
-    async countFailedAttempts({ apiClientId, patientId, since }) {
+    async countFailedAttempts({ integrationId, patientId, since }) {
       return attempts.filter(
         (attempt) =>
-          attempt.apiClientId === apiClientId &&
+          attempt.integrationId === integrationId &&
           !attempt.succeeded &&
           (patientId === undefined || attempt.patientId === patientId) &&
           attempt.at.getTime() >= since.getTime(),
       ).length
     },
-    async lastSuccessAt({ apiClientId, patientId }) {
-      const successes = attempts.filter((a) => a.apiClientId === apiClientId && a.patientId === patientId && a.succeeded)
+    async lastSuccessAt({ integrationId, patientId }) {
+      const successes = attempts.filter((a) => a.integrationId === integrationId && a.patientId === patientId && a.succeeded)
       return successes.at(-1)?.at ?? null
     },
   }
@@ -182,6 +201,7 @@ export interface PartnerHarness {
   db: Db
   audit: RecordingAuditRepository
   verifications: FakeVerifications
+  keys: KeyVerifier
   options: PartnerHostOptions
   /** Sends a request through the whole chain. */
   send(input: {
@@ -196,7 +216,7 @@ export interface PartnerHarness {
 }
 
 export function partnerHarness(overrides: {
-  clients?: readonly ApiClient[]
+  keys?: readonly TestKey[]
   patients?: readonly PatientLookupRow[]
   waiting?: readonly WaitQueueRow[]
   now?: () => Date
@@ -207,9 +227,10 @@ export function partnerHarness(overrides: {
   const now = overrides.now ?? (() => NOW)
   const audit = recordingAuditRepository()
   const verifications = fakeVerifications(now)
+  const keys = fakeKeys(overrides.keys, now)
   const db = fakeDb({
     audit,
-    apiClients: fakeApiClients(overrides.clients),
+    integrations: fakeIntegrations(),
     verifications,
     patients: fakePatients(overrides.patients),
     locations: fakeLocations(),
@@ -218,6 +239,7 @@ export function partnerHarness(overrides: {
   const options: PartnerHostOptions = {
     db,
     now,
+    keys,
     rateLimiter: createRateLimiter(),
     enabled: overrides.enabled ?? true,
     env: overrides.env ?? {},
@@ -227,8 +249,9 @@ export function partnerHarness(overrides: {
     db,
     audit,
     verifications,
+    keys,
     options,
-    async send({ method, path, key = testKey(), body, headers = {}, rawBody, contentType }) {
+    async send({ method, path, key = TEST_TOKEN, body, headers = {}, rawBody, contentType }) {
       const requestHeaders: Record<string, string> = { ...headers }
       if (key !== null) requestHeaders.authorization = `Bearer ${key}`
       if (overrides.ip !== null) requestHeaders['x-forwarded-for'] = overrides.ip ?? '203.0.113.5'

@@ -117,7 +117,7 @@ export function toCalendarDate(value: Date): string {
   return value.toISOString().slice(0, 10)
 }
 
-/** The partner lookup row (ADR 37): identity and both verification factors, nothing else. */
+/** The partner lookup row (ADR 38): identity and both verification factors, nothing else. */
 export function toPatientLookupRow(row: PatientRow): PatientLookupRow {
   return patientLookupRowSchema.parse({
     patientId: row.id,

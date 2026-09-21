@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /**
- * The PHI access audit event (ADR 10, ADR 36).
+ * The PHI access audit event (ADR 10, ADR 37).
  *
  * One record per attempt to reach protected health information, whether the
  * attempt was allowed, refused, or failed. Two producers write it, the tRPC
@@ -26,8 +26,8 @@ export const AUDIT_TRANSPORTS = ['trpc', 'rest', 'cli'] as const
 export const auditTransportSchema = z.enum(AUDIT_TRANSPORTS)
 export type AuditTransport = z.infer<typeof auditTransportSchema>
 
-/** Who was asking: a staff session, a partner API client, or nobody identifiable. */
-export const AUDIT_ACTOR_KINDS = ['staff', 'api_client', 'anonymous'] as const
+/** Who was asking: a staff session, an integration holding a partner key, or nobody identifiable. */
+export const AUDIT_ACTOR_KINDS = ['staff', 'integration', 'anonymous'] as const
 export const auditActorKindSchema = z.enum(AUDIT_ACTOR_KINDS)
 export type AuditActorKind = z.infer<typeof auditActorKindSchema>
 
@@ -50,9 +50,9 @@ export const AUDIT_USER_AGENT_MAX_LENGTH = 256
 export const phiAuditEventSchema = z.object({
   transport: auditTransportSchema,
   actorKind: auditActorKindSchema,
-  /** Staff user id or api client id; null when anonymous. */
+  /** Staff user id, or the integration principal's user id; null when anonymous. */
   actorId: z.string().min(1).nullable(),
-  /** The partner key's public id (never its hash); null for staff and anonymous calls. */
+  /** The partner key row's id (never the key, never its hash); null for staff and anonymous calls. */
   apiKeyId: z.string().min(1).nullable().optional(),
   /** The verification that authorised a patient-specific partner call, when one did. */
   verificationId: z.string().min(1).nullable().optional(),

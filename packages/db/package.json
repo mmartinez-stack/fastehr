@@ -17,8 +17,7 @@
     "issue-temp-password": "node scripts/issue-temp-password.ts",
     "migrate-users": "node scripts/migrate-users.ts",
     "migrate-patients": "node scripts/migrate-patients.ts",
-    "migrate-visits": "node scripts/migrate-visits.ts",
-    "partner-api-keys": "node scripts/partner-api-keys.ts"
+    "migrate-visits": "node scripts/migrate-visits.ts"
   },
   "dependencies": {
     "@fastehr/contracts": "workspace:*",

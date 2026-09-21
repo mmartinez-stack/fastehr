@@ -1,26 +1,29 @@
 import type { LocationSlug, PartnerScope } from '@fastehr/contracts'
 import { db as defaultDb, type Db } from '@fastehr/db'
 import { createAuditSink, type AuditSink } from '../audit-log.ts'
+import { betterAuthKeyVerifier, type KeyVerifier } from './keys.ts'
 import { createRateLimiter, type RateLimiter } from './rate-limit.ts'
 
 /**
- * Request-scoped context for the partner API (ADR 37).
+ * Request-scoped context for the partner API (ADR 38).
  *
  * Deliberately its own type rather than the tRPC `Context`: a partner call
  * must never be able to satisfy `requireRole` or reach a staff procedure, so
  * the actor shape does not overlap. What is shared is what should be: the
- * repositories (`Db`) and the audit sink (ADR 36), so the two chains write
+ * repositories (`Db`) and the audit sink (ADR 37), so the two chains write
  * one trail through one seam.
  */
 
-/** An authenticated partner: the client row, minus anything secret. */
+/** An authenticated partner: the integration principal and the key it presented, minus anything secret. */
 export interface PartnerActor {
-  kind: 'api_client'
-  clientId: string
+  kind: 'integration'
+  /** The integration principal's user id (ADR 36): the audit trail's `actorId`. */
+  integrationId: string
+  /** The key row's id: the audit trail's `apiKeyId`. */
   keyId: string
   name: string
   scopes: readonly PartnerScope[]
-  /** Empty means every active clinic; otherwise the key sees only these (ADR 37: a boundary for a key). */
+  /** Empty means every active clinic; otherwise the key sees only these (ADR 38: a boundary for a key). */
   locations: readonly LocationSlug[]
 }
 
@@ -37,6 +40,8 @@ export interface PartnerContext {
   actor: PartnerActor | null
   db: Db
   audit: AuditSink
+  /** The key verifier (ADR 36): Better Auth's plugin, or a fake in a test. */
+  keys: KeyVerifier
   requestId: string
   ipAddress: string | null
   userAgent: string | null
@@ -46,7 +51,7 @@ export interface PartnerContext {
   auditScope: AuditScope
 }
 
-/** One limiter per process: the buckets are what a single container can offer (ADR 37). */
+/** One limiter per process: the buckets are what a single container can offer (ADR 38). */
 let sharedRateLimiter: RateLimiter | undefined
 
 export function createPartnerContext({
@@ -57,6 +62,7 @@ export function createPartnerContext({
   audit = createAuditSink(db.audit),
   now = () => new Date(),
   rateLimiter = (sharedRateLimiter ??= createRateLimiter()),
+  keys = betterAuthKeyVerifier(),
 }: {
   requestId: string
   ipAddress: string | null
@@ -65,6 +71,7 @@ export function createPartnerContext({
   audit?: AuditSink
   now?: () => Date
   rateLimiter?: RateLimiter
+  keys?: KeyVerifier
 }): PartnerContext {
-  return { actor: null, db, audit, requestId, ipAddress, userAgent, now, rateLimiter, auditScope: {} }
+  return { actor: null, db, audit, keys, requestId, ipAddress, userAgent, now, rateLimiter, auditScope: {} }
 }

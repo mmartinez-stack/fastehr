@@ -1,4 +1,4 @@
-import { roleHasAccess, type RoleSurface } from '@fastehr/contracts'
+import { ROLE_SURFACES, roleHasAccess, type RoleSurface } from '@fastehr/contracts'
 import { TRPCError } from '@trpc/server'
 import { t } from '../trpc.ts'
 
@@ -11,12 +11,15 @@ export const requireAuth = t.middleware(({ ctx, next }) => {
 })
 
 /**
- * Role check (RBAC), coarsest form: the actor carries at least one role. The
- * per-surface checks below are the real matrix.
+ * Role check (RBAC), coarsest form: the actor carries at least one role that
+ * reaches some surface. The per-surface checks below are the real matrix.
+ * A role with no surface at all (`integration`, ADR 36) is refused here, so
+ * a session-only procedure is not the one door such a role could open.
  */
 export const requireRole = t.middleware(({ ctx, next }) => {
-  if (ctx.actor === null) throw new TRPCError({ code: 'UNAUTHORIZED' })
-  if (ctx.actor.roles.length === 0) throw new TRPCError({ code: 'FORBIDDEN' })
+  const actor = ctx.actor
+  if (actor === null) throw new TRPCError({ code: 'UNAUTHORIZED' })
+  if (!ROLE_SURFACES.some((surface) => hasSurface(actor, surface))) throw new TRPCError({ code: 'FORBIDDEN' })
   return next()
 })
 

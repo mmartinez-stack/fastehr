@@ -3,7 +3,7 @@ import { getPrismaClient } from '../client.ts'
 import { db } from '../index.ts'
 
 /**
- * The audit trail against real PostgreSQL (ADR 36): a row lands with the
+ * The audit trail against real PostgreSQL (ADR 37): a row lands with the
  * enum values, and the table refuses to be rewritten.
  *
  * There is no TRUNCATE in `beforeEach` on purpose: the trigger under test
@@ -22,7 +22,7 @@ describe('audit repository', () => {
   it('appends one row per event', async () => {
     await db.audit.record({
       transport: 'rest',
-      actorKind: 'api_client',
+      actorKind: 'integration',
       actorId: 'client-1',
       apiKeyId: 'ABCDEFGH',
       action: 'patients.verify',
@@ -42,7 +42,7 @@ describe('audit repository', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({
       transport: 'rest',
-      actorKind: 'api_client',
+      actorKind: 'integration',
       actorId: 'client-1',
       apiKeyId: 'ABCDEFGH',
       outcome: 'denied',

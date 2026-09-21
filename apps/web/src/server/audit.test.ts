@@ -10,7 +10,7 @@ import { fakeDb, recordingAuditRepository } from './test-support/fake-db.ts'
  * function of its context (ADR 9): the security behaviour
  * that most needs testing is also the cheapest thing in the repo to test.
  *
- * Two sinks (ADR 36): the stdout line, read back through a spy, and the
+ * Two sinks (ADR 37): the stdout line, read back through a spy, and the
  * audit repository, faked here. Both must carry the same event.
  */
 const repository = recordingAuditRepository()
@@ -40,7 +40,7 @@ afterEach(() => {
 
 describe('PHI audit', () => {
   it('records an allowed access, in the log and in the table', async () => {
-    await expect(callWith({ id: 'user-1', roles: ['clinician'], locations: ['sylmar'] })).resolves.toBe('Lovelace, Ada')
+    await expect(callWith({ id: 'user-1', roles: ['provider'], locations: ['sylmar'] })).resolves.toBe('Lovelace, Ada')
     await sink.flush()
 
     const expected = expect.objectContaining({
@@ -87,7 +87,7 @@ describe('PHI audit', () => {
   })
 
   it('never records the procedure input, in either sink', async () => {
-    await callWith({ id: 'user-1', roles: ['clinician'], locations: ['sylmar'] })
+    await callWith({ id: 'user-1', roles: ['provider'], locations: ['sylmar'] })
     await callWith(null).catch(() => {})
     await sink.flush()
 
@@ -105,7 +105,7 @@ describe('PHI audit', () => {
       },
     })
     const caller = appRouter.createCaller(
-      createContext({ actor: { id: 'user-1', roles: ['clinician'], locations: ['sylmar'] }, db: fakeDb(), audit: failing }),
+      createContext({ actor: { id: 'user-1', roles: ['provider'], locations: ['sylmar'] }, db: fakeDb(), audit: failing }),
     )
 
     await expect(caller.patientDisplayName({ firstName: 'Ada', lastName: 'Lovelace' })).resolves.toBe('Lovelace, Ada')

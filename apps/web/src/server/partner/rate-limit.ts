@@ -1,5 +1,5 @@
 /**
- * Token buckets in process memory (ADR 37).
+ * Token buckets in process memory (ADR 38).
  *
  * One bucket per key: a partner client, a client and operation class, a
  * source address. Each has a capacity and a refill rate; a request takes

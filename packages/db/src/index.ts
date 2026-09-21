@@ -1,7 +1,7 @@
 import { getPrismaClient, type PrismaClient } from './client.ts'
-import { createApiClientRepository, type ApiClientRepository } from './repositories/api-client.ts'
 import { createAuditRepository, type AuditRepository } from './repositories/audit.ts'
 import { createIntakeRepository, type IntakeRepository } from './repositories/intake.ts'
+import { createIntegrationRepository, type IntegrationRepository } from './repositories/integration.ts'
 import { createLocationRepository, type LocationRepository } from './repositories/location.ts'
 import { createPatientRepository, type PatientRepository } from './repositories/patient.ts'
 import { createQueueRepository, type QueueRepository } from './repositories/queue.ts'
@@ -35,11 +35,11 @@ export interface Db {
   reviews: ReviewRepository
   locations: LocationRepository
   queue: QueueRepository
-  /** The PHI audit trail (ADR 36): append-only, `record` is its only method. */
+  /** The PHI audit trail (ADR 37): append-only, `record` is its only method. */
   audit: AuditRepository
-  /** Partner API clients and their keys (ADR 37). */
-  apiClients: ApiClientRepository
-  /** Patient verification tokens and the attempt counter behind the lockout (ADR 37). */
+  /** Integration principals and what the application reads of their keys (ADR 36). */
+  integrations: IntegrationRepository
+  /** Patient verification tokens and the attempt counter behind the lockout (ADR 38). */
   verifications: VerificationRepository
 }
 
@@ -64,7 +64,7 @@ export function createDb(getClient: () => PrismaClient = getPrismaClient): Db {
     locations: createLocationRepository(getClient),
     queue: createQueueRepository(getClient),
     audit: createAuditRepository(getClient),
-    apiClients: createApiClientRepository(getClient),
+    integrations: createIntegrationRepository(getClient),
     verifications: createVerificationRepository(getClient),
   }
 }
@@ -75,9 +75,9 @@ export const db: Db = createDb()
 export { createAuthAdapter } from './auth-adapter.ts'
 export { StaffUserEmailTakenError, StaffUserReferencedError }
 export type {
-  ApiClientRepository,
   AuditRepository,
   IntakeRepository,
+  IntegrationRepository,
   LocationRepository,
   PatientRepository,
   QueueRepository,

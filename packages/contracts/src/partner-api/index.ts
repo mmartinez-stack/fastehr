@@ -9,19 +9,8 @@ export {
   type PartnerErrorCode,
   type PartnerError,
 } from './errors.ts'
+export { API_KEY_ENVIRONMENTS, API_KEY_PREFIX, API_KEY_MAX_LENGTH, apiKeyPrefix, bearerToken, type ApiKeyEnvironment } from './api-key.ts'
 export {
-  API_KEY_ENVIRONMENTS,
-  API_KEY_ID_LENGTH,
-  API_KEY_ID_ALPHABET,
-  formatApiKey,
-  parseApiKey,
-  bearerToken,
-  type ApiKeyEnvironment,
-  type ParsedApiKey,
-} from './api-key.ts'
-export {
-  API_CLIENT_STATUSES,
-  apiClientStatusSchema,
   API_KEY_DEFAULT_TTL_DAYS,
   API_KEY_MAX_TTL_DAYS,
   PATIENT_VERIFICATION_TTL_MINUTES,
@@ -29,17 +18,23 @@ export {
   VERIFICATION_LOCKOUT,
   PARTNER_RATE_LIMITS,
   ipAllowlistEntrySchema,
-  apiClientSchema,
-  createApiClientInput,
+  apiKeyMetadataSchema,
+  scopesToPermissions,
+  permissionsToScopes,
+  integrationKeySchema,
+  integrationSchema,
+  issueIntegrationKeyInput,
   PATIENT_VERIFICATION_METHODS,
   patientVerificationMethodSchema,
   patientVerificationSchema,
-  type ApiClientStatus,
-  type ApiClient,
-  type CreateApiClientInput,
+  type ApiKeyMetadata,
+  type ApiKeyPermissions,
+  type IntegrationKey,
+  type Integration,
+  type IssueIntegrationKeyInput,
   type PatientVerificationMethod,
   type PatientVerification,
-} from './api-client.ts'
+} from './keys.ts'
 export {
   PATIENT_LOOKUP_LIMIT,
   partnerPatientLookupInput,

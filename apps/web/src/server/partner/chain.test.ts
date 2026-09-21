@@ -1,11 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ADA, LOOKUP_BODY, OTHER_KEY_ID, partnerHarness, testClient, testKey, TEST_SECRET } from '../test-support/partner-fakes.ts'
+import {
+  ADA,
+  INACTIVE_INTEGRATION_ID,
+  LOOKUP_BODY,
+  OTHER_TOKEN,
+  partnerHarness,
+  testKey,
+  TEST_TOKEN,
+} from '../test-support/partner-fakes.ts'
 
 /**
  * The partner chain end to end through `handlePartnerRequest`, with fakes:
  * audit outermost, authentication, scope, rate limit, validation, output
  * shaping, and the transport rules. Every refusal must leave an audit row
- * (ADR 10, ADR 36) and never a word of the request.
+ * (ADR 10, ADR 37) and never a word of the request.
  */
 beforeEach(() => {
   vi.spyOn(console, 'info').mockImplementation(() => {})
@@ -39,40 +47,65 @@ describe('partner chain: authentication', () => {
     ])
   })
 
-  it('refuses a wrong secret, an unknown key id, a malformed key, and an expired key identically', async () => {
-    const harness = partnerHarness({ now: () => new Date('2027-06-01T00:00:00.000Z') })
-    for (const key of [testKey(TEST_SECRET.slice(0, 8), 'x'.repeat(43)), testKey(OTHER_KEY_ID), 'not-a-key', testKey()]) {
+  it('refuses an unknown key, a malformed one, a revoked one, and an expired one identically', async () => {
+    const expired = partnerHarness({ now: () => new Date('2027-06-01T00:00:00.000Z') })
+    const revoked = partnerHarness({ keys: [testKey({ enabled: false })] })
+    for (const [harness, key] of [
+      [expired, OTHER_TOKEN],
+      [expired, 'not-a-key'],
+      [expired, `Bearer ${TEST_TOKEN}`],
+      [revoked, TEST_TOKEN],
+      [expired, TEST_TOKEN],
+    ] as const) {
       const { status, body } = await harness.send({ path: '/patients/lookup', key, body: LOOKUP_BODY })
       expect(status, key).toBe(401)
       expect((body as { error: { code: string } }).error.code).toBe('unauthenticated')
     }
   })
 
+  it('refuses a key whose principal is switched off, and one whose settings no longer parse', async () => {
+    const off = partnerHarness({ keys: [testKey({ referenceId: INACTIVE_INTEGRATION_ID })] })
+    expect((await off.send({ path: '/queue/count' })).status).toBe(401)
+    const unparseable = partnerHarness({ keys: [testKey({ metadata: null })] })
+    expect((await unparseable.send({ path: '/queue/count' })).status).toBe(401)
+    const foreignClinic = partnerHarness({ keys: [testKey({ metadata: { locationIds: ['mars' as never] } })] })
+    expect((await foreignClinic.send({ path: '/queue/count' })).status).toBe(401)
+  })
+
   it('refuses an address outside the allowlist as unauthenticated', async () => {
-    const harness = partnerHarness({ clients: [testClient({ allowedIps: ['198.51.100.0/24'] })] })
+    const harness = partnerHarness({ keys: [testKey({ metadata: { allowedIps: ['198.51.100.0/24'] } })] })
     expect((await harness.send({ path: '/patients/lookup', body: LOOKUP_BODY })).status).toBe(401)
-    const allowed = partnerHarness({ clients: [testClient({ allowedIps: ['203.0.113.0/24'] })] })
+    const allowed = partnerHarness({ keys: [testKey({ metadata: { allowedIps: ['203.0.113.0/24'] } })] })
     expect((await allowed.send({ path: '/patients/lookup', body: LOOKUP_BODY })).status).toBe(200)
+  })
+
+  it('answers 429 when the key row\'s own counter is exhausted, recorded against nobody', async () => {
+    const harness = partnerHarness({ keys: [testKey({ rateLimited: true })] })
+    const { status, body, headers } = await harness.send({ path: '/queue/count' })
+    expect(status).toBe(429)
+    expect((body as { error: { code: string } }).error.code).toBe('rate_limited')
+    expect(headers.get('retry-after')).toBe('60')
+    expect(harness.audit.events[0]).toMatchObject({ actorKind: 'anonymous', outcome: 'denied', code: 'rate_limited' })
   })
 
   it('never accepts a key in the query string', async () => {
     const harness = partnerHarness()
-    const { status } = await harness.send({ path: `/queue/count?api_key=${testKey()}`, key: null })
+    const { status } = await harness.send({ path: `/queue/count?api_key=${TEST_TOKEN}`, key: null })
     expect(status).toBe(401)
   })
 })
 
 describe('partner chain: authorization and limits', () => {
   it('refuses a key without the scope with 403, recorded against the key', async () => {
-    const harness = partnerHarness({ clients: [testClient({ scopes: ['queue:read'] })] })
+    const harness = partnerHarness({ keys: [testKey({ scopes: ['queue:read'] })] })
     const { status, body } = await harness.send({ path: '/patients/lookup', body: LOOKUP_BODY })
 
     expect(status).toBe(403)
     expect((body as { error: { code: string } }).error.code).toBe('forbidden')
     expect(harness.audit.events[0]).toMatchObject({
-      actorKind: 'api_client',
-      actorId: 'client-1',
-      apiKeyId: 'TESTKEY1',
+      actorKind: 'integration',
+      actorId: 'integration-1',
+      apiKeyId: 'key-1',
       outcome: 'denied',
       code: 'forbidden',
     })
@@ -90,15 +123,15 @@ describe('partner chain: authorization and limits', () => {
     expect(harness.audit.events.at(-1)).toMatchObject({ outcome: 'denied', code: 'rate_limited' })
   })
 
-  it('stops asking the database about an address that keeps failing authentication', async () => {
+  it('stops asking the verifier about an address that keeps failing authentication', async () => {
     const harness = partnerHarness()
-    const findByCredential = vi.spyOn(harness.db.apiClients, 'findByCredential')
-    for (let i = 0; i < 30; i += 1) await harness.send({ path: '/queue/count', key: testKey(OTHER_KEY_ID) })
-    const calls = findByCredential.mock.calls.length
+    const verify = vi.spyOn(harness.keys, 'verify')
+    for (let i = 0; i < 30; i += 1) await harness.send({ path: '/queue/count', key: OTHER_TOKEN })
+    const calls = verify.mock.calls.length
     const { status, body } = await harness.send({ path: '/queue/count' })
     expect(status).toBe(429)
     expect((body as { error: { code: string } }).error.code).toBe('rate_limited')
-    expect(findByCredential.mock.calls.length).toBe(calls)
+    expect(verify.mock.calls.length).toBe(calls)
   })
 })
 
