@@ -172,19 +172,15 @@ and so on); the type surface a client compiles against is
    never submitted answers `412`. The row was deleted afterwards.
 6. `sign-out` answers `{"success": true}` and the next call answers `401`.
 
-## Known gap found by this test
+## A temporary password opens a session, not the API
 
-**A temporary password is enough to call the API.** The page guards
-(`apps/web/src/server/guards.ts`) refuse an account whose password change
-is pending with `PASSWORD_CHANGE_REQUIRED`, but the tRPC middleware
-(`apps/web/src/server/middleware/auth.ts`) checks only for a session and a
-role: step 3 above succeeded for `location.listActive` before the password
-was changed. Someone handed a temporary password can therefore read through
-`/api/trpc` what the UI would not show them until they chose a password of
-their own. The fix is one check in `requireAuth` and `requireSurface`
-(refuse with `FORBIDDEN` while `actor.mustChangePassword` is true, except
-for whatever the change-password page itself needs), with a procedure test
-for each. Tracked as a follow-up in `deploy/README.md`.
+The page guards (`apps/web/src/server/guards.ts`) and the tRPC middleware
+(`apps/web/src/server/middleware/auth.ts`) both refuse an account whose
+password change is pending: the pages redirect to `/change-password`, and
+every procedure answers `403` with the message `PASSWORD_CHANGE_REQUIRED`.
+The first run of this test (2026-09-20) found the procedures did not, and
+DIA-77 closed that. `scripts/api-smoke.sh` stops with a hint when the
+account it was given is still on a temporary password.
 
 ## Where to look when something fails
 

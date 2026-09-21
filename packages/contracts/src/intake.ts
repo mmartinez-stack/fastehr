@@ -38,12 +38,12 @@ export const intakeStatusSchema = z.enum(INTAKE_STATUSES)
 export type IntakeStatus = z.infer<typeof intakeStatusSchema>
 
 /**
- * How long a texted link works. Two days: the person is expected to fill
- * the form before the visit the link was sent for, and a shorter window
- * limits how long a leaked link is worth anything (the Sep 13 decision,
- * down from a week).
+ * How long a texted link works. One hour (the Sep 14 decision, down from
+ * two days, and from a week before that): the person fills the form when
+ * the text arrives, and a shorter window limits how long a leaked link is
+ * worth anything. The front desk sends a fresh link when one lapses.
  */
-export const INTAKE_LINK_TTL_HOURS = 48
+export const INTAKE_LINK_TTL_HOURS = 1
 
 /** When the person would like the clinic to call: the legacy intake's three options. */
 export const INTAKE_CONTACT_TIMES = ['morning', 'afternoon', 'evening'] as const
@@ -91,6 +91,8 @@ export const intakeSubmissionSchema = z.object({
         treatedBy: optionalText,
         medicated: z.boolean(),
         medications: optionalText,
+        /** The person's own description of the condition (the Sep 14 review); optional on read. */
+        details: optionalText,
       }),
     )
     .default([]),
@@ -117,8 +119,9 @@ export type IntakeConsent = z.infer<typeof intakeConsentSchema>
 /** The request as the front desk sees it in the queue. The token hash never leaves the database. */
 export const intakeRequestSchema = z.object({
   id: z.uuid(),
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
+  /** What the front desk typed when sending; null when they gave only the phone (the Sep 14 decision). */
+  firstName: z.string().min(1).nullable(),
+  lastName: z.string().min(1).nullable(),
   phone: z.string().regex(/^\d{10}$/),
   language: patientLanguageSchema.nullable(),
   status: intakeStatusSchema,
@@ -155,6 +158,7 @@ export interface SendIntakeResult {
  * token is a capability to *fill in* one form, not to read anything.
  */
 export const intakeInviteSchema = z.object({
+  /** Prefilled from the request; empty when the front desk sent the link with only a phone. */
   firstName: z.string(),
   lastName: z.string(),
   language: patientLanguageSchema.nullable(),
@@ -201,6 +205,14 @@ export const submitIntakeInput = z
     ) {
       ctx.addIssue({ code: 'custom', path: ['consentSignature'] })
     }
+    // A condition answered "Yes" needs the person's description (the Sep 14
+    // review). Only here: the staff form leaves it optional, since a clinician
+    // records the detail in the note.
+    value.conditions.forEach((row, index) => {
+      if (row.present && (row.details === undefined || row.details === '')) {
+        ctx.addIssue({ code: 'custom', path: ['conditions', index, 'details'] })
+      }
+    })
   })
   .transform(composeClinical)
 export type SubmitIntakeInput = z.infer<typeof submitIntakeInput>

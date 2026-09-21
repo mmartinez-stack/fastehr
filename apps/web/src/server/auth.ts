@@ -106,7 +106,8 @@ export function createAuthOptions(env: { secret: string; baseURL: string }): Bet
        * - Change/reset-password exits the temp-credential state. Issuance
        *   (packages/db/scripts/issue-temp-password.ts) sets
        *   `mustChangePassword`; proving a new password here clears it, and
-       *   guards refuse the account for everything else in between.
+       *   until then the page guards redirect the account and the tRPC
+       *   chain refuses it (DIA-77).
        */
       after: createAuthMiddleware(async (ctx) => {
         if (ctx.context.returned instanceof APIError) return

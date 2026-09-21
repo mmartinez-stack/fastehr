@@ -9,6 +9,7 @@ import {
   CircleAlertIcon,
   ClipboardPlusIcon,
   FileTextIcon,
+  HeartPulseIcon,
   HouseIcon,
   MessageSquareIcon,
   MessagesSquareIcon,
@@ -30,6 +31,7 @@ import { LanguageTag, PatientStatusBadge } from "@/components/status-badges"
 import { WaiversColumn } from "@/features/consents/waivers-column"
 import { formatHeight } from "@/features/patients/height"
 import { ROLE_LABEL } from "@/lib/staff-role-label"
+import { cn } from "@/lib/utils"
 import {
   ageFromDob,
   bmi,
@@ -47,12 +49,15 @@ import { VisitRecords, type CrossComment } from "./visit-records"
 import { WeightChart } from "./weight-chart"
 
 /**
- * The patient record, split by role (the Aug 7 sync) and laid out per the
- * Sep 7 review of the provider's view:
+ * The patient record, split by role (the Aug 7 sync), laid out per the
+ * Sep 7 review of the provider's view and tightened per the Sep 14 review:
  *
- * - The patient information sits top right, the current medication and the
- *   weight bar chart beneath it, and the column is fixed so the provider
- *   never scrolls to find them. Visit records take the left, 60/40.
+ * - One box across the top, split in half: the patient information on the
+ *   left, the medical history on the right with its own lines for
+ *   conditions and drug allergies and the free text beneath them (the Sep
+ *   14 review). The current medication and the weight bar chart keep their
+ *   place in the right column, fixed, so the provider never scrolls to find
+ *   them. Visit records take the left, 60/40.
  * - Each fact is shown once (the 2026-09-13 review): age, date of birth,
  *   height, office, weight, and BMI on the patient card; medication on its
  *   own card; the visits as records, with no second table.
@@ -170,6 +175,14 @@ export function PatientDetail({
         proportional rather than a fixed side width so the chart grows with
         the screen instead of the text.
       */}
+      <PatientSummary
+        patient={patient}
+        age={age}
+        currentWeight={clinical ? currentWeight : null}
+        currentBmi={clinical ? currentBmi : null}
+        showHistory={clinical}
+      />
+
       <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="flex min-w-0 flex-col gap-6">
           {composing && (
@@ -184,8 +197,6 @@ export function PatientDetail({
               }}
             />
           )}
-
-          {clinical && <MedicalHistoryNotes initial={patient.medsHistory} />}
 
           {/* One strip for every section a role may see; each fact lives in one tab. */}
           <Tabs defaultValue={clinical ? "records" : "administrative"}>
@@ -212,6 +223,8 @@ export function PatientDetail({
                     visits={clinicalVisits}
                     comments={crossComments("provider")}
                     currentUser={currentUser}
+                    heightIn={patient.heightIn}
+                    providerViewDefault={!clerical}
                   />
                 )}
               </TabsContent>
@@ -223,6 +236,7 @@ export function PatientDetail({
                   visits={administrativeVisits}
                   comments={crossComments("administrative")}
                   currentUser={currentUser}
+                  heightIn={patient.heightIn}
                 />
               </TabsContent>
             )}
@@ -245,39 +259,6 @@ export function PatientDetail({
         </div>
 
         <aside className="flex flex-col gap-4 xl:sticky xl:top-20 xl:self-start">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <StethoscopeIcon className="size-4 text-primary" />
-                Patient information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-              <Term>Gender</Term>
-              <Detail>{patient.gender}</Detail>
-              <Term>Age</Term>
-              <Detail>{age} yrs</Detail>
-              <Term>DOB</Term>
-              <Detail>{fmtDateLong(patient.dob)}</Detail>
-              <Term>Height</Term>
-              <Detail>{formatHeight(patient.heightIn)}</Detail>
-              {clinical && (
-                <>
-                  <Term>Weight</Term>
-                  <Detail>{currentWeight === null ? "-" : `${currentWeight} lbs`}</Detail>
-                  <Term>BMI</Term>
-                  <Detail>{currentBmi === null || currentBmi === 0 ? "-" : currentBmi}</Detail>
-                </>
-              )}
-              <Term>Office</Term>
-              <Detail>{patient.office}</Detail>
-              <Term>Program</Term>
-              <Detail>{patient.program ?? "-"}</Detail>
-              <Term>Last visit</Term>
-              <Detail>{fmtDateLong(patient.lastVisit)}</Detail>
-            </CardContent>
-          </Card>
-
           {clinical && (
             <Card>
               <CardHeader>
@@ -431,13 +412,94 @@ function AtHomeCard({ patient }: { patient: Patient }) {
   )
 }
 
+/**
+ * The top box, split in half (the Sep 14 review): the patient information
+ * on the left, the medical history on the right with a line for the
+ * conditions and a line for the drug allergies above the provider's free
+ * text. The header's weight and BMI are the current values; each clinical
+ * note carries its own visit's pair.
+ */
+function PatientSummary({
+  patient,
+  age,
+  currentWeight,
+  currentBmi,
+  showHistory,
+}: {
+  patient: Patient
+  age: number
+  currentWeight: number | null
+  currentBmi: number | null
+  showHistory: boolean
+}) {
+  return (
+    <Card className="mt-6">
+      <CardContent className={cn("grid gap-6 pt-6", showHistory && "md:grid-cols-2")}>
+        <section className="flex flex-col gap-3">
+          <h2 className="flex items-center gap-2 text-base font-semibold">
+            <StethoscopeIcon className="size-4 text-primary" />
+            Patient information
+          </h2>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+            <Term>Gender</Term>
+            <Detail>{patient.gender}</Detail>
+            <Term>Age</Term>
+            <Detail>{age} yrs</Detail>
+            <Term>DOB</Term>
+            <Detail>{fmtDateLong(patient.dob)}</Detail>
+            <Term>Height</Term>
+            <Detail>{formatHeight(patient.heightIn)}</Detail>
+            {showHistory && (
+              <>
+                <Term>Weight</Term>
+                <Detail>{currentWeight === null ? "-" : `${currentWeight} lbs`}</Detail>
+                <Term>BMI</Term>
+                <Detail>{currentBmi === null || currentBmi === 0 ? "-" : currentBmi}</Detail>
+              </>
+            )}
+            <Term>Office</Term>
+            <Detail>{patient.office}</Detail>
+            <Term>Program</Term>
+            <Detail>{patient.program ?? "-"}</Detail>
+            <Term>Last visit</Term>
+            <Detail>{fmtDateLong(patient.lastVisit)}</Detail>
+          </dl>
+        </section>
+
+        {showHistory && (
+          <section className="flex flex-col gap-3 md:border-l md:border-border md:pl-6">
+            <h2 className="flex items-center gap-2 text-base font-semibold">
+              <HeartPulseIcon className="size-4 text-primary" />
+              Medical history
+            </h2>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+              <Term>Conditions</Term>
+              <Detail>{patient.conditions.length === 0 ? "None on file" : patient.conditions.join(", ")}</Detail>
+              <Term>Drug allergies</Term>
+              <Detail>
+                {patient.drugAllergies.length === 0 ? (
+                  "None known"
+                ) : (
+                  <span className="text-destructive">{patient.drugAllergies.join(", ")}</span>
+                )}
+              </Detail>
+            </dl>
+            <MedicalHistoryNotes initial={patient.medsHistory} />
+          </section>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 function Term({ children }: { children: React.ReactNode }) {
-  return <span className="text-muted-foreground">{children}</span>
+  return <dt className="text-muted-foreground">{children}</dt>
 }
 
 function Detail({ children }: { children: React.ReactNode }) {
-  return <span className="font-medium">{children}</span>
+  return <dd className="font-medium">{children}</dd>
 }
+
 
 /**
  * The free text box the Sep 7 sync asked for: a place for the provider to
@@ -450,33 +512,28 @@ function MedicalHistoryNotes({ initial }: { initial: string }) {
   const dirty = text !== saved
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Medical history</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        <Textarea
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          rows={4}
-          aria-label="Medical history"
-          placeholder="Conditions, prior treatments, anything the next provider should read first."
-          className="text-sm leading-relaxed"
-        />
-        <div className="flex justify-end">
-          <Button
-            size="sm"
-            disabled={!dirty}
-            onClick={() => {
-              setSaved(text)
-              toast.success("Medical history saved")
-            }}
-          >
-            <SaveIcon data-icon="inline-start" />
-            Save
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="flex flex-col gap-2">
+      <Textarea
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        rows={3}
+        aria-label="Medical history notes"
+        placeholder="Prior treatments, anything the next provider should read first."
+        className="text-sm leading-relaxed"
+      />
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          disabled={!dirty}
+          onClick={() => {
+            setSaved(text)
+            toast.success("Medical history saved")
+          }}
+        >
+          <SaveIcon data-icon="inline-start" />
+          Save
+        </Button>
+      </div>
+    </div>
   )
 }

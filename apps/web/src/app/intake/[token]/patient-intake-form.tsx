@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import {
   Select,
@@ -71,6 +72,8 @@ interface ConditionRowValues {
   treatedBy: string
   medicated: boolean
   medications: string
+  /** The person's own description; required for a "Yes" (the Sep 14 review). */
+  details: string
 }
 
 export interface PatientIntakeValues {
@@ -91,6 +94,8 @@ export interface PatientIntakeValues {
   heightFeet: string
   heightInchesPart: string
   conditions: ConditionRowValues[]
+  /** Conditions not on the list; folded into the medical history text on submit. */
+  otherConditions: string
   medications: MedicationRowValues[]
   pcpName: string
   pcpPhone: string
@@ -125,7 +130,9 @@ export function emptyIntakeValues(firstName: string, lastName: string): PatientI
       treatedBy: "",
       medicated: false,
       medications: "",
+      details: "",
     })),
+    otherConditions: "",
     medications: [],
     pcpName: "",
     pcpPhone: "",
@@ -142,15 +149,33 @@ const FEET = ["3", "4", "5", "6", "7"]
  * and the staff-only fields the schema still lists, blank.
  */
 function toSubmitInput(value: PatientIntakeValues, token: string, language: PatientLanguage) {
+  const { otherConditions, ...rest } = value
   return {
-    ...value,
+    ...rest,
+    dateOfBirth: isoDateFromTyped(value.dateOfBirth),
     token,
     language,
     referredByPatientId: "",
     programType: "",
     pcpAddress: "",
+    // Conditions not on the checklist have no row of their own; they go
+    // into the medical history text, labelled, where the reviewer reads them.
+    historyOther: otherConditions.trim() === "" ? "" : `Other conditions: ${otherConditions.trim()}`,
     consentVersion: INTAKE_CONSENT_VERSION,
   }
+}
+
+/**
+ * The birthdate is typed, not picked (the Sep 14 review: patients found the
+ * scrolling picker confusing). Month/day/year with any separator becomes the
+ * ISO date the contract expects; anything else passes through unchanged so
+ * the contract answers with its `invalid_format` code and the copy explains.
+ */
+export function isoDateFromTyped(typed: string): string {
+  const match = /^\s*(\d{1,2})[/.\-\s](\d{1,2})[/.\-\s](\d{4})\s*$/.exec(typed)
+  if (match === null) return typed.trim()
+  const [, month, day, year] = match
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`
 }
 
 /**
@@ -282,6 +307,36 @@ export function PatientIntakeForm({
     </form.Field>
   )
 
+  const textareaField = (
+    name: string,
+    label: string,
+    options: { description?: string; required?: boolean } = {},
+  ) => (
+    <form.Field name={name as "firstName"}>
+      {(field) => (
+        <Field data-invalid={!field.state.meta.isValid}>
+          <FieldLabel htmlFor={field.name}>
+            {label}
+            {options.required === true ? <RequiredMark /> : null}
+          </FieldLabel>
+          <Textarea
+            id={field.name}
+            name={field.name}
+            value={field.state.value}
+            onChange={(event) => field.handleChange(event.target.value)}
+            onBlur={field.handleBlur}
+            aria-invalid={!field.state.meta.isValid}
+            rows={3}
+          />
+          {options.description === undefined ? null : (
+            <FieldDescription>{options.description}</FieldDescription>
+          )}
+          <FieldError errors={field.state.meta.errors} />
+        </Field>
+      )}
+    </form.Field>
+  )
+
   const selectField = (
     name: string,
     label: string,
@@ -378,9 +433,12 @@ export function PatientIntakeForm({
               </label>
             </RadioGroup>
           </div>
-          {presentField.state.value
-            ? textField(`conditions[${index}].onset`, copy.labels.onset, { placeholder: "2019" })
-            : null}
+          {presentField.state.value ? (
+            <>
+              {textareaField(`conditions[${index}].details`, copy.labels.details, { required: true })}
+              {textField(`conditions[${index}].onset`, copy.labels.onset, { placeholder: "2019" })}
+            </>
+          ) : null}
         </div>
       )}
     </form.Field>
@@ -400,7 +458,13 @@ export function PatientIntakeForm({
       <Section title={copy.sections.about} step={1}>
         {textField("firstName", copy.labels.firstName, { autoComplete: "given-name", required: true })}
         {textField("lastName", copy.labels.lastName, { autoComplete: "family-name", required: true })}
-        {textField("dateOfBirth", copy.labels.dateOfBirth, { type: "date", autoComplete: "bday", required: true })}
+        {textField("dateOfBirth", copy.labels.dateOfBirth, {
+          inputMode: "numeric",
+          autoComplete: "bday",
+          placeholder: "MM/DD/YYYY",
+          description: copy.labels.dateOfBirthHint,
+          required: true,
+        })}
         {radioField(
           "gender",
           copy.labels.gender,
@@ -504,6 +568,10 @@ export function PatientIntakeForm({
             {PATIENT_CONDITIONS.map((condition, index) => conditionRow(condition, index))}
           </div>
         </div>
+
+        {textareaField("otherConditions", copy.labels.otherConditions, {
+          description: copy.labels.otherConditionsHint,
+        })}
 
         <form.Field name="medications" mode="array">
           {(list) => (

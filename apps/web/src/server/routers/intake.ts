@@ -41,10 +41,21 @@ function hashToken(token: string): string {
  * The text, in the language the front desk chose. Plain sentences and one
  * link; no patient detail beyond the person's own first name.
  */
-function intakeMessage(firstName: string, language: 'english' | 'spanish', link: string): string {
-  return language === 'spanish'
-    ? `Hola ${firstName}, por favor complete su información de paciente en el siguiente enlace (válido por ${INTAKE_LINK_TTL_HOURS} horas): ${link}`
-    : `Hi ${firstName}, please fill out your patient information at the following link (valid for ${INTAKE_LINK_TTL_HOURS} hours): ${link}`
+/**
+ * The text itself. The greeting carries the name only when the front desk
+ * typed one (the Sep 14 decision: a phone is enough to send); the window is
+ * stated in words so "1 hours" never goes out.
+ */
+function intakeMessage(firstName: string | null, language: 'english' | 'spanish', link: string): string {
+  const hours = INTAKE_LINK_TTL_HOURS
+  if (language === 'spanish') {
+    const greeting = firstName === null ? 'Hola' : `Hola ${firstName}`
+    const window = hours === 1 ? '1 hora' : `${hours} horas`
+    return `${greeting}, por favor complete su información de paciente en el siguiente enlace (válido por ${window}): ${link}`
+  }
+  const greeting = firstName === null ? 'Hi' : `Hi ${firstName}`
+  const window = hours === 1 ? '1 hour' : `${hours} hours`
+  return `${greeting}, please fill out your patient information at the following link (valid for ${window}): ${link}`
 }
 
 /** A request the public page may still act on: sent, and not yet expired. */
@@ -73,7 +84,7 @@ export const intakeRouter = router({
     const link = `${ctx.appBaseUrl().replace(/\/$/, '')}/intake/${token}`
     const outcome = await ctx.sms.send({
       to: input.phone,
-      body: intakeMessage(input.firstName, input.language ?? 'english', link),
+      body: intakeMessage(input.firstName ?? null, input.language ?? 'english', link),
     })
     return { request, link: outcome === 'logged' ? link : null }
   }),
@@ -89,7 +100,13 @@ export const intakeRouter = router({
     // learns nothing about which it was.
     if (request === null || !isOpen(request, new Date())) throw new TRPCError({ code: 'NOT_FOUND' })
     const locations = await ctx.db.locations.listActive()
-    return intakeInviteSchema.parse({ ...request, locations })
+    // A request sent with only a phone prefills nothing; the person types their name.
+    return intakeInviteSchema.parse({
+      ...request,
+      firstName: request.firstName ?? '',
+      lastName: request.lastName ?? '',
+      locations,
+    })
   }),
 
   /** The person's submission — one per link — with the consent they signed. */

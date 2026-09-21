@@ -9,6 +9,7 @@ import {
   MailIcon,
   PaperclipIcon,
   PenLineIcon,
+  SaveIcon,
   PillIcon,
   PlusIcon,
   PrinterIcon,
@@ -123,7 +124,7 @@ export function ConsultationForm({
     setPrescribed((prev) => [...prev.filter((m) => m.name !== medication), { name: medication, dosage: dose }])
   }
 
-  function build(): Visit {
+  function build(signed: boolean): Visit {
     const now = new Date().toISOString()
     const bp = Number(systolic)
     const dp = Number(diastolic)
@@ -143,9 +144,9 @@ export function ConsultationForm({
       noShow: false,
       phoneVisit,
       mailingCompleted: phoneVisit && mailingCompleted,
-      signed: true,
-      signedBy: currentUser,
-      signedAt: now,
+      signed,
+      signedBy: signed ? currentUser : undefined,
+      signedAt: signed ? now : undefined,
       openedAt: now,
       paymentMethod,
       amount: total,
@@ -155,8 +156,14 @@ export function ConsultationForm({
     }
   }
 
+  /** Save as a draft: the record exists, unsigned, and can be edited and signed later. */
+  function save() {
+    onSave(build(false))
+    toast.success("Visit saved. Not signed yet.")
+  }
+
   function sign() {
-    onSave(build())
+    onSave(build(true))
     toast.success(`Visit signed as ${currentUser}`)
   }
 
@@ -535,11 +542,16 @@ export function ConsultationForm({
           <Button type="button" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
-          {/* One action, as the legacy form had it: signing is what saves the
-              visit, under the name of whoever filled it. */}
+          {/* Two actions, distinct colours (the Sep 14 review): Save keeps a
+              draft the provider can come back to; Save and sign finalises the
+              note under the name of whoever filled it, as the legacy form did. */}
+          <Button type="button" variant="outline" onClick={save}>
+            <SaveIcon data-icon="inline-start" />
+            Save
+          </Button>
           <Button type="button" onClick={sign}>
             <PenLineIcon data-icon="inline-start" />
-            Sign as {currentUser}
+            Save and sign as {currentUser}
           </Button>
         </div>
       </CardContent>
