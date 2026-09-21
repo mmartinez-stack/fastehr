@@ -110,7 +110,6 @@ deploy role is far narrower.
   would make them runnable on the instance.
 - **Migrations roll forward only.** `deploy.sh` rolls the image back, never
   the schema, so only expand/contract migrations are safe through it.
-- **GHCR tags accumulate.** GHCR has no lifecycle policy; old `dev-*` tags
-  are deleted from the repository's packages page by hand, or by a scheduled
-  workflow later.
+- **GHCR retention** is `.github/workflows/ghcr-retention.yml`: weekly, the
+  newest twenty versions of each package stay, the rest go.
 - **A production environment** is a separate decision (ADR 34).
