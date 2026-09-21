@@ -23,7 +23,9 @@ describe('buildOpenApiDocument', () => {
     const send = doc.paths['/api/trpc/intake.send']?.post
     expect(send?.parameters).toBeUndefined()
     const body = send?.requestBody?.content['application/json']?.schema.properties.json
-    expect(body?.required).toEqual(expect.arrayContaining(['firstName', 'lastName', 'phone']))
+    // Only the phone is required to send (the Sep 14 decision); the names are optional.
+    expect(body?.required).toEqual(['phone'])
+    expect(body?.properties).toHaveProperty('firstName')
   })
 
   it('carries the access level the procedure chain declares, from meta, not from the path', () => {

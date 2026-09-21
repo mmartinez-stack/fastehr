@@ -377,6 +377,15 @@ describe('suggestPatientsInput', () => {
 })
 
 describe('sendPatientIntakeInput', () => {
+  it('needs only a phone: blank names are absent, not errors (the Sep 14 decision)', () => {
+    expect(sendPatientIntakeInput.parse({ firstName: '', lastName: '  ', phone: '9515550000', language: '' })).toEqual({
+      firstName: undefined,
+      lastName: undefined,
+      phone: '9515550000',
+      language: undefined,
+    })
+  })
+
   it('normalizes the phone and treats a blank language as absent', () => {
     expect(
       sendPatientIntakeInput.parse({
@@ -390,7 +399,7 @@ describe('sendPatientIntakeInput', () => {
 
   it('requires names and a complete phone number', () => {
     expect(
-      sendPatientIntakeInput.safeParse({ firstName: '', lastName: 'L', phone: '951555' }).success,
+      sendPatientIntakeInput.safeParse({ firstName: 'A', lastName: 'L', phone: '951555' }).success,
     ).toBe(false)
   })
 })

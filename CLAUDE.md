@@ -217,7 +217,10 @@ Info, and Billing, each served by its own procedure per ADR 28 as amended,
 with Medical open to every role and the other two clerical; the medical
 history checklist defaults to No, the history text box beneath it is
 writable (the legacy text migrated into it), and allergies are out of scope). The self-service intake is wired end to end (ADR 29 as amended): a texted
-single-use link that lives 48 hours, a phone-first bilingual form at
+single-use link that lives one hour (48 hours before the Sep 14 review,
+which also made the names optional when sending, the birthdate a typed
+field, and a description required for every condition marked yes), a
+phone-first bilingual form at
 `/intake/[token]` that ends with a signed treatment consent (recorded on the
 request until DIA-56), and a per-office Pending tab on the roster; until
 `TWILIO_*` is set, text messages go to the server log and the send panel
