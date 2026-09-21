@@ -1,0 +1,34 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadRuntimeConfig",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParametersByPath",
+        "ssm:GetParameters",
+        "ssm:GetParameter"
+      ],
+      "Resource": "arn:aws:ssm:${AWS_REGION}:${ACCOUNT_ID}:parameter/fastehr/${FASTEHR_ENV}/*"
+    },
+    {
+      "Sid": "DecryptRuntimeConfig",
+      "Effect": "Allow",
+      "Action": "kms:Decrypt",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": { "kms:ViaService": "ssm.${AWS_REGION}.amazonaws.com" }
+      }
+    },
+    {
+      "Sid": "WriteContainerLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogStreams"
+      ],
+      "Resource": "arn:aws:logs:${AWS_REGION}:${ACCOUNT_ID}:log-group:/fastehr/${FASTEHR_ENV}/web:*"
+    }
+  ]
+}

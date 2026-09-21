@@ -1,505 +1,390 @@
-# Runbook: stand up the development environment on EC2, from scratch
+# Runbook: stand up the development environment on AWS, from scratch
 
 **What this produces:** the app container running on one EC2 instance behind
 Caddy (automatic HTTPS), backed by an RDS PostgreSQL instance, reachable at a
-Route53 subdomain, with no SSH key pair and no inbound port 22 — break-glass
-access is SSM Session Manager.
+Route53 name, with no SSH key pair and no inbound port 22. Break-glass access
+is SSM Session Manager. After this runbook, every push to `development`
+deploys itself: GitHub Actions builds the images, pushes them to GHCR, and
+rolls the instance through SSM Run Command.
 
-**Relation to `docs/deployment-development.md`:** that document is the CI/CD
-proposal (build on merge, deploy via SSM Run Command). This runbook is the
-manual, first-time construction of the environment it deploys into — and it
-**supersedes that document's §5.5 database decision**: Postgres is RDS, not a
-container on the instance, because the legacy patient import means this
-environment will hold real data, which deserves managed storage, backups, and
-encryption at rest.
+**What it is made of:** the policy documents under `deploy/iam/`, the
+instance files under `deploy/instance/`, and this sequence of AWS CLI calls.
+ADR 34 has the reasoning; `deploy/README.md` has the map. Resources are
+created one by one, so run the steps in order and do not skip the variables.
 
-Everything below is copy-paste shell against the AWS CLI v2. Run the local
-steps from the repo root on an x86_64 machine (the images are built locally and
-pushed; the instance is x86_64, so an ARM Mac needs `--platform linux/amd64`
-on the builds).
+Everything below is copy-paste shell against the AWS CLI v2, from the repo
+root. `envsubst` (package `gettext`) renders the placeholders in `deploy/`.
 
 ---
 
 ## 0. Prerequisites
 
-- An AWS account and a person with admin access to it (one-time setup needs
-  broad permissions; nothing after this runbook does).
-- AWS CLI v2 installed locally (`aws --version`).
-- Docker installed locally.
-- A domain you control. The examples use `example.com` and the subdomain
-  `dev.fastehr.example.com` — substitute yours everywhere.
+- An IAM identity in the client's account with the permissions in
+  `deploy/operator-policy.json` (EC2, RDS, Route53, CloudWatch Logs, SSM, and
+  IAM limited to roles named `fastehr-*`), or `AdministratorAccess`.
+- AWS CLI v2, `envsubst`, `dig`, and the GitHub CLI (`gh`, signed in) locally.
+  Docker is not needed: images are built by GitHub Actions.
+- A domain whose DNS is a public hosted zone in Route53 in this account.
+- A GitHub token that can read packages, for the instance to pull from GHCR:
+  a classic personal access token with only the `read:packages` scope, from a
+  user who can see the repository. Fine-grained tokens cannot read GHCR.
 
-## 1. Configure CLI credentials
-
-If the account uses IAM Identity Center (SSO), prefer it — credentials expire
-on their own:
-
-```bash
-aws configure sso        # follow the prompts; pick the admin permission set
-export AWS_PROFILE=<the-profile-name-you-chose>
-```
-
-Otherwise, create an IAM user for yourself with `AdministratorAccess`, create
-an access key for it (IAM console → Users → Security credentials), and:
+## 1. Credentials and session variables
 
 ```bash
-aws configure            # paste the key id and secret; default region: us-west-2
-```
-
-Verify:
-
-```bash
-aws sts get-caller-identity
-```
-
-## 2. Session variables
-
-Everything below reuses these. Re-export them if you open a new shell.
-
-```bash
-export AWS_REGION=us-west-2                      # closest to the LA-area offices
+export AWS_PROFILE=fastehr                     # the project profile; see deploy/README.md
+export AWS_REGION=us-west-1                    # where the client's existing servers and databases are
 export AWS_DEFAULT_REGION=$AWS_REGION
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-REGISTRY="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+aws sts get-caller-identity
 
-APP_HOST=dev.fastehr.example.com                 # your subdomain
-OFFICE_CIDR=203.0.113.0/24                       # your office/VPN egress range
+export FASTEHR_ENV=development
+export APP_HOST=dev.fastehr.example.com        # yours; must be inside the hosted zone
+export ZONE_DOMAIN=example.com                 # the hosted zone's name
+export GITHUB_REPOSITORY=mmartinez-stack/fastehr
+export GITHUB_ENVIRONMENT=development
 
-WORK=~/fastehr-aws && mkdir -p "$WORK"           # scratch dir for policy JSON
+export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+VPC_ID=$(aws ec2 describe-vpcs --filters Name=is-default,Values=true --query 'Vpcs[0].VpcId' --output text)
+WEB_SUBNET_ID=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" Name=default-for-az,Values=true \
+  --query 'Subnets[0].SubnetId' --output text)
+WORK=$(mktemp -d)
+echo "$ACCOUNT_ID $VPC_ID $WEB_SUBNET_ID $WORK"
 ```
 
-> **Why `OFFICE_CIDR`:** this is a dev EHR box, and real patient records land
-> in it the day the legacy import runs against it. HTTPS is allowed from your
-> office/VPN range only; only port 80 (the ACME challenge, which serves no app
-> content) is open to the world.
+The default VPC is fine for one development box: its subnets are public,
+which the Elastic IP needs, and RDS uses its default subnet group.
 
-## 3. Network and security groups
+## 2. Secrets into Parameter Store
 
-The default VPC is fine for a single dev box.
+All `SecureString`. The app's variables sit directly under
+`/fastehr/<env>/`, named as `.env.example` names them; `deploy.sh` copies
+exactly that level into the container's environment. The RDS master password
+and the GHCR token sit one level down so that copy never includes them.
 
 ```bash
-VPC_ID=$(aws ec2 describe-vpcs --filters Name=is-default,Values=true \
-  --query 'Vpcs[0].VpcId' --output text)
+P=/fastehr/$FASTEHR_ENV
+aws ssm put-parameter --type SecureString --name "$P/rds/master-password" --value "$(openssl rand -hex 24)"
+aws ssm put-parameter --type SecureString --name "$P/BETTER_AUTH_SECRET"  --value "$(openssl rand -base64 32)"
+aws ssm put-parameter --type SecureString --name "$P/BETTER_AUTH_URL"     --value "https://$APP_HOST"
+aws ssm put-parameter --type SecureString --name "$P/ghcr/username"       --value "<github user the token belongs to>"
+aws ssm put-parameter --type SecureString --name "$P/ghcr/token"          --value "<the read:packages token>"
+```
 
-# Web instance: 80 to the world (Let's Encrypt HTTP-01), 443 to the office only.
-WEB_SG=$(aws ec2 create-security-group --vpc-id "$VPC_ID" \
-  --group-name fastehr-dev-web --description 'fastehr dev web instance' \
-  --query GroupId --output text)
-aws ec2 authorize-security-group-ingress --group-id "$WEB_SG" \
-  --protocol tcp --port 80 --cidr 0.0.0.0/0
-aws ec2 authorize-security-group-ingress --group-id "$WEB_SG" \
-  --protocol tcp --port 443 --cidr "$OFFICE_CIDR"
+`DATABASE_URL` is added in step 4 once the endpoint exists. Twilio, if and
+when the account is handed over (docs/legacy-sms-integration.md): the three
+`TWILIO_*` names at the same level as `BETTER_AUTH_URL`, all three or none.
 
-# Database: 5432 from the web security group and from nowhere else.
-DB_SG=$(aws ec2 create-security-group --vpc-id "$VPC_ID" \
-  --group-name fastehr-dev-db --description 'fastehr dev rds' \
-  --query GroupId --output text)
-aws ec2 authorize-security-group-ingress --group-id "$DB_SG" \
-  --protocol tcp --port 5432 --source-group "$WEB_SG"
+## 3. Security groups
+
+Web: 80 and 443 from anywhere, nothing else. Anywhere is deliberate: the
+intake link (ADR 29) is opened on patients' phones. Database: 5432 from the
+web group only.
+
+```bash
+WEB_SG=$(aws ec2 create-security-group --vpc-id "$VPC_ID" --group-name "fastehr-$FASTEHR_ENV-web" \
+  --description 'FastEHR web instance, HTTPS and the ACME redirect' --query GroupId --output text)
+for port in 80 443; do
+  aws ec2 authorize-security-group-ingress --group-id "$WEB_SG" --ip-permissions \
+    "IpProtocol=tcp,FromPort=$port,ToPort=$port,IpRanges=[{CidrIp=0.0.0.0/0}],Ipv6Ranges=[{CidrIpv6=::/0}]"
+done
+
+DB_SG=$(aws ec2 create-security-group --vpc-id "$VPC_ID" --group-name "fastehr-$FASTEHR_ENV-db" \
+  --description 'FastEHR database, 5432 from the web group only' --query GroupId --output text)
+aws ec2 authorize-security-group-ingress --group-id "$DB_SG" --protocol tcp --port 5432 --source-group "$WEB_SG"
+
+aws ec2 create-tags --resources "$WEB_SG" "$DB_SG" --tags "Key=fastehr:environment,Value=$FASTEHR_ENV"
 ```
 
 ## 4. RDS PostgreSQL
 
-The engine major version matches local dev and CI (PostgreSQL 17). Generate
-the master password as hex so it never needs URL-encoding inside
-`DATABASE_URL`:
+Major version 17 matches local development and CI. The password comes from
+Parameter Store through a command substitution, so it is not in the shell
+history. About ten minutes.
 
 ```bash
-DB_PASSWORD=$(openssl rand -hex 24)
-echo "$DB_PASSWORD"        # store it in your password manager NOW; it is shown nowhere again
-
 aws rds create-db-instance \
-  --db-instance-identifier fastehr-dev \
+  --db-instance-identifier "fastehr-$FASTEHR_ENV" \
   --engine postgres --engine-version 17 \
   --db-instance-class db.t4g.micro \
-  --allocated-storage 20 --storage-type gp3 \
-  --master-username fastehr --master-user-password "$DB_PASSWORD" \
-  --db-name fastehr \
+  --allocated-storage 20 --max-allocated-storage 100 --storage-type gp3 --storage-encrypted \
+  --db-name fastehr --master-username fastehr \
+  --master-user-password "$(aws ssm get-parameter --name "$P/rds/master-password" --with-decryption --query Parameter.Value --output text)" \
   --vpc-security-group-ids "$DB_SG" \
-  --no-publicly-accessible \
-  --storage-encrypted \
-  --backup-retention-period 7 \
-  --no-multi-az
+  --no-publicly-accessible --no-multi-az \
+  --backup-retention-period 7 --copy-tags-to-snapshot --deletion-protection \
+  --ca-certificate-identifier rds-ca-rsa2048-g1 \
+  --enable-cloudwatch-logs-exports postgresql \
+  --tags "Key=fastehr:environment,Value=$FASTEHR_ENV"
 
-aws rds wait db-instance-available --db-instance-identifier fastehr-dev   # ~10 min
-
-RDS_HOST=$(aws rds describe-db-instances --db-instance-identifier fastehr-dev \
+aws rds wait db-instance-available --db-instance-identifier "fastehr-$FASTEHR_ENV"
+RDS_HOST=$(aws rds describe-db-instances --db-instance-identifier "fastehr-$FASTEHR_ENV" \
   --query 'DBInstances[0].Endpoint.Address' --output text)
-echo "$RDS_HOST"
+
+aws ssm put-parameter --type SecureString --name "$P/DATABASE_URL" --value \
+  "postgresql://fastehr:$(aws ssm get-parameter --name "$P/rds/master-password" --with-decryption --query Parameter.Value --output text)@$RDS_HOST:5432/fastehr?sslmode=verify-full&sslrootcert=/etc/fastehr/rds-ca.pem"
 ```
 
-Notes on the choices:
+`db.t4g.micro` is Graviton although the instance is x86: the database's
+architecture is invisible to the app, and it is the cheapest class. RDS
+forces TLS; the connection string verifies the certificate against the
+regional CA bundle that user-data downloads onto the instance.
 
-- `db.t4g.micro` (Graviton) is fine even though the EC2 instance is x86 — the
-  database's architecture is invisible to the app, and t4g is the cheapest.
-- `--no-publicly-accessible` + the security group means the only network path
-  to this database is from the web instance. Ad-hoc access from your machine
-  goes through an SSM port-forward (step 12), never by opening 5432.
-- `--backup-retention-period 7` because real records arrive with the import.
-- RDS PostgreSQL ships with `rds.force_ssl=1`: connections must use TLS. The
-  connection string below handles it.
+## 5. Log group
+
+The web container's stdout is the PHI audit trail until the audit table
+exists (`apps/web/src/server/audit-log.ts`), so it is kept six years, the
+HIPAA documentation retention period.
 
 ```bash
-DATABASE_URL="postgresql://fastehr:$DB_PASSWORD@$RDS_HOST:5432/fastehr?sslmode=no-verify"
+aws logs create-log-group --log-group-name "/fastehr/$FASTEHR_ENV/web" \
+  --tags "fastehr:environment=$FASTEHR_ENV"
+aws logs put-retention-policy --log-group-name "/fastehr/$FASTEHR_ENV/web" --retention-in-days 2192
 ```
 
-> `sslmode=no-verify` encrypts the connection without verifying the RDS CA —
-> acceptable inside a VPC on dev. If `prisma migrate deploy` (step 10) rejects
-> that mode, the fallbacks are, in order: bake the RDS CA bundle
-> (`https://truststore.pki.rds.amazonaws.com/$AWS_REGION/$AWS_REGION-bundle.pem`)
-> into the env as `sslrootcert`, or attach a custom parameter group with
-> `rds.force_ssl=0`.
+## 6. Instance role
 
-## 5. ECR repositories, build, push
-
-Two repositories — the runtime image and the migrator (ADR 23 keeps migrations
-out of the runtime image; the `migrator` target exists in the Dockerfile for
-exactly this step). Tags are immutable so "what is running" is always
-answerable.
+The instance authenticates to AWS through this role and nothing else; no
+credential file ever lands on the box. `AmazonSSMManagedInstanceCore` is what
+replaces SSH.
 
 ```bash
-aws ecr create-repository --repository-name fastehr/web      --image-tag-mutability IMMUTABLE
-aws ecr create-repository --repository-name fastehr/migrator --image-tag-mutability IMMUTABLE
+envsubst '$ACCOUNT_ID $AWS_REGION $FASTEHR_ENV' < deploy/iam/instance-policy.json > "$WORK/instance-policy.json"
 
-aws ecr get-login-password | docker login --username AWS --password-stdin "$REGISTRY"
-
-# From the repo root, on the commit you mean to deploy:
-TAG=dev-$(git rev-parse --short=12 HEAD)
-
-# NEXT_PUBLIC_APP_URL is inlined at build time (ADR 24): this image is bound
-# to this origin and must never be pointed at another environment.
-docker build --target runner --build-arg NEXT_PUBLIC_APP_URL="https://$APP_HOST" \
-  -t "$REGISTRY/fastehr/web:$TAG" .
-docker build --target migrator -t "$REGISTRY/fastehr/migrator:$TAG" .
-
-docker push "$REGISTRY/fastehr/web:$TAG"
-docker push "$REGISTRY/fastehr/migrator:$TAG"
-```
-
-## 6. IAM role for the instance
-
-The instance authenticates to AWS through its instance profile — no credential
-file ever lands on the box. `AmazonSSMManagedInstanceCore` is what replaces
-SSH; the inline policy lets it pull the two images.
-
-```bash
-cat > "$WORK/ec2-trust.json" <<'EOF'
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": { "Service": "ec2.amazonaws.com" },
-    "Action": "sts:AssumeRole"
-  }]
-}
-EOF
-
-aws iam create-role --role-name fastehr-dev-instance \
-  --assume-role-policy-document "file://$WORK/ec2-trust.json"
-
-aws iam attach-role-policy --role-name fastehr-dev-instance \
+aws iam create-role --role-name "fastehr-$FASTEHR_ENV-instance" \
+  --assume-role-policy-document file://deploy/iam/instance-trust.json \
+  --tags "Key=fastehr:environment,Value=$FASTEHR_ENV"
+aws iam attach-role-policy --role-name "fastehr-$FASTEHR_ENV-instance" \
   --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+aws iam put-role-policy --role-name "fastehr-$FASTEHR_ENV-instance" \
+  --policy-name runtime --policy-document "file://$WORK/instance-policy.json"
 
-cat > "$WORK/ecr-pull.json" <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    { "Effect": "Allow", "Action": "ecr:GetAuthorizationToken", "Resource": "*" },
-    { "Effect": "Allow",
-      "Action": ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer", "ecr:BatchCheckLayerAvailability"],
-      "Resource": "arn:aws:ecr:$AWS_REGION:$ACCOUNT_ID:repository/fastehr/*" }
-  ]
-}
-EOF
-
-aws iam put-role-policy --role-name fastehr-dev-instance \
-  --policy-name ecr-pull --policy-document "file://$WORK/ecr-pull.json"
-
-aws iam create-instance-profile --instance-profile-name fastehr-dev-instance
-aws iam add-role-to-instance-profile --instance-profile-name fastehr-dev-instance \
-  --role-name fastehr-dev-instance
+aws iam create-instance-profile --instance-profile-name "fastehr-$FASTEHR_ENV-instance"
+aws iam add-role-to-instance-profile --instance-profile-name "fastehr-$FASTEHR_ENV-instance" \
+  --role-name "fastehr-$FASTEHR_ENV-instance"
+sleep 10    # the profile takes a moment to become usable by run-instances
 ```
 
-## 7. EC2 instance and Elastic IP
+## 7. GitHub deploy role
 
-Amazon Linux 2023 (SSM agent and AWS CLI preinstalled), `t3.small` (x86_64,
-matching the local builds), 30 GiB, **no key pair** — nothing SSHes in, ever.
-User-data installs Docker and the compose plugin on first boot.
+GitHub Actions assumes this through OIDC: a fifteen-minute token scoped to
+one repository and one GitHub Environment. It may only send Run Command to
+instances tagged for this environment.
 
 ```bash
-cat > "$WORK/user-data.sh" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-dnf update -y
-dnf install -y docker
-systemctl enable --now docker
+# One provider per account for this issuer. Skip if it already exists.
+aws iam list-open-id-connect-providers --query 'OpenIDConnectProviderList[].Arn' --output text \
+  | grep -q token.actions.githubusercontent.com \
+  || aws iam create-open-id-connect-provider --url https://token.actions.githubusercontent.com \
+       --client-id-list sts.amazonaws.com
 
-mkdir -p /usr/local/lib/docker/cli-plugins
-curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64" \
-  -o /usr/local/lib/docker/cli-plugins/docker-compose
-chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+# The token's subject. With GitHub's "immutable subject" setting (the default
+# for new repositories) it carries the owner and repository ids, so a renamed
+# or re-created repository cannot assume the role. The API gives the exact
+# prefix either way.
+export GITHUB_SUB_PREFIX=$(gh api "repos/$GITHUB_REPOSITORY/actions/oidc/customization/sub" --jq .sub_claim_prefix)
+echo "$GITHUB_SUB_PREFIX"     # repo:<owner>@<id>/<name>@<id>, or repo:<owner>/<name>
 
-mkdir -p /opt/fastehr /etc/fastehr
-EOF
+envsubst '$ACCOUNT_ID $GITHUB_SUB_PREFIX $GITHUB_ENVIRONMENT' < deploy/iam/github-trust.json > "$WORK/github-trust.json"
+envsubst '$ACCOUNT_ID $AWS_REGION $FASTEHR_ENV' < deploy/iam/github-policy.json > "$WORK/github-policy.json"
 
-AMI=$(aws ssm get-parameter \
-  --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
+aws iam create-role --role-name "fastehr-$FASTEHR_ENV-github-deploy" \
+  --assume-role-policy-document "file://$WORK/github-trust.json" \
+  --tags "Key=fastehr:environment,Value=$FASTEHR_ENV"
+aws iam put-role-policy --role-name "fastehr-$FASTEHR_ENV-github-deploy" \
+  --policy-name deploy --policy-document "file://$WORK/github-policy.json"
+
+DEPLOY_ROLE_ARN=$(aws iam get-role --role-name "fastehr-$FASTEHR_ENV-github-deploy" --query Role.Arn --output text)
+```
+
+## 8. EC2 instance and Elastic IP
+
+Amazon Linux 2023 (SSM Agent and the AWS CLI preinstalled), `t3.small`
+(x86_64, matching GitHub's runners), 30 GiB encrypted, IMDSv2 only, **no key
+pair**. User-data installs Docker and compose and records what `deploy.sh`
+needs; it does not start the app.
+
+```bash
+envsubst '$FASTEHR_ENV $AWS_REGION $GITHUB_REPOSITORY $APP_HOST' < deploy/instance/user-data.sh > "$WORK/user-data.sh"
+AMI=$(aws ssm get-parameter --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
   --query Parameter.Value --output text)
 
 INSTANCE_ID=$(aws ec2 run-instances \
-  --image-id "$AMI" --instance-type t3.small \
-  --iam-instance-profile Name=fastehr-dev-instance \
+  --image-id "$AMI" --instance-type t3.small --subnet-id "$WEB_SUBNET_ID" \
+  --iam-instance-profile "Name=fastehr-$FASTEHR_ENV-instance" \
   --security-group-ids "$WEB_SG" \
   --user-data "file://$WORK/user-data.sh" \
-  --block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":30,"VolumeType":"gp3"}}]' \
-  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=fastehr-dev}]' \
+  --block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":30,"VolumeType":"gp3","Encrypted":true}}]' \
+  --metadata-options HttpTokens=required,HttpPutResponseHopLimit=2 \
+  --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=fastehr-$FASTEHR_ENV},{Key=fastehr:environment,Value=$FASTEHR_ENV}]" \
   --query 'Instances[0].InstanceId' --output text)
-
 aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
 
-# The Elastic IP keeps DNS stable across stop/start (it is free while attached).
-EIP_ALLOC=$(aws ec2 allocate-address --query AllocationId --output text)
+EIP_ALLOC=$(aws ec2 allocate-address --domain vpc \
+  --tag-specifications "ResourceType=elastic-ip,Tags=[{Key=Name,Value=fastehr-$FASTEHR_ENV}]" \
+  --query AllocationId --output text)
 aws ec2 associate-address --instance-id "$INSTANCE_ID" --allocation-id "$EIP_ALLOC"
-EIP=$(aws ec2 describe-addresses --allocation-ids "$EIP_ALLOC" \
-  --query 'Addresses[0].PublicIp' --output text)
+EIP=$(aws ec2 describe-addresses --allocation-ids "$EIP_ALLOC" --query 'Addresses[0].PublicIp' --output text)
 echo "instance $INSTANCE_ID at $EIP"
 ```
 
-Confirm the instance registered with SSM (this is the deploy path *and* the
-break-glass path, so do not proceed until it appears — a minute or two after
-boot):
+The `fastehr:environment` tag is what the deploy role's permission and the
+workflow's instance lookup key on. Wait for SSM before going on; this is the
+deploy path and the break-glass path:
 
 ```bash
-aws ssm describe-instance-information \
-  --filters "Key=InstanceIds,Values=$INSTANCE_ID" \
-  --query 'InstanceInformationList[0].PingStatus'    # → "Online"
+aws ssm describe-instance-information --filters "Key=InstanceIds,Values=$INSTANCE_ID" \
+  --query 'InstanceInformationList[0].PingStatus' --output text     # Online, a minute or two after boot
 ```
 
-If it never comes online, the instance profile or outbound 443 is wrong.
+If it never comes online, the subnet is not public or outbound 443 is blocked.
 
-## 8. Route53: the subdomain
-
-Two cases, depending on where the domain's DNS lives today.
-
-**Case A — the domain already has a public hosted zone in this account:**
+## 9. Route53
 
 ```bash
-ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name example.com \
-  --query 'HostedZones[0].Id' --output text)
+ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "$ZONE_DOMAIN" \
+  --query 'HostedZones[0].Id' --output text | sed 's#/hostedzone/##')
+
+aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" --change-batch "{
+  \"Changes\": [{ \"Action\": \"UPSERT\", \"ResourceRecordSet\": {
+    \"Name\": \"$APP_HOST\", \"Type\": \"A\", \"TTL\": 300, \"ResourceRecords\": [{ \"Value\": \"$EIP\" }] } }] }"
+
+dig +short "$APP_HOST"    # the Elastic IP, within a minute
 ```
 
-**Case B — the domain is registered elsewhere (GoDaddy, Namecheap, …):**
-create a hosted zone here and move the domain's DNS to it. Route53 charges
-$0.50/month per zone.
+Caddy needs the name to resolve to this box before it can pass the ACME
+challenge, so do not trigger the first deploy until `dig` agrees.
 
-```bash
-ZONE_ID=$(aws route53 create-hosted-zone --name example.com \
-  --caller-reference "fastehr-$(date +%s)" --query 'HostedZone.Id' --output text)
+## 10. Wire GitHub, then deploy
 
-# These four name servers go into the registrar's NS settings for the domain.
-aws route53 get-hosted-zone --id "$ZONE_ID" --query 'DelegationSet.NameServers'
-```
+In the repository settings, an Environment named `development` and these
+variables (none are secret):
 
-> Moving the whole domain moves *all* its DNS — recreate any existing records
-> (mail, the main site) in the zone **before** switching the NS entries at the
-> registrar. If that is not acceptable, delegate only the subdomain instead:
-> create the zone for `dev.fastehr.example.com` itself and add its four NS
-> records at the registrar as an `NS` record for that name.
+| variable | scope | value |
+| --- | --- | --- |
+| `DEPLOY_ENABLED` | repository | `true` |
+| `AWS_REGION` | environment | `$AWS_REGION` |
+| `AWS_DEPLOY_ROLE_ARN` | environment | `$DEPLOY_ROLE_ARN` |
+| `NEXT_PUBLIC_APP_URL` | environment | `https://$APP_HOST` |
 
-**Both cases — point the subdomain at the Elastic IP:**
+`DEPLOY_ENABLED` is repository-scoped because a job-level `if` is evaluated
+before the job's environment is resolved.
 
-```bash
-cat > "$WORK/dns.json" <<EOF
-{ "Changes": [ { "Action": "UPSERT", "ResourceRecordSet": {
-  "Name": "$APP_HOST", "Type": "A", "TTL": 300,
-  "ResourceRecords": [{ "Value": "$EIP" }] } } ] }
-EOF
-aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" \
-  --change-batch "file://$WORK/dns.json"
+Then run `Deploy · development` from the Actions tab (`workflow_dispatch`) on
+the commit you mean to deploy, or merge a PR into `development`. The workflow
+verifies, builds both images, pushes them to GHCR, and runs `deploy.sh` on
+the instance. Its log ends with `deployed dev-… to <host>`; the first run also
+shows every migration in `packages/db/prisma/migrations/` being applied.
 
-# Wait for propagation before starting Caddy — it needs the name to resolve
-# to this box to pass the ACME challenge.
-dig +short "$APP_HOST"    # → the Elastic IP
-```
+From a browser, `https://$APP_HOST` serves the login page over a valid
+certificate within a minute of the first deploy.
 
-## 9. Configure the instance
+**Break it once on purpose:** deploy a commit whose `/_smoke` fails and
+confirm the previous tag comes back. A rollback path that has never executed
+is not a rollback path.
 
-Open a shell on it (this is what replaced SSH):
+If the migrator rejects the TLS mode, the fallback is `sslmode=no-verify` in
+`DATABASE_URL` (encrypted, unverified) and a note against ADR 34. Do not
+attach a parameter group with `rds.force_ssl=0`.
 
-```bash
-aws ssm start-session --target "$INSTANCE_ID"
-```
-
-Everything in this step runs **inside that session**, as root
-(`sudo -i`). Substitute the real values — the session is not your local
-shell, so `$RDS_HOST` etc. do not exist there.
-
-Runtime environment, per `.env.example` — three values, `0600`, root-owned.
-Generate `BETTER_AUTH_SECRET` here so it never exists on any other machine:
-
-```bash
-umask 077
-cat > /etc/fastehr/app.env <<EOF
-DATABASE_URL=postgresql://fastehr:<DB_PASSWORD>@<RDS_HOST>:5432/fastehr?sslmode=no-verify
-BETTER_AUTH_SECRET=$(openssl rand -base64 32)
-BETTER_AUTH_URL=https://dev.fastehr.example.com
-EOF
-chmod 600 /etc/fastehr/app.env
-```
-
-The compose file and Caddyfile:
-
-```bash
-cat > /opt/fastehr/docker-compose.yml <<'EOF'
-name: fastehr
-
-services:
-  web:
-    image: ${WEB_IMAGE:?required}
-    restart: unless-stopped
-    env_file: /etc/fastehr/app.env
-    expose:
-      - "3000"
-
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-    depends_on:
-      - web
-
-volumes:
-  caddy_data:
-EOF
-
-cat > /opt/fastehr/Caddyfile <<'EOF'
-dev.fastehr.example.com {
-    reverse_proxy web:3000
-}
-EOF
-```
-
-Caddy obtains and renews the Let's Encrypt certificate on its own; the DNS
-record from step 8 and world-reachable port 80 are all it needs.
-
-## 10. Migrations
-
-Still on the instance. Log in to ECR with the instance role, pull, and run the
-migrator as a one-shot container that must exit 0:
-
-```bash
-REGISTRY=<ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com
-TAG=<the tag pushed in step 5>
-
-aws ecr get-login-password --region us-west-2 \
-  | docker login --username AWS --password-stdin "$REGISTRY"
-
-docker run --rm --env-file /etc/fastehr/app.env "$REGISTRY/fastehr/migrator:$TAG"
-```
-
-Expected: every migration in `packages/db/prisma/migrations/` applies, ending
-in `All migrations have been successfully applied.` Re-running it prints
-`No pending migrations to apply.` and exits 0 — it is idempotent, and this is
-the same step every future deploy runs before rolling the web container.
-
-### Weekly note sampling (DIA-74, ADR 30)
-
-The medical-director review queue is fed by a job that samples one in twenty
-of the notes signed since its last run. Cadence is cron's; the job records
-the window it covered, so a late or repeated run skips nothing. Install it on
-the instance as a weekly line (Monday 06:00 Pacific; the instance clock is
-UTC, so 13:00 UTC in summer) running inside the web image:
-
-```bash
-sudo tee /etc/cron.d/fastehr-review-sample >/dev/null <<'EOF2'
-0 13 * * 1  root  cd /opt/fastehr && docker compose run --rm web node apps/web/scripts/sample-notes-for-review.ts >> /var/log/fastehr-review-sample.log 2>&1
-EOF2
-```
-
-`--rate <n>` changes "one in twenty"; `--since YYYY-MM-DD` catches up from an
-earlier date. An admin who holds the medical-director flag can also run it
-from the review page.
-
-## 11. Start and verify
-
-```bash
-cd /opt/fastehr
-echo "WEB_IMAGE=$REGISTRY/fastehr/web:$TAG" > .env
-docker compose up -d
-
-# /_smoke needs no database, so a failure here is the app itself (ADR 16/23):
-docker compose exec -T web node -e \
-  "fetch('http://127.0.0.1:3000/_smoke').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" \
-  && echo SMOKE-OK
-```
-
-Then from a browser **on the office network**: `https://dev.fastehr.example.com`
-should serve the login page over a valid certificate. (From anywhere else, 443
-is filtered — that is the security group doing its job.)
-
-## 12. First admin
+## 11. First admin
 
 Sign-up is disabled by design, so the first account is inserted directly and
-issued a temporary password. The database accepts connections only from inside
-the VPC; reach it from your machine through an SSM port-forward via the
-instance:
+issued a temporary password. Reach the database through an SSM port-forward
+via the instance; 5432 is not open to anything else.
 
 ```bash
-# Terminal 1 — leave running:
+# Terminal 1, leave running:
 aws ssm start-session --target "$INSTANCE_ID" \
   --document-name AWS-StartPortForwardingSessionToRemoteHost \
   --parameters "host=$RDS_HOST,portNumber=5432,localPortNumber=15432"
 
-# Terminal 2 — create the admin row (updatedAt has no DB default; supply it):
-psql "postgresql://fastehr:$DB_PASSWORD@localhost:15432/fastehr" -c \
+# Terminal 2 (updatedAt has no database default; supply it):
+DB_PASSWORD=$(aws ssm get-parameter --name "$P/rds/master-password" --with-decryption --query Parameter.Value --output text)
+psql "postgresql://fastehr:$DB_PASSWORD@localhost:15432/fastehr?sslmode=require" -c \
   "INSERT INTO users (id, name, email, role, \"updatedAt\")
    VALUES (gen_random_uuid(), 'Your Name', 'you@diagnosticpartners.com', 'admin', now());"
 
-# Terminal 2 — issue the temporary password (prints to stdout only):
+# Through the tunnel the host is localhost, so the certificate's name cannot
+# be verified; uselibpqcompat makes the Node driver encrypt without verifying,
+# which is what psql's sslmode=require above already does.
 cd packages/db
-DATABASE_URL="postgresql://fastehr:$DB_PASSWORD@localhost:15432/fastehr" \
+DATABASE_URL="postgresql://fastehr:$DB_PASSWORD@localhost:15432/fastehr?uselibpqcompat=true&sslmode=require" \
   pnpm issue-temp-password -- --email you@diagnosticpartners.com
 ```
 
-Sign in at `https://dev.fastehr.example.com/login` with the printed password;
-the app forces `/change-password` before anything else. Further users are
-created through the Users screen. Staff and patient data arrive via the
-migration runbooks (`user-migration.md`, `docs/legacy-data-mapping.md`) run
-against this same port-forward.
+The temporary password prints once, to your terminal. `aws ssm start-session`
+needs the Session Manager plugin installed locally (AWS documents the
+download per platform; on a distribution without a package, extracting the
+`.deb` and putting `session-manager-plugin` on `PATH` is enough).
 
-## Deploying a new version later
+Sign in at `https://$APP_HOST/login`; the app forces `/change-password`
+first. Further users come from the Users screen. Staff and patient data
+arrive through the migration runbooks (`user-migration.md`,
+`docs/legacy-data-mapping.md`) over this same port-forward.
 
-Until the CI/CD pipeline from `docs/deployment-development.md` is built, a
-deploy is: step 5 (build + push a new `$TAG` locally), then on the instance
-step 10 (migrator) and step 11 (`sed -i` the new tag into `/opt/fastehr/.env`,
-`docker compose up -d web`). Occasionally `docker image prune -f` to reclaim
-disk.
+Then prove the API end to end with `scripts/api-smoke.sh`
+(`docs/runbooks/test-development-api.md` explains every call).
+
+## Operating it
+
+- **A shell on the box:** `aws ssm start-session --target "$INSTANCE_ID"`,
+  then `sudo -i`. `docker compose -f /opt/fastehr/docker-compose.yml ps`.
+- **Logs:** CloudWatch Logs, group `/fastehr/development/web`, streams `web`,
+  `caddy`, `migrator`. The `[phi-audit]` lines are in `web`.
+- **Deploy a specific commit:** the workflow with `workflow_dispatch` and
+  the ref. By hand, from an SSM session: `/opt/fastehr/deploy.sh dev-<sha>`
+  for any tag already in GHCR.
+- **Rotate a secret:** `aws ssm put-parameter --overwrite …`, then redeploy
+  the current tag; `deploy.sh` re-reads the level every run. The GHCR token
+  is a GitHub setting with an expiry; rotate it the same way.
+- **Replace the instance:** terminate it, repeat step 8 with the same
+  security group and profile, re-associate the Elastic IP, deploy. The log
+  group, database, roles, and DNS record are untouched.
 
 ## Cost
 
-| Item | Monthly (us-west-2, on-demand) |
+| Item | Monthly (us-west-1, on-demand) |
 | --- | --- |
 | EC2 `t3.small` 24/7 | ~$15 |
 | 30 GiB gp3 | ~$2.40 |
 | RDS `db.t4g.micro` 24/7 | ~$12 |
 | RDS 20 GiB gp3 + backups | ~$2.50 |
 | Route53 hosted zone | $0.50 |
-| ECR, SSM, Elastic IP (attached) | ~$1 |
-| **Total** | **≈ $33/month** |
+| CloudWatch Logs, SSM, Elastic IP (attached) | ~$1.50 |
+| **Total** | **≈ $34/month** |
 
-Stopping the EC2 instance outside working hours roughly halves its line; the
-Elastic IP then bills ~$3.60/month while detached-or-stopped, which is still a
-net saving. RDS can also be stopped, but restarts itself after 7 days.
+GHCR storage for a private repository counts against the GitHub plan's
+package quota; the two images are about 320 MB and 1.5 GB per tag, so delete
+old tags from the packages page now and then.
 
 ## Teardown
 
-In reverse order: `docker compose down` on the instance; terminate the
-instance; release the Elastic IP; delete the RDS instance (**take a final
-snapshot if the import ever ran** — it holds real patient data); delete the
-ECR repositories, the two security groups, the IAM role/profile, and the
-Route53 record.
+Reverse order. The database refuses to delete while deletion protection is
+on and leaves a final snapshot when it goes, since it may hold real records.
+
+```bash
+aws ec2 terminate-instances --instance-ids "$INSTANCE_ID"
+aws ec2 wait instance-terminated --instance-ids "$INSTANCE_ID"
+aws ec2 release-address --allocation-id "$EIP_ALLOC"
+aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" --change-batch "{
+  \"Changes\": [{ \"Action\": \"DELETE\", \"ResourceRecordSet\": {
+    \"Name\": \"$APP_HOST\", \"Type\": \"A\", \"TTL\": 300, \"ResourceRecords\": [{ \"Value\": \"$EIP\" }] } }] }"
+
+aws rds modify-db-instance --db-instance-identifier "fastehr-$FASTEHR_ENV" --no-deletion-protection --apply-immediately
+aws rds delete-db-instance --db-instance-identifier "fastehr-$FASTEHR_ENV" \
+  --final-db-snapshot-identifier "fastehr-$FASTEHR_ENV-final-$(date +%Y%m%d)"
+
+aws iam remove-role-from-instance-profile --instance-profile-name "fastehr-$FASTEHR_ENV-instance" --role-name "fastehr-$FASTEHR_ENV-instance"
+aws iam delete-instance-profile --instance-profile-name "fastehr-$FASTEHR_ENV-instance"
+aws iam detach-role-policy --role-name "fastehr-$FASTEHR_ENV-instance" --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+aws iam delete-role-policy --role-name "fastehr-$FASTEHR_ENV-instance" --policy-name runtime
+aws iam delete-role --role-name "fastehr-$FASTEHR_ENV-instance"
+aws iam delete-role-policy --role-name "fastehr-$FASTEHR_ENV-github-deploy" --policy-name deploy
+aws iam delete-role --role-name "fastehr-$FASTEHR_ENV-github-deploy"
+
+aws ec2 delete-security-group --group-id "$DB_SG"
+aws ec2 delete-security-group --group-id "$WEB_SG"
+aws logs delete-log-group --log-group-name "/fastehr/$FASTEHR_ENV/web"     # only if the audit trail is no longer needed
+aws ssm delete-parameters --names "$P/DATABASE_URL" "$P/BETTER_AUTH_SECRET" "$P/BETTER_AUTH_URL" \
+  "$P/rds/master-password" "$P/ghcr/username" "$P/ghcr/token"
+```

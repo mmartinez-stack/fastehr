@@ -1,6 +1,16 @@
 # Development environment: CI/CD to EC2
 
-**Status:** proposal, not decided. Becomes an ADR if accepted.
+**Status:** accepted and implemented (2026-09-18). The design below became
+ADR 34; the on-instance side is `deploy/instance/`, the IAM side is
+`deploy/iam/`, the AWS resources are created by the CLI calls in
+`docs/runbooks/deploy-development-ec2.md`, and the pipeline is
+`.github/workflows/deploy-development.yml`. Kept for the reasoning and the
+rejected alternatives; where a detail here disagrees with those files, the
+files win. Differences worth knowing: the database is RDS (see the
+amendment below); the registry is GHCR, not ECR, and the instance files
+travel inside the Run Command rather than through S3, because the client's
+account grants neither (ADR 34); and port 443 is open to the internet because
+the intake link is opened on patients' phones (ADR 29).
 **Scope:** the **development** environment only. No staging, no production.
 
 > **Amended 2026-08-31:** two decisions below are superseded by

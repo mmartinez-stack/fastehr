@@ -1,0 +1,165 @@
+name: Deploy · development
+
+# Every push to development is verified here (this workflow calls ci.yml, so
+# there is one definition of "verified" and one run per push), and, when the
+# repository variable DEPLOY_ENABLED is true, built, pushed to GHCR, and
+# rolled onto the instance through SSM Run Command. Design and rejected
+# alternatives: docs/deployment-development.md and ADR 34.
+#
+# Nothing here is a long-lived credential: images are pushed with the job's
+# own GITHUB_TOKEN, the AWS side is an IAM role assumed through GitHub OIDC,
+# and Run Command needs no inbound port on the instance at all.
+on:
+  push:
+    branches: [development]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit or branch to deploy (defaults to the workflow's ref)
+        required: false
+
+# Deploys must never overlap: two migrate steps against one database is the
+# failure this prevents. Not cancelled in progress, unlike CI: a half-finished
+# deploy is worse than a queued one.
+concurrency:
+  group: deploy-development
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: build and push images
+    needs: verify
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: development
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      # GHCR names must be lowercase; the repository slug may not be.
+      - id: meta
+        run: |
+          echo "tag=dev-$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+          echo "registry=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      # NEXT_PUBLIC_APP_URL is inlined at build time (ADR 23/24), which is why
+      # the tag is prefixed dev-: this image is bound to this environment's
+      # origin and must never be promoted to another.
+      - name: web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runner
+          push: true
+          tags: ${{ steps.meta.outputs.registry }}/web:${{ steps.meta.outputs.tag }}
+          build-args: |
+            NEXT_PUBLIC_APP_URL=${{ vars.NEXT_PUBLIC_APP_URL }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: migrator image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: migrator
+          push: true
+          tags: ${{ steps.meta.outputs.registry }}/migrator:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+
+  deploy:
+    name: roll the instance
+    needs: build
+    runs-on: ubuntu-latest
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # The instance never has the repository. The compose file, Caddyfile and
+      # deploy.sh travel inside the command itself, as a base64 tarball, so
+      # the files on the box are always the ones at this commit. Targeted by
+      # tag rather than instance id, so replacing the instance needs no change
+      # here or in the deploy role.
+      - name: run deploy.sh through SSM
+        env:
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          INSTANCE_ID=$(aws ssm describe-instance-information \
+            --filters "Key=tag:fastehr:environment,Values=development" \
+            --query 'InstanceInformationList[?PingStatus==`Online`].InstanceId | [0]' --output text)
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
+            echo "no online instance tagged fastehr:environment=development" >&2
+            exit 1
+          fi
+
+          BUNDLE=$(tar -czf - -C deploy/instance docker-compose.yml Caddyfile deploy.sh | base64 -w0)
+          jq -n --arg bundle "$BUNDLE" --arg tag "$TAG" '{
+            commands: [
+              "set -euo pipefail",
+              "mkdir -p /opt/fastehr",
+              ("echo " + $bundle + " | base64 -d | tar -xzf - -C /opt/fastehr"),
+              ("/opt/fastehr/deploy.sh " + $tag)
+            ],
+            executionTimeout: ["900"]
+          }' > params.json
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "deploy $TAG" \
+            --timeout-seconds 600 \
+            --parameters file://params.json \
+            --query 'Command.CommandId' --output text)
+          echo "instance $INSTANCE_ID, command $COMMAND_ID"
+
+          # `wait` gives up after a fixed number of polls; loop on the status
+          # instead so a slow pull does not read as a failure.
+          STATUS=Pending
+          for _ in $(seq 1 90); do
+            STATUS=$(aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+              --query Status --output text 2>/dev/null || echo Pending)
+            case "$STATUS" in
+              Pending|InProgress|Delayed) sleep 10 ;;
+              *) break ;;
+            esac
+          done
+
+          aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+            --query StandardOutputContent --output text
+          if [ "$STATUS" != "Success" ]; then
+            aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+              --query StandardErrorContent --output text >&2
+            echo "deploy finished with status $STATUS" >&2
+            exit 1
+          fi

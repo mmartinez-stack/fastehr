@@ -1,0 +1,25 @@
+# TLS termination in front of the app. Caddy obtains and renews the
+# Let's Encrypt certificate on its own; it needs the Route53 record to resolve
+# to this box and port 80 reachable for the HTTP-01 challenge (the web stack
+# opens both).
+#
+# No `log` directive on purpose. An access log records request paths, and the
+# intake link carries its single-use token in the path (ADR 29: the token
+# exists in the text message and the URL, nowhere else). Caddy's own runtime
+# messages still reach the container's stdout.
+{$APP_HOST} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	reverse_proxy web:3000 {
+		# tRPC's httpBatchStreamLink (ADR 17) and RSC both stream: flush every
+		# chunk as it arrives rather than buffering the response.
+		flush_interval -1
+	}
+}
