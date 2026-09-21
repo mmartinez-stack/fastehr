@@ -200,6 +200,17 @@ export, visit photos, delete visit, and a New visit consultation form in
 the legacy form's four sections, Visit info and Prescription for the
 clinical surface, Billing and Admin for the clerical one;
 docs/provider-record-migrations.md lists what it needs from the schema);
+reworked again per the Sep 14 review: one box across the top split in
+half, patient information left and medical history right with Conditions
+and Drug allergies lines above the free text, medication and the weight
+chart staying in the fixed right column; the chart's axis on both sides
+with light horizontal gridlines and a value on each bar; on each clinical
+note its visit's weight and BMI beside the medication, a full-width
+"Signed by" line beneath the note as the legacy Sign panel had it, addenda
+as a thread, Save and Save and sign as two buttons on the consultation form
+and on addenda, "Sign reviewed as" after a review, and a Provider view
+checkbox that hides the front desk's comments and marks clinical notes
+green, on for a provider and off for an administrator);
 tabs everywhere are styled as distinct buttons through the slot attributes
 in `globals.css`; the record itself has three tabs, Medical, Patient
 Info, and Billing, each served by its own procedure per ADR 28 as amended,
