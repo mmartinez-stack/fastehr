@@ -99,10 +99,6 @@ deploy role is far narrower.
   (ADR 30) is not in it and neither is the workspace it imports. The weekly
   sampling runs from the admin's "run now" button until a `jobs` image target
   exists.
-- **A temporary password is enough to call the API.** The tRPC middleware
-  does not check `mustChangePassword`; only the page guards do. Found by
-  `docs/runbooks/test-development-api.md`; fix in
-  `apps/web/src/server/middleware/auth.ts` with procedure tests.
 - **The migrator image cannot run the db scripts.** It carries `packages/db`
   without `packages/contracts`, so `issue-temp-password` and the migration
   scripts fail there with `ERR_MODULE_NOT_FOUND`; they run locally through
