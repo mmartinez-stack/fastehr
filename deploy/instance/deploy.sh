@@ -19,10 +19,23 @@ set -euo pipefail
 write_env() {
   cat > .env <<ENV
 WEB_IMAGE=$1
+JOBS_IMAGE=$2
 AWS_REGION=$AWS_REGION
 LOG_GROUP=$LOG_GROUP
 APP_HOST=$APP_HOST
 ENV
+}
+
+# The weekly jobs (DIA-79) run from cron, which Amazon Linux 2023 does not
+# ship; installed here rather than in user-data so an instance built before
+# this existed gets it on its next deploy. The cron line itself travels with
+# the deploy files and reads the image from .env at run time.
+install_jobs_cron() {
+  if ! command -v crond >/dev/null; then
+    dnf install -y cronie >/dev/null
+  fi
+  systemctl enable --now crond >/dev/null 2>&1 || true
+  install -m 644 "$APP_DIR/fastehr-jobs.cron" /etc/cron.d/fastehr-jobs
 }
 
 param() {
@@ -44,12 +57,14 @@ main() {
   APP_DIR=/opt/fastehr
   WEB_IMAGE="$REGISTRY/web:$TAG"
   MIGRATOR_IMAGE="$REGISTRY/migrator:$TAG"
+  JOBS_IMAGE="$REGISTRY/jobs:$TAG"
 
   cd "$APP_DIR"
   chmod 755 "$APP_DIR/deploy.sh"
 
   # What is running now, so a failed rollout can go back to it.
   PREVIOUS=$(grep -oP '(?<=^WEB_IMAGE=).*' .env 2>/dev/null || true)
+  PREVIOUS_JOBS=$(grep -oP '(?<=^JOBS_IMAGE=).*' .env 2>/dev/null || true)
 
   # GHCR: the images are private, so the instance holds a GitHub token with
   # read:packages and nothing else. One level below the app's variables so
@@ -59,6 +74,7 @@ main() {
 
   docker pull "$WEB_IMAGE"
   docker pull "$MIGRATOR_IMAGE"
+  docker pull "$JOBS_IMAGE"
 
   # Runtime configuration from Parameter Store, one level, not recursive: the
   # RDS master password and the registry token live a level down and are not
@@ -86,8 +102,9 @@ main() {
     --log-opt "awslogs-region=$AWS_REGION" --log-opt "awslogs-group=$LOG_GROUP" --log-opt awslogs-stream=migrator \
     "$MIGRATOR_IMAGE"
 
-  write_env "$WEB_IMAGE"
+  write_env "$WEB_IMAGE" "$JOBS_IMAGE"
   docker compose up -d --remove-orphans
+  install_jobs_cron
 
   # Health gate. /_smoke needs no database, so a failure here is the app itself
   # rather than the connection (ADR 16).
@@ -105,7 +122,7 @@ main() {
     echo "smoke check failed for $TAG; rolling back to ${PREVIOUS:-<nothing>}" >&2
     docker compose logs --tail 50 web >&2 || true
     if [ -n "$PREVIOUS" ]; then
-      write_env "$PREVIOUS"
+      write_env "$PREVIOUS" "${PREVIOUS_JOBS:-$JOBS_IMAGE}"
       docker compose up -d web
     fi
     exit 1

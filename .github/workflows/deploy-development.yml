@@ -86,6 +86,15 @@ jobs:
           tags: ${{ steps.meta.outputs.registry }}/migrator:${{ steps.meta.outputs.tag }}
           cache-from: type=gha
 
+      - name: jobs image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: jobs
+          push: true
+          tags: ${{ steps.meta.outputs.registry }}/jobs:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+
   deploy:
     name: roll the instance
     needs: build
@@ -123,7 +132,7 @@ jobs:
             exit 1
           fi
 
-          BUNDLE=$(tar -czf - -C deploy/instance docker-compose.yml Caddyfile deploy.sh | base64 -w0)
+          BUNDLE=$(tar -czf - -C deploy/instance docker-compose.yml Caddyfile deploy.sh fastehr-jobs.cron | base64 -w0)
           jq -n --arg bundle "$BUNDLE" --arg tag "$TAG" '{
             commands: [
               "set -euo pipefail",

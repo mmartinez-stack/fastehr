@@ -115,8 +115,15 @@ WORKDIR /repo
 
 COPY --from=deps --chown=node:node /repo/node_modules ./node_modules
 COPY --from=deps --chown=node:node /repo/packages/db/node_modules ./packages/db/node_modules
+COPY --from=deps --chown=node:node /repo/packages/contracts/node_modules ./packages/contracts/node_modules
 COPY --chown=node:node package.json pnpm-workspace.yaml ./
 COPY --chown=node:node packages/db ./packages/db
+# The db scripts (issue-temp-password, the legacy migrations) import
+# @fastehr/contracts through a workspace symlink; without the package beside
+# packages/db they fail with ERR_MODULE_NOT_FOUND (DIA-78). The generated
+# client comes from the build stage, as the jobs image below.
+COPY --chown=node:node packages/contracts ./packages/contracts
+COPY --from=build --chown=node:node /repo/packages/db/src/generated ./packages/db/src/generated
 
 USER node
 WORKDIR /repo/packages/db
@@ -126,3 +133,38 @@ WORKDIR /repo/packages/db
 # corepack would re-download pnpm over the network at deploy time. Neither
 # belongs in a deployment step.
 CMD ["./node_modules/.bin/prisma", "migrate", "deploy"]
+
+# ---------------------------------------------------------------------------
+# jobs — scheduled scripts on the instance (DIA-79). NOT part of the runtime
+# image, which carries only Next's standalone output and therefore neither
+# apps/web/scripts nor the workspace they import. Cron on the instance runs
+# this image once a week for the medical-director sampling (ADR 30):
+#
+#   docker run --rm --env-file /etc/fastehr/app.env fastehr-jobs \
+#     node apps/web/scripts/sample-notes-for-review.ts
+#
+# Raw TypeScript, run by Node directly (ADR 1); the generated Prisma client
+# is copied from the build stage rather than generated again.
+# ---------------------------------------------------------------------------
+FROM base AS jobs
+WORKDIR /repo
+
+COPY --from=deps --chown=node:node /repo/node_modules ./node_modules
+COPY --from=deps --chown=node:node /repo/apps/web/node_modules ./apps/web/node_modules
+COPY --from=deps --chown=node:node /repo/packages/config/node_modules ./packages/config/node_modules
+COPY --from=deps --chown=node:node /repo/packages/contracts/node_modules ./packages/contracts/node_modules
+COPY --from=deps --chown=node:node /repo/packages/core/node_modules ./packages/core/node_modules
+COPY --from=deps --chown=node:node /repo/packages/db/node_modules ./packages/db/node_modules
+COPY --chown=node:node package.json pnpm-workspace.yaml ./
+COPY --chown=node:node packages/config ./packages/config
+COPY --chown=node:node packages/contracts ./packages/contracts
+COPY --chown=node:node packages/core ./packages/core
+COPY --chown=node:node packages/db ./packages/db
+COPY --from=build --chown=node:node /repo/packages/db/src/generated ./packages/db/src/generated
+COPY --chown=node:node apps/web/package.json ./apps/web/package.json
+COPY --chown=node:node apps/web/scripts ./apps/web/scripts
+COPY --chown=node:node apps/web/src/server ./apps/web/src/server
+
+ENV NODE_ENV=production
+USER node
+CMD ["node", "apps/web/scripts/sample-notes-for-review.ts"]
