@@ -1,0 +1,9 @@
+# Weekly medical-director note sampling (ADR 30, DIA-79): one in twenty of the
+# notes signed since the last run, Mondays 06:00 Pacific (13:00 UTC in summer,
+# 14:00 in winter; the job records its own window, so drift skips nothing).
+# Installed into /etc/cron.d by deploy.sh; the image comes from /opt/fastehr/.env
+# so a deploy never edits this file. Output goes to the CloudWatch group's
+# jobs stream through the same log driver as the app.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+0 13 * * 1 root cd /opt/fastehr && . ./.env && docker run --rm --env-file /etc/fastehr/app.env -v /etc/fastehr/rds-ca.pem:/etc/fastehr/rds-ca.pem:ro --log-driver awslogs --log-opt "awslogs-region=$AWS_REGION" --log-opt "awslogs-group=$LOG_GROUP" --log-opt awslogs-stream=jobs "$JOBS_IMAGE" node apps/web/scripts/sample-notes-for-review.ts
