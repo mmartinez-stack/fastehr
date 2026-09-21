@@ -299,7 +299,7 @@ export function toPatientSummary(patient: Patient): PatientSummary {
  * submitting would fail `z.email()` on `''` — an error for a field the user
  * never filled in.
  */
-function blankAsAbsent<Schema extends z.ZodType>(schema: Schema) {
+export function blankAsAbsent<Schema extends z.ZodType>(schema: Schema) {
   return z.preprocess(
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
     schema.optional(),

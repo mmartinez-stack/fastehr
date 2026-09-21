@@ -11,4 +11,5 @@ export const ROLE_LABEL: Record<StaffRole, string> = {
   provider: "Provider",
   frontdesk: "Front Desk",
   medical_director: "Medical Director",
+  integration: "Integration",
 }

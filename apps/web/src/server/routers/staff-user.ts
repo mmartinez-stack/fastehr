@@ -23,7 +23,11 @@ import { router } from '../trpc.ts'
  * deleted at all (PRECONDITION_FAILED, from the repository's named refusal).
  */
 export const staffUserRouter = router({
+  /** People only; integration principals are listed apart, below. */
   list: adminProcedure.query(({ ctx }) => ctx.db.staffUsers.list()),
+
+  /** Integration principals and their keys (ADR 36), read-only: keys are issued by the runbook script. */
+  listIntegrations: adminProcedure.query(({ ctx }) => ctx.db.integrations.list()),
 
   /** The single-input search (ADR 27's pattern): `@` means email, else name. */
   search: adminProcedure

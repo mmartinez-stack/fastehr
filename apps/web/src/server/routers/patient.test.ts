@@ -2,6 +2,7 @@ import type { Db } from '@fastehr/db'
 import type { Patient } from '@fastehr/contracts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContext, type Actor } from '../context.ts'
+import { recordingAuditRepository, stubRepository } from '../test-support/fake-db.ts'
 import { appRouter } from './root.ts'
 
 /**
@@ -175,6 +176,7 @@ function fakeDb(overrides: Partial<Db['patients']> = {}): Db {
       setStatus: async () => {
         throw new Error('not under test')
       },
+      lookup: async () => [],
       ...overrides,
     },
     staffUsers: {
@@ -221,6 +223,9 @@ function fakeDb(overrides: Partial<Db['patients']> = {}): Db {
       startFromRecordWrite: async () => 0,
       listWaiting: async () => [],
     },
+    audit: recordingAuditRepository(),
+    integrations: stubRepository('integrations'),
+    verifications: stubRepository('verifications'),
   }
 }
 

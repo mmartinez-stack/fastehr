@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { staffRoleSchema } from './staff-role.ts'
+import { humanStaffRoleSchema, staffRoleSchema } from './staff-role.ts'
 
 /**
  * Staff account administration — the contract behind the Users screen.
@@ -32,10 +32,11 @@ const normalizedEmail = z
   .toLowerCase()
   .pipe(z.email())
 
+/** A person's role. An integration principal is created by the key issuance runbook, never here (ADR 36). */
 export const createStaffUserInput = z.object({
   name: z.string().trim().min(1),
   email: normalizedEmail,
-  role: staffRoleSchema,
+  role: humanStaffRoleSchema,
 })
 
 export type CreateStaffUserInput = z.infer<typeof createStaffUserInput>
@@ -43,7 +44,7 @@ export type CreateStaffUserInput = z.infer<typeof createStaffUserInput>
 export const updateStaffUserInput = z.object({
   id: z.string().min(1),
   name: z.string().trim().min(1).optional(),
-  role: staffRoleSchema.optional(),
+  role: humanStaffRoleSchema.optional(),
 })
 
 export type UpdateStaffUserInput = z.infer<typeof updateStaffUserInput>

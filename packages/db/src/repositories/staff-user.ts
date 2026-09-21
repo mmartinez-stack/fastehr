@@ -53,6 +53,9 @@ export class StaffUserReferencedError extends Error {
 
 const CREDENTIAL_FILTER ={ where: { providerId: 'credential' }, select: { id: true } } as const
 
+/** The Users screen lists people; an integration principal (ADR 36) is listed apart, by its own repository. */
+const PEOPLE = { role: { not: 'integration' } } as const
+
 function isUniqueViolation(error: unknown): boolean {
   return (
     typeof error === 'object' &&
@@ -66,6 +69,7 @@ export function createStaffUserRepository(getClient: () => PrismaClient): StaffU
   return {
     async list() {
       const rows = await getClient().user.findMany({
+        where: PEOPLE,
         orderBy: [{ name: 'asc' }],
         include: { accounts: CREDENTIAL_FILTER },
       })
@@ -76,6 +80,7 @@ export function createStaffUserRepository(getClient: () => PrismaClient): StaffU
       const query = input.query
       const rows = await getClient().user.findMany({
         where: {
+          ...PEOPLE,
           ...(query === undefined
             ? {}
             : query.kind === 'email'

@@ -81,7 +81,8 @@ src/server/
   procedures.ts   public / protected procedure composition
   middleware/     auth.ts (authn + RBAC), audit.ts (PHI trail)
   routers/        root.ts, plus one file per domain as they arrive
-  audit-log.ts    the audit event and its sink
+  audit-log.ts    the audit sink: stdout plus the phi_audit_events table (ADR 37)
+  partner/        the partner REST API: key auth, scopes, verification, its chain (ADR 38)
 ```
 
 `trpc.ts` holds initialisation only, and `procedures.ts` composes the chain,
@@ -293,6 +294,7 @@ incremental cache, not a build product.
 | --- | --- |
 | `/_smoke` | workspace wiring test — components, contracts, the tRPC seam end to end |
 | `/api/trpc/[trpc]` | the tRPC mount point |
+| `/api/v1/[[...path]]` | the partner REST API (ADR 38); `/api/v1/openapi.json` and `/api/v1/docs` are its reference; 404 unless `PARTNER_API_ENABLED=true` |
 | everything else | the v0 mockup, still reading `src/lib/mock-data.ts` |
 
 `pnpm smoke` asserts `/_smoke` against a built server, and CI runs it. Why it is

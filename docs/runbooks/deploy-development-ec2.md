@@ -325,6 +325,71 @@ arrive through the migration runbooks (`user-migration.md`,
 Then prove the API end to end with `scripts/api-smoke.sh`
 (`docs/runbooks/test-development-api.md` explains every call).
 
+## 12. Partner API keys (ADR 36, ADR 38)
+
+The partner API (`/api/v1`, the phone assistant's integration) is off until
+`PARTNER_API_ENABLED=true` is in Parameter Store, and inert until a key
+exists. Keys are minted by Better Auth's api key plugin on the auth
+instance, so the script runs where the app's environment is: from the
+`jobs` image on the box, in a Session Manager shell (a shell, not Run
+Command, whose output is stored). The key is printed once and is never
+stored, logged, or emailed.
+
+```bash
+aws ssm start-session --target "$INSTANCE_ID"
+sudo -i
+cd /opt/fastehr && source .env   # IMAGE_TAG
+keys() { docker run --rm --env-file /etc/fastehr/app.env \
+  -v /etc/fastehr/rds-ca.pem:/etc/fastehr/rds-ca.pem:ro \
+  "ghcr.io/$GHCR_OWNER/fastehr/jobs:$IMAGE_TAG" node apps/web/scripts/partner-api-keys.ts "$@"; }
+
+# Issue (a live key refuses without --baa-signed):
+keys issue --name "Voice assistant" --environment dev \
+  --scopes patients:lookup,patients:verify,queue:read \
+  --issued-by you@diagnosticpartners.com --expires-in-days 90 \
+  --allow-ip 203.0.113.5/32 --baa-signed 2026-09-01
+
+keys list
+keys rotate --key-id <id>   # new key; the old one expires in 24 h
+keys revoke --key-id <id>   # immediate, no restart
+```
+
+Locally, against a database over the port-forward of step 11, the same
+script runs as `node --env-file=.env apps/web/scripts/partner-api-keys.ts …`
+with `DATABASE_URL` pointing through the tunnel; the auth secret and URL
+only need to be present, since minting a key does not sign anything.
+
+Before the first `live` key: the BAA is signed and dated on the row, the
+vendor's egress addresses are in `--allow-ip` and in the 443 security-group
+rule, and `docs/partner-api/README.md`'s go-live checklist is ticked.
+
+**Incident.** `revoke` the key (takes effect on the next request), or set
+`PARTNER_API_ENABLED=false` and `docker compose up -d web` to close the whole
+surface. Then read the trail for the window:
+
+```sql
+SELECT "occurredAt", "actorKind", "apiKeyId", "action", "outcome", "code", "patientId", "requestId", "ipAddress"
+FROM phi_audit_events
+WHERE "apiKeyId" = '<key id>' AND "occurredAt" BETWEEN '2026-09-17' AND '2026-09-18'
+ORDER BY "occurredAt";
+```
+
+Reading the trail is itself a PHI access: note who ran the query and why in
+the incident log. The table refuses `UPDATE`, `DELETE`, and `TRUNCATE`
+(ADR 37) and is kept for six years.
+
+**The proxy.** `deploy/instance/Caddyfile` already carries what a live key
+needs: TLS 1.2 and 1.3 only, HSTS, a 256 KB request body cap, a 30 s
+upstream header timeout, and `X-Forwarded-For` overwritten with the peer
+address, never appended (the key's `--allow-ip` check and the audit
+trail's address read it). There is no access log at all (ADR 29), which is
+stricter than one filtered of `Authorization` and `X-Patient-Verification`.
+Port 3000 is never published.
+
+**Quarterly.** `keys list`; revoke any key whose last use
+is older than 30 days. Never set `DEBUG=prisma*` or a Prisma `log: ['query']`
+option on this host: both print bound query parameters, which are PHI.
+
 ## Operating it
 
 - **A shell on the box:** `aws ssm start-session --target "$INSTANCE_ID"`,

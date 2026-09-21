@@ -2,6 +2,8 @@ import {
   CLINIC_TIME_ZONE,
   type CreatePatientInput,
   type Patient,
+  type PatientLookupCriteria,
+  type PatientLookupRow,
   type PatientSearchInterpretation,
   type PatientSummary,
   type SearchPatientsByNameInput,
@@ -14,7 +16,7 @@ import {
   resolveLegacyOffice,
 } from '@fastehr/contracts'
 import type { PrismaClient } from '../client.ts'
-import { toPatient, toPatientSummary } from '../mappers/patient.ts'
+import { toPatient, toPatientLookupRow, toPatientSummary } from '../mappers/patient.ts'
 
 /**
  * Patient reads and writes — the query set ported from the legacy patient
@@ -56,6 +58,12 @@ export interface PatientRepository {
   updateClinical(input: UpdatePatientClinicalInput): Promise<Patient | null>
   updateBilling(input: UpdatePatientBillingInput): Promise<Patient | null>
   setStatus(input: SetPatientStatusInput): Promise<Patient>
+  /**
+   * The partner lookup (ADR 38): exact, case-insensitive matches on the
+   * identifiers given, restricted to the clinics the key may see. Not the
+   * roster's substring search; a partner API is not a browse tool.
+   */
+  lookup(criteria: PatientLookupCriteria): Promise<PatientLookupRow[]>
 }
 
 /**
@@ -219,6 +227,32 @@ export function createPatientRepository(getClient: () => PrismaClient): PatientR
     async findById(id) {
       const row = await getClient().patient.findUnique({ where: { id }, include: RECORD_INCLUDE })
       return row === null ? null : toPatient(row)
+    },
+
+    async lookup(criteria) {
+      const hasIdentifier =
+        criteria.patientId !== undefined ||
+        criteria.dateOfBirth !== undefined ||
+        criteria.phone !== undefined ||
+        criteria.lastName !== undefined
+      // The contract refuses an empty lookup; this is the repository's own
+      // refusal to ever run an unfiltered scan should a caller bypass it.
+      if (!hasIdentifier) return []
+
+      const exact = (value: string) => ({ equals: value, mode: 'insensitive' as const })
+      const rows = await getClient().patient.findMany({
+        where: {
+          ...(criteria.patientId === undefined ? {} : { id: criteria.patientId }),
+          ...(criteria.dateOfBirth === undefined ? {} : { dateOfBirth: new Date(criteria.dateOfBirth) }),
+          ...(criteria.phone === undefined ? {} : { phone: criteria.phone }),
+          ...(criteria.lastName === undefined ? {} : { lastName: exact(criteria.lastName) }),
+          ...(criteria.firstName === undefined ? {} : { firstName: exact(criteria.firstName) }),
+          ...(criteria.locationIds.length === 0 ? {} : { locationId: { in: [...criteria.locationIds] } }),
+        },
+        orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }, { id: 'asc' }],
+        take: criteria.limit,
+      })
+      return rows.map(toPatientLookupRow)
     },
 
     async listRecent() {

@@ -41,6 +41,28 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+
+  /**
+   * Headers for the partner API (ADR 38), applied by Next so they hold even
+   * on a response produced before the handler runs (a 404 for a path under
+   * `/api/v1` that Next itself refuses). The handler sets the same set, plus
+   * the request id, on everything it answers. HSTS is meaningful from the
+   * TLS host; emitting it here as well is harmless and self-documenting. No
+   * CORS header is set anywhere: this is a server-to-server surface.
+   */
+  async headers() {
+    return [
+      {
+        source: '/api/v1/:path*',
+        headers: [
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+          { key: 'Cache-Control', value: 'no-store' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+        ],
+      },
+    ]
+  },
 }
 
 export default nextConfig

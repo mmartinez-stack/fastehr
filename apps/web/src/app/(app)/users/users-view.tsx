@@ -5,8 +5,9 @@ import { useForm } from "@tanstack/react-form"
 import {
   createStaffUserInput,
   describeValidationFailure,
-  STAFF_ROLES,
+  HUMAN_STAFF_ROLES,
   updateStaffUserInput,
+  type HumanStaffRole,
   type StaffRole,
   type StaffUser,
 } from "@fastehr/contracts"
@@ -73,13 +74,14 @@ import { CircleCheck, CircleSlash, PencilIcon, Search, Trash2, UserPlusIcon } fr
  * actions are inline buttons on the row — never folded into an overflow menu.
  */
 
-const ROLE_OPTIONS = STAFF_ROLES.map((value) => ({ value, label: ROLE_LABEL[value] }))
+const ROLE_OPTIONS = HUMAN_STAFF_ROLES.map((value) => ({ value, label: ROLE_LABEL[value] }))
 
 const roleVariant: Record<StaffRole, "default" | "secondary" | "outline"> = {
   provider: "default",
   admin: "secondary",
   medical_director: "secondary",
   frontdesk: "outline",
+  integration: "outline",
 }
 
 /** Every message a user reads, keyed by field and issue code (ADR 12). */
@@ -91,6 +93,39 @@ const COPY: FormCopy = {
 
 const EMAIL_TAKEN: FormErrors = { fields: { email: { message: "That email is already in use." } } }
 const SAVE_FAILED = "The changes could not be saved. Check your connection and try again."
+
+function integrationStatus(
+  isActive: boolean,
+  key: { enabled: boolean; expiresAt: string | null } | null,
+) {
+  if (!isActive) {
+    return (
+      <Badge variant="ghost" className="bg-muted text-muted-foreground">
+        Disabled
+      </Badge>
+    )
+  }
+  if (key === null) return null
+  if (!key.enabled) {
+    return (
+      <Badge variant="ghost" className="bg-muted text-muted-foreground">
+        Revoked
+      </Badge>
+    )
+  }
+  if (key.expiresAt !== null && new Date(key.expiresAt).getTime() <= Date.now()) {
+    return (
+      <Badge variant="ghost" className="bg-warning/15 text-warning">
+        Expired
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="ghost" className="bg-success/15 text-success">
+      Active
+    </Badge>
+  )
+}
 
 function initials(name: string) {
   return name
@@ -148,7 +183,7 @@ function CreateUserForm({ onDone }: { onDone: () => void }) {
       },
       onSubmitAsync: async ({ value }) => {
         try {
-          const created = await create.mutateAsync({ ...value, role: value.role as StaffRole })
+          const created = await create.mutateAsync({ ...value, role: value.role as HumanStaffRole })
           toast.success(`${created.name} added. Issue a temporary password to enable sign-in`)
           void utils.staffUsers.invalidate()
           onDone()
@@ -261,7 +296,7 @@ function EditUserForm({
           const updated = await update.mutateAsync({
             id: user.id,
             name: value.name,
-            role: value.role as StaffRole,
+            role: value.role as HumanStaffRole,
           })
           toast.success(`${updated.name} saved`)
           void utils.staffUsers.invalidate()
@@ -353,6 +388,7 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
   )
   const active = submitted === null ? list : search
   const users = active.data ?? []
+  const integrations = trpc.staffUsers.listIntegrations.useQuery()
 
   const [addOpen, setAddOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<StaffUser | null>(null)
@@ -565,6 +601,72 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
                 <TableRow>
                   <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                     {submitted === null ? "No staff accounts yet." : "No users match your search."}
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Integration principals (ADR 36): key owners, never people. Read-only
+          here on purpose: keys are issued and revoked by the runbook script,
+          which is the only place a key is ever shown. */}
+      <Card className="mt-6">
+        <CardContent className="flex flex-col gap-4">
+          <div>
+            <h2 className="text-base font-semibold">Integrations</h2>
+            <p className="text-sm text-muted-foreground">
+              Partner systems holding an API key. Keys are issued, rotated, and revoked from the runbook, never here.
+            </p>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Integration</TableHead>
+                <TableHead>Key</TableHead>
+                <TableHead>Scopes</TableHead>
+                <TableHead>Expires</TableHead>
+                <TableHead>Last used</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(integrations.data ?? []).flatMap((integration) =>
+                integration.keys.length === 0
+                  ? [
+                      <TableRow key={integration.id}>
+                        <TableCell className="font-medium">{integration.name}</TableCell>
+                        <TableCell colSpan={4} className="text-muted-foreground">No keys</TableCell>
+                        <TableCell>{integrationStatus(integration.isActive, null)}</TableCell>
+                      </TableRow>,
+                    ]
+                  : integration.keys.map((key) => (
+                      <TableRow key={key.id}>
+                        <TableCell className="font-medium">{integration.name}</TableCell>
+                        <TableCell>
+                          <span className="font-mono text-xs">{key.start ?? key.id}</span>
+                          {key.metadata?.environment === "live" ? (
+                            <Badge variant="ghost" className="ml-2 bg-warning/15 text-warning">live</Badge>
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{key.scopes.join(", ") || "-"}</TableCell>
+                        <TableCell>{key.expiresAt === null ? "-" : new Date(key.expiresAt).toLocaleDateString()}</TableCell>
+                        <TableCell>{key.lastUsedAt === null ? "Never" : new Date(key.lastUsedAt).toLocaleString()}</TableCell>
+                        <TableCell>{integrationStatus(integration.isActive, key)}</TableCell>
+                      </TableRow>
+                    )),
+              )}
+              {integrations.isPending ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                    Loading integrations…
+                  </TableCell>
+                </TableRow>
+              ) : (integrations.data ?? []).length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                    No integrations yet.
                   </TableCell>
                 </TableRow>
               ) : null}

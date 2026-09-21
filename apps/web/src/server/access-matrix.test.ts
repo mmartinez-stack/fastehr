@@ -1,6 +1,7 @@
 import { ROLE_ACCESS, ROLE_SURFACES, STAFF_ROLES, type RoleSurface } from '@fastehr/contracts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContext } from './context.ts'
+import { fakeDb } from './test-support/fake-db.ts'
 import {
   adminProcedure,
   clericalProcedure,
@@ -18,9 +19,11 @@ import { router } from './trpc.ts'
  *
  * `clinical` has no procedure kind of its own: the Medical tab is open to
  * every role (ADR 28, the Aug 31 decision that nothing clinical is withheld
- * from the front desk), so `protectedProcedure` admits the whole vocabulary
- * and the `clinical` surface only shapes the client (the Queues entry, the
- * chart's clinical cards). That asymmetry is pinned below rather than hidden.
+ * from the front desk), so `protectedProcedure` admits every role that
+ * reaches any surface and the `clinical` surface only shapes the client (the
+ * Queues entry, the chart's clinical cards). That asymmetry is pinned below
+ * rather than hidden. The one role with no surface, `integration` (ADR 36),
+ * is refused by every chain, the any-role one included.
  */
 
 const probe = router({
@@ -38,7 +41,7 @@ function call(
   actor: { mustChangePassword?: boolean } = {},
 ) {
   const caller = probe.createCaller(
-    createContext({ actor: { id: 'probe', roles, locations: ['sylmar'], ...actor } }),
+    createContext({ actor: { id: 'probe', roles, locations: ['sylmar'], ...actor }, db: fakeDb() }),
   )
   return caller[procedure]()
 }
@@ -53,8 +56,10 @@ afterEach(() => {
 
 describe('the access matrix, enforced', () => {
   for (const role of STAFF_ROLES) {
-    it(`${role} reaches the any-role chain`, async () => {
-      await expect(call('any', [role])).resolves.toBe('ok')
+    const reachesAnything = ROLE_SURFACES.some((surface) => ROLE_ACCESS[role][surface])
+    it(`${role} ${reachesAnything ? 'reaches' : 'is refused by'} the any-role chain`, async () => {
+      if (reachesAnything) await expect(call('any', [role])).resolves.toBe('ok')
+      else await expect(call('any', [role])).rejects.toMatchObject({ code: 'FORBIDDEN' })
     })
     for (const surface of ENFORCED) {
       const allowed = ROLE_ACCESS[role][surface]

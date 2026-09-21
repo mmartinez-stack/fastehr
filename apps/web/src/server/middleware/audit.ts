@@ -1,5 +1,5 @@
+import type { PhiAuditEvent } from '@fastehr/contracts'
 import type { TRPCError } from '@trpc/server'
-import { recordAuditEvent, type AuditEvent } from '../audit-log.ts'
 import { t } from '../trpc.ts'
 
 /**
@@ -12,15 +12,20 @@ import { t } from '../trpc.ts'
  * downstream fails, so a rejected call still produces a record, with `ctx.actor`
  * as whatever the request actually presented — `anonymous` for an
  * unauthenticated attempt.
+ *
+ * The event carries the procedure path and never its input (ADR 10); the
+ * sink on the context (ADR 37) writes it to stdout and to the audit table.
  */
 export const auditPhiAccess = t.middleware(async ({ ctx, path, type, next }) => {
   const startedAt = Date.now()
   const result = await next()
 
-  recordAuditEvent({
-    actorId: ctx.actor?.id ?? 'anonymous',
-    path,
-    type,
+  ctx.audit.record({
+    transport: 'trpc',
+    actorKind: ctx.actor === null ? 'anonymous' : 'staff',
+    actorId: ctx.actor?.id ?? null,
+    action: path,
+    method: type,
     ...describeOutcome(result),
     durationMs: Date.now() - startedAt,
   })
@@ -34,7 +39,7 @@ const DENIAL_CODES = new Set<string>(['UNAUTHORIZED', 'FORBIDDEN'])
 function describeOutcome(result: {
   ok: boolean
   error?: TRPCError
-}): Pick<AuditEvent, 'outcome' | 'code'> {
+}): Pick<PhiAuditEvent, 'outcome' | 'code'> {
   if (result.ok) return { outcome: 'allowed' }
   const code = result.error?.code
   if (code === undefined) return { outcome: 'error' }

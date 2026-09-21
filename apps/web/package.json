@@ -10,10 +10,12 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "test:integration": "vitest run -c vitest.integration.config.ts",
-    "sample-notes-for-review": "node scripts/sample-notes-for-review.ts"
+    "sample-notes-for-review": "node scripts/sample-notes-for-review.ts",
+    "partner-api-keys": "node scripts/partner-api-keys.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
+    "@better-auth/api-key": "1.7.1",
     "@fastehr/contracts": "workspace:*",
     "@fastehr/core": "workspace:*",
     "@fastehr/db": "workspace:*",

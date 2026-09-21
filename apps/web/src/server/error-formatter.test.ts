@@ -1,6 +1,7 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import { describe, expect, it } from 'vitest'
 import { createContext, type Actor } from './context.ts'
+import { fakeDb } from './test-support/fake-db.ts'
 import { appRouter } from './routers/root.ts'
 
 /**
@@ -13,7 +14,7 @@ import { appRouter } from './routers/root.ts'
  * quote the offending value; a hand-written refinement message can, and this is
  * what makes that harmless.
  */
-const CLINICIAN: Actor = { id: 'user-1', roles: ['clinician'], locations: ['sylmar'] }
+const CLINICIAN: Actor = { id: 'user-1', roles: ['provider'], locations: ['sylmar'] }
 
 async function callWithInput(input: unknown, actor: Actor | null = CLINICIAN) {
   // A query, so: GET with the input in the query string, superjson-enveloped.
@@ -23,7 +24,7 @@ async function callWithInput(input: unknown, actor: Actor | null = CLINICIAN) {
     endpoint: '/api/trpc',
     req: new Request(`http://test.invalid/api/trpc/patientDisplayName?input=${encoded}`),
     router: appRouter,
-    createContext: () => createContext({ actor }),
+    createContext: () => createContext({ actor, db: fakeDb() }),
   })
   return { status: response.status, body: await response.text() }
 }

@@ -1,5 +1,7 @@
 import { getPrismaClient, type PrismaClient } from './client.ts'
+import { createAuditRepository, type AuditRepository } from './repositories/audit.ts'
 import { createIntakeRepository, type IntakeRepository } from './repositories/intake.ts'
+import { createIntegrationRepository, type IntegrationRepository } from './repositories/integration.ts'
 import { createLocationRepository, type LocationRepository } from './repositories/location.ts'
 import { createPatientRepository, type PatientRepository } from './repositories/patient.ts'
 import { createQueueRepository, type QueueRepository } from './repositories/queue.ts'
@@ -10,6 +12,7 @@ import {
   StaffUserReferencedError,
   type StaffUserRepository,
 } from './repositories/staff-user.ts'
+import { createVerificationRepository, type VerificationRepository } from './repositories/verification.ts'
 
 /**
  * The public surface of `@fastehr/db`.
@@ -32,6 +35,12 @@ export interface Db {
   reviews: ReviewRepository
   locations: LocationRepository
   queue: QueueRepository
+  /** The PHI audit trail (ADR 37): append-only, `record` is its only method. */
+  audit: AuditRepository
+  /** Integration principals and what the application reads of their keys (ADR 36). */
+  integrations: IntegrationRepository
+  /** Patient verification tokens and the attempt counter behind the lockout (ADR 38). */
+  verifications: VerificationRepository
 }
 
 /**
@@ -54,6 +63,9 @@ export function createDb(getClient: () => PrismaClient = getPrismaClient): Db {
     reviews: createReviewRepository(getClient),
     locations: createLocationRepository(getClient),
     queue: createQueueRepository(getClient),
+    audit: createAuditRepository(getClient),
+    integrations: createIntegrationRepository(getClient),
+    verifications: createVerificationRepository(getClient),
   }
 }
 
@@ -63,10 +75,13 @@ export const db: Db = createDb()
 export { createAuthAdapter } from './auth-adapter.ts'
 export { StaffUserEmailTakenError, StaffUserReferencedError }
 export type {
+  AuditRepository,
   IntakeRepository,
+  IntegrationRepository,
   LocationRepository,
   PatientRepository,
   QueueRepository,
   ReviewRepository,
   StaffUserRepository,
+  VerificationRepository,
 }

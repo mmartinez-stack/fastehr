@@ -2,7 +2,7 @@
 
 import * as React from "react"
 
-import { ROLE_ACCESS, STAFF_ROLES, type RoleSurface, type StaffRole } from "@fastehr/contracts"
+import { HUMAN_STAFF_ROLES, ROLE_ACCESS, type RoleSurface, type StaffRole } from "@fastehr/contracts"
 
 /**
  * Which role's view of the application is on screen.
@@ -55,7 +55,8 @@ export function RoleProvider({
     () => ({
       role: canSwitch ? preview : actual,
       sessionRole,
-      roles: STAFF_ROLES,
+      // The switcher previews people's views; an integration principal (ADR 36) has none.
+      roles: HUMAN_STAFF_ROLES,
       canSwitch,
       setRole: (next: StaffRole) => {
         if (canSwitch) setPreview(next)

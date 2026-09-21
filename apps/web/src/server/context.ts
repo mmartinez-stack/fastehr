@@ -1,5 +1,6 @@
 import type { LocationSlug } from '@fastehr/contracts'
 import { db, type Db } from '@fastehr/db'
+import { createAuditSink, type AuditSink } from './audit-log.ts'
 import { getAppBaseUrl } from './auth.ts'
 import { smsTransportFromEnv, type SmsTransport } from './sms.ts'
 
@@ -51,6 +52,12 @@ export interface Context {
   sms: SmsTransport
   /** The origin public links are built on — resolved lazily, like the auth env. */
   appBaseUrl: () => string
+  /**
+   * The PHI audit sink (ADR 37): stdout plus the audit table. On the context
+   * so the tRPC middleware and the partner chain write through one seam, and
+   * so a test hands in a recording sink and reads the trail back.
+   */
+  audit: AuditSink
 }
 
 /**
@@ -71,11 +78,13 @@ export function createContext({
   db: repositories = db,
   sms = smsTransportFromEnv(),
   appBaseUrl = getAppBaseUrl,
+  audit = createAuditSink(repositories.audit),
 }: {
   actor: Actor | null
   db?: Db
   sms?: SmsTransport
   appBaseUrl?: () => string
+  audit?: AuditSink
 }): Context {
-  return { actor, db: repositories, sms, appBaseUrl }
+  return { actor, db: repositories, sms, appBaseUrl, audit }
 }

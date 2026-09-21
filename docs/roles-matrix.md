@@ -89,6 +89,31 @@ Notes that carry weight:
 - Refused attempts are audited: the audit middleware is outermost precisely so
   a `FORBIDDEN` probe leaves a trace (ADR 10).
 
+## Integrations (partner keys, ADR 36 and ADR 38)
+
+A partner key belongs to a fifth role, `integration`: a `users` row whose
+`ROLE_ACCESS` row is `false` on every surface, which the Users screen
+lists apart and never assigns, the role switcher never offers,
+`requireRole` refuses (no surface at all), and `actorFromHeaders` refuses
+by name. `/api/v1` resolves no session, and `/api/trpc` accepts no key.
+A key's permissions are **scopes** on the key row, checked by the partner
+chain against the operation registry in `packages/contracts/src/partner-api/operations.ts`,
+default deny. Patient-specific operations additionally require a
+verification token minted by the verify operation for that patient and that
+integration. A key may be restricted to some clinics; then it is a boundary,
+not a filter (unlike a staff actor's, ADR 22).
+
+| Operation | Scope | Verification token |
+| --- | --- | :-: |
+| `POST /api/v1/patients/lookup` | `patients:lookup` | no |
+| `POST /api/v1/patients/{patientId}/verify` | `patients:verify` | no (issues one) |
+| `GET /api/v1/queue/count` | `queue:read` | no |
+| Planned: medications read, refill create, task create, appointments read and create, interaction writeback | `medications:read`, `refills:write`, `tasks:write`, `appointments:read`, `appointments:write`, `interactions:write` | yes, where a patient is named |
+
+Every call, refused or not, writes a `phi_audit_events` row (ADR 37).
+`apps/web/src/server/partner/scope-matrix.test.ts` runs every operation
+against every single-scope key.
+
 ## Client surfaces (presentation, not enforcement)
 
 `role-provider.tsx` renders from the **session's** role, supplied by the app
@@ -117,6 +142,8 @@ triggers a refused call.
 | Record sections and tabs | ADR 28, `apps/web/src/features/patients/patient-tabs.ts` |
 | Session + surface page guards | `apps/web/src/server/guards.ts`, `apps/web/src/lib/guard-page.ts` |
 | Audit chain ordering | ADR 10 |
+| Partner keys, scopes, verification tokens | ADR 38, `apps/web/src/server/partner/`, `docs/partner-api/` |
+| The audit trail: event shape, the append-only table, the two sinks | ADR 37, `packages/contracts/src/audit.ts`, `apps/web/src/server/audit-log.ts` |
 | Office scoping | ADR 22 |
 | Mockup surfaces | `apps/web/src/components/role-provider.tsx` |
 | Legacy role migration | `packages/db/scripts/migrate-users.ts`, docs/legacy-data-mapping.md § users |
