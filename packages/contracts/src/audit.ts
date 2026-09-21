@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /**
- * The PHI access audit event (ADR 10, ADR 35).
+ * The PHI access audit event (ADR 10, ADR 36).
  *
  * One record per attempt to reach protected health information, whether the
  * attempt was allowed, refused, or failed. Two producers write it, the tRPC

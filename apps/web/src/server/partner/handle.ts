@@ -12,7 +12,7 @@ import { logPartnerRequest } from './request-log.ts'
 import { matchRoute } from './router.ts'
 
 /**
- * The partner API entry point (ADR 36): a `Request` in, a `Response` out,
+ * The partner API entry point (ADR 37): a `Request` in, a `Response` out,
  * with nothing from `next/*` (ADR 9). The Next route handler at
  * `app/api/v1/[[...path]]/route.ts` calls this and nothing else; a test
  * calls it with a hand-built `Request` and fakes.

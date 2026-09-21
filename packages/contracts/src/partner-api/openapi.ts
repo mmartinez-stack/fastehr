@@ -8,7 +8,7 @@ import { API_SCOPES } from './scopes.ts'
 
 /**
  * The OpenAPI 3.1 document for the partner API, built from the registry and
- * the Zod schemas (ADR 36). Zod 4 emits JSON Schema 2020-12 natively, which
+ * the Zod schemas (ADR 37). Zod 4 emits JSON Schema 2020-12 natively, which
  * is the dialect OpenAPI 3.1 consumes, so there is no generator dependency:
  * this module lives in contracts because it is the one package that may
  * import Zod (ADR 5).

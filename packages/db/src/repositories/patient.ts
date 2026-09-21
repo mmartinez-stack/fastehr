@@ -59,7 +59,7 @@ export interface PatientRepository {
   updateBilling(input: UpdatePatientBillingInput): Promise<Patient | null>
   setStatus(input: SetPatientStatusInput): Promise<Patient>
   /**
-   * The partner lookup (ADR 36): exact, case-insensitive matches on the
+   * The partner lookup (ADR 37): exact, case-insensitive matches on the
    * identifiers given, restricted to the clinics the key may see. Not the
    * roster's substring search; a partner API is not a browse tool.
    */

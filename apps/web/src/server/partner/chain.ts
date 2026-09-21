@@ -23,7 +23,7 @@ import { resolveVerification } from './verification.ts'
  *   audit -> authenticate -> authorize -> rate limit -> verification -> validate -> handle -> shape
  *
  * Audit is outermost, so a refused key, a missing scope, a locked-out
- * patient, and a bad body all leave a row (ADR 35) with the outcome the
+ * patient, and a bad body all leave a row (ADR 36) with the outcome the
  * investigation wants: `denied` for a refusal, `error` for a failure. The
  * handler's result is parsed through the operation's output schema on the
  * way out, so nothing the contract does not describe reaches the wire.

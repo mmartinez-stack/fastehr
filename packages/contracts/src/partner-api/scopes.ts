@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /**
- * Partner API scopes (ADR 36): one per capability the vendor asked for, and
+ * Partner API scopes (ADR 37): one per capability the vendor asked for, and
  * default deny. A key carries a subset; an operation names the one it needs
  * (`scope` on its registry entry, ./operations.ts), and the chain refuses a
  * key without it.

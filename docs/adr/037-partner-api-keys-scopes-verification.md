@@ -1,4 +1,4 @@
-# ADR 36 — The partner API: scoped keys, a verification token, one chain, one registry
+# ADR 37 — The partner API: scoped keys, a verification token, one chain, one registry
 
 **Status:** accepted 2026-09-17 (the vendor's Patient Lookup and Patient Verification, plus the queue count)  
 **Applies to:** `packages/contracts/src/partner-api/` · `packages/contracts/src/env.ts` · `packages/db/prisma/migrations/20260917130000_partner_api_clients` · `packages/db/src/repositories/api-client.ts` · `packages/db/src/repositories/verification.ts` · `packages/db/scripts/partner-api-keys.ts` · `apps/web/src/server/partner/` · `apps/web/src/app/api/v1/[[...path]]/route.ts` · `apps/web/next.config.mjs` · `docs/partner-api/`
@@ -51,7 +51,7 @@ identity, the wrong permissions, and the wrong audit line.
    authorize (scope), rate limit, verification, validate, handle, and shape
    the output through the operation's strict schema so nothing the contract
    does not describe leaves. Every refusal writes a row through the same
-   sink the tRPC chain uses (ADR 35), with the route template and never the
+   sink the tRPC chain uses (ADR 36), with the route template and never the
    URL, and the patient as the subject when the route names one.
 5. **One registry.** `PARTNER_OPERATIONS` in contracts is read by the
    router, the chain, the OpenAPI builder, the scope-matrix test, and the

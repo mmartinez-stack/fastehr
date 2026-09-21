@@ -2,7 +2,7 @@ import { phiAuditEventSchema, type PhiAuditEvent } from '@fastehr/contracts'
 import type { PrismaClient } from '../client.ts'
 
 /**
- * The PHI audit trail (ADR 35): one row per access attempt, appended and
+ * The PHI audit trail (ADR 36): one row per access attempt, appended and
  * never changed.
  *
  * The interface has a single method on purpose. There is no update, no

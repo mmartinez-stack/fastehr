@@ -1,5 +1,5 @@
 /**
- * Partner API key issuance (ADR 36). The operator-only path: keys are never
+ * Partner API key issuance (ADR 37). The operator-only path: keys are never
  * created from the application, and the key is printed to **stdout once**,
  * to be handed to the partner out-of-band. It is never written to a file
  * and never logged; the database keeps the key id and the SHA-256 of the

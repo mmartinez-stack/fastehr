@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /**
- * The partner API error envelope (ADR 12 applied to REST, ADR 36).
+ * The partner API error envelope (ADR 12 applied to REST, ADR 37).
  *
  * Every failure leaves as `{ error: { code, requestId, validation? } }`:
  * a code from the closed list below, the request id the caller can quote

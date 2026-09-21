@@ -4,7 +4,7 @@ import type { OperationHandler } from '../chain.ts'
 import { PartnerApiError } from '../errors.ts'
 
 /**
- * The live queue count (ADR 36, over ADR 33's queue). The same rows and the
+ * The live queue count (ADR 37, over ADR 33's queue). The same rows and the
  * same functions the staff screen uses, reduced to a number per clinic and
  * the longest wait; never a name, an id, or an arrival time. A key
  * restricted to some clinics sees only those, and asking for a clinic it

@@ -10,7 +10,7 @@ import { fakeDb, recordingAuditRepository } from './test-support/fake-db.ts'
  * function of its context (ADR 9): the security behaviour
  * that most needs testing is also the cheapest thing in the repo to test.
  *
- * Two sinks (ADR 35): the stdout line, read back through a spy, and the
+ * Two sinks (ADR 36): the stdout line, read back through a spy, and the
  * audit repository, faked here. Both must carry the same event.
  */
 const repository = recordingAuditRepository()

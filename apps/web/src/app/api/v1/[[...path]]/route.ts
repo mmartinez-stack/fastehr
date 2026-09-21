@@ -1,7 +1,7 @@
 import { handlePartnerRequest } from '@/server'
 
 /**
- * The partner API mount point (ADR 36), the third and last file that bridges
+ * The partner API mount point (ADR 37), the third and last file that bridges
  * Next.js into the server layer (with the tRPC and auth routes). It holds
  * no logic: the request goes to `handlePartnerRequest` as a plain `Request`,
  * which is what keeps `src/server/partner/**` mountable anywhere (ADR 9).

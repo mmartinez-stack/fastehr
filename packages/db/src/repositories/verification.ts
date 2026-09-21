@@ -4,7 +4,7 @@ import { toPatientVerification } from '../mappers/verification.ts'
 
 /**
  * Patient verification tokens and the attempt counter behind the lockout
- * (ADR 36).
+ * (ADR 37).
  *
  * The token itself is minted and hashed in the server layer; only the hash
  * arrives here, and only the hash is looked up, as with the intake token

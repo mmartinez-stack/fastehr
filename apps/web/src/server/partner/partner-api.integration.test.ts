@@ -10,10 +10,10 @@ import { resolveVerification } from './verification.ts'
 import { recordingAuditRepository } from '../test-support/fake-db.ts'
 
 /**
- * The partner API against real PostgreSQL (ADR 36): a key issued the way
+ * The partner API against real PostgreSQL (ADR 37): a key issued the way
  * the CLI issues one, a lookup, a verification, the token honoured by the
  * resolver, the lockout surviving a fresh process (a new limiter, the same
- * database), and the events the exchange produces (ADR 35; the table write
+ * database), and the events the exchange produces (ADR 36; the table write
  * itself is covered in packages/db).
  *
  * Everything reaches the database through `Db`, as the application does

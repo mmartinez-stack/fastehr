@@ -3,7 +3,7 @@ import { getPrismaClient } from '../client.ts'
 import { db } from '../index.ts'
 
 /**
- * The audit trail against real PostgreSQL (ADR 35): a row lands with the
+ * The audit trail against real PostgreSQL (ADR 36): a row lands with the
  * enum values, and the table refuses to be rewritten.
  *
  * There is no TRUNCATE in `beforeEach` on purpose: the trigger under test

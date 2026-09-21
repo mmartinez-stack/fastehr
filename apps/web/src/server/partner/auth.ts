@@ -4,7 +4,7 @@ import type { PartnerActor, PartnerContext } from './context.ts'
 import { PartnerApiError } from './errors.ts'
 
 /**
- * Partner key authentication (ADR 36).
+ * Partner key authentication (ADR 37).
  *
  * The bearer token is parsed into its key id and secret; the secret is
  * hashed and handed to the repository, which compares it in constant time

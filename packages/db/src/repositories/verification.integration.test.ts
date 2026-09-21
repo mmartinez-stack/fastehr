@@ -5,7 +5,7 @@ import { db } from '../index.ts'
 
 /**
  * Verification tokens and the attempt counter against real PostgreSQL
- * (ADR 36): only the hash is stored, and failures count per patient and per
+ * (ADR 37): only the hash is stored, and failures count per patient and per
  * client inside a window.
  */
 const prisma = getPrismaClient()

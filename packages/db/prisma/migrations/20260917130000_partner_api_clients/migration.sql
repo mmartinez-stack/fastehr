@@ -1,4 +1,4 @@
--- ADR 36: partner API clients, patient verification tokens, and the attempt
+-- ADR 37: partner API clients, patient verification tokens, and the attempt
 -- counter behind the lockout. Plus the phone index the lookup needs.
 
 

@@ -9,7 +9,7 @@ import type { PartnerContext } from './context.ts'
 import { PartnerApiError } from './errors.ts'
 
 /**
- * Patient verification tokens and the lockout (ADR 36).
+ * Patient verification tokens and the lockout (ADR 37).
  *
  * The token is 32 random bytes, base64url; only its SHA-256 is stored, as
  * with the intake token (ADR 29). It is bound to one client and one

@@ -4,7 +4,7 @@ import { API_KEY_ENVIRONMENTS, API_KEY_ID_LENGTH } from './api-key.ts'
 import { partnerScopeSchema } from './scopes.ts'
 
 /**
- * Partner API clients and patient verifications (ADR 36).
+ * Partner API clients and patient verifications (ADR 37).
  *
  * An `ApiClient` is one partner integration holding one key. The row keeps
  * the key's public id and the hash of its secret; neither the secret nor
@@ -20,7 +20,7 @@ export const API_CLIENT_STATUSES = ['active', 'revoked'] as const
 export const apiClientStatusSchema = z.enum(API_CLIENT_STATUSES)
 export type ApiClientStatus = z.infer<typeof apiClientStatusSchema>
 
-/** A key must expire. Ninety days by default, a year at most (ADR 36). */
+/** A key must expire. Ninety days by default, a year at most (ADR 37). */
 export const API_KEY_DEFAULT_TTL_DAYS = 90
 export const API_KEY_MAX_TTL_DAYS = 365
 

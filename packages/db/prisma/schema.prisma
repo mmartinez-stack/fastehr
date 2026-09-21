@@ -194,7 +194,7 @@ model Patient {
   @@index([locationId])
   // The roster's default order: most recently seen first.
   @@index([lastVisitAt])
-  // Partner lookup and verification by phone (ADR 36): without this each
+  // Partner lookup and verification by phone (ADR 37): without this each
   // call is a sequential scan, which is both a load lever and a timing signal.
   @@index([phone])
   @@map("patients")
@@ -514,7 +514,7 @@ model IntakeRequest {
 }
 
 // ---------------------------------------------------------------------------
-// PHI audit trail (ADR 10, ADR 35)
+// PHI audit trail (ADR 10, ADR 36)
 // ---------------------------------------------------------------------------
 
 enum AuditTransport {
@@ -588,7 +588,7 @@ model PhiAuditEvent {
 }
 
 // ---------------------------------------------------------------------------
-// Partner API clients and patient verifications (ADR 36)
+// Partner API clients and patient verifications (ADR 37)
 // ---------------------------------------------------------------------------
 
 enum ApiClientStatus {

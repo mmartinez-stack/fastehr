@@ -12,8 +12,8 @@
  *   auth.ts           the Better Auth instance; session → Actor resolution
  *   guards.ts         requireSession / requireRole — fail-closed entry guards
  *   routers/          root.ts, plus one file per domain as they arrive
- *   audit-log.ts      the audit sink (ADR 35)
- *   partner/          the partner REST API: key auth, scopes, verification, its chain (ADR 36)
+ *   audit-log.ts      the audit sink (ADR 36)
+ *   partner/          the partner REST API: key auth, scopes, verification, its chain (ADR 37)
  */
 export { appRouter } from './routers/root.ts'
 export type { AppRouter } from './routers/root.ts'

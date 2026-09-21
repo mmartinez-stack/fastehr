@@ -14,7 +14,7 @@ import { t } from '../trpc.ts'
  * unauthenticated attempt.
  *
  * The event carries the procedure path and never its input (ADR 10); the
- * sink on the context (ADR 35) writes it to stdout and to the audit table.
+ * sink on the context (ADR 36) writes it to stdout and to the audit table.
  */
 export const auditPhiAccess = t.middleware(async ({ ctx, path, type, next }) => {
   const startedAt = Date.now()

@@ -4,7 +4,7 @@ import { getPrismaClient } from '../client.ts'
 import { db } from '../index.ts'
 
 /**
- * Partner API clients against real PostgreSQL (ADR 36): the credential
+ * Partner API clients against real PostgreSQL (ADR 37): the credential
  * match, what a read never yields, and the conditional revoke.
  */
 const prisma = getPrismaClient()

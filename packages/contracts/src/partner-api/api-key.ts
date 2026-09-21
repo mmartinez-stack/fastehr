@@ -1,5 +1,5 @@
 /**
- * The partner API key format (ADR 36).
+ * The partner API key format (ADR 37).
  *
  *   fehr_<env>_<keyId>_<secret>
  *

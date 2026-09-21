@@ -4,12 +4,12 @@ import { createAuditSink, type AuditSink } from '../audit-log.ts'
 import { createRateLimiter, type RateLimiter } from './rate-limit.ts'
 
 /**
- * Request-scoped context for the partner API (ADR 36).
+ * Request-scoped context for the partner API (ADR 37).
  *
  * Deliberately its own type rather than the tRPC `Context`: a partner call
  * must never be able to satisfy `requireRole` or reach a staff procedure, so
  * the actor shape does not overlap. What is shared is what should be: the
- * repositories (`Db`) and the audit sink (ADR 35), so the two chains write
+ * repositories (`Db`) and the audit sink (ADR 36), so the two chains write
  * one trail through one seam.
  */
 
@@ -20,7 +20,7 @@ export interface PartnerActor {
   keyId: string
   name: string
   scopes: readonly PartnerScope[]
-  /** Empty means every active clinic; otherwise the key sees only these (ADR 36: a boundary for a key). */
+  /** Empty means every active clinic; otherwise the key sees only these (ADR 37: a boundary for a key). */
   locations: readonly LocationSlug[]
 }
 
@@ -46,7 +46,7 @@ export interface PartnerContext {
   auditScope: AuditScope
 }
 
-/** One limiter per process: the buckets are what a single container can offer (ADR 36). */
+/** One limiter per process: the buckets are what a single container can offer (ADR 37). */
 let sharedRateLimiter: RateLimiter | undefined
 
 export function createPartnerContext({

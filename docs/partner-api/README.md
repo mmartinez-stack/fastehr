@@ -1,6 +1,6 @@
 # FastEHR Partner API
 
-Server-to-server access for an approved partner (ADR 36). The reference is
+Server-to-server access for an approved partner (ADR 37). The reference is
 the OpenAPI document in this directory, `openapi.json`, also served at
 `/api/v1/openapi.json` and rendered at `/api/v1/docs` on any environment
 where the API is enabled. Regenerate it after any contract change:

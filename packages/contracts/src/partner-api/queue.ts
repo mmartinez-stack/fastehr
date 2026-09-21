@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { LOCATION_FILTER_ALL, locationFilterSchema, locationSlugSchema } from '../location.ts'
 
 /**
- * The live queue count on the partner API (ADR 36, reading ADR 33's queue).
+ * The live queue count on the partner API (ADR 37, reading ADR 33's queue).
  *
  * A number per clinic and nothing else: never names, patient ids, or
  * arrival times. It is computed from the same rows and the same functions

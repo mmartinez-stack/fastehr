@@ -1,4 +1,4 @@
--- ADR 35: a durable PHI audit trail, replacing the stdout-only sink.
+-- ADR 36: a durable PHI audit trail, replacing the stdout-only sink.
 
 
 -- CreateEnum
@@ -49,13 +49,13 @@ CREATE INDEX "phi_audit_events_patientId_occurredAt_idx" ON "phi_audit_events"("
 CREATE INDEX "phi_audit_events_outcome_occurredAt_idx" ON "phi_audit_events"("outcome", "occurredAt");
 
 
--- ADR 35: the trail is append-only. The application exposes no update or
+-- ADR 36: the trail is append-only. The application exposes no update or
 -- delete, and the database refuses them too, so a compromised or careless
 -- session cannot rewrite what it reached. Reads are unaffected.
 CREATE OR REPLACE FUNCTION phi_audit_events_immutable() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-  RAISE EXCEPTION 'phi_audit_events is append-only (ADR 35): % refused', TG_OP
+  RAISE EXCEPTION 'phi_audit_events is append-only (ADR 36): % refused', TG_OP
     USING ERRCODE = 'insufficient_privilege';
 END;
 $$;

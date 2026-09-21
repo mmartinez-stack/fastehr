@@ -43,7 +43,7 @@ const nextConfig = {
   },
 
   /**
-   * Headers for the partner API (ADR 36), applied by Next so they hold even
+   * Headers for the partner API (ADR 37), applied by Next so they hold even
    * on a response produced before the handler runs (a 404 for a path under
    * `/api/v1` that Next itself refuses). The handler sets the same set, plus
    * the request id, on everything it answers. HSTS is meaningful from the

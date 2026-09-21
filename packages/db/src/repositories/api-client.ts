@@ -4,7 +4,7 @@ import type { PrismaClient } from '../client.ts'
 import { toApiClient } from '../mappers/api-client.ts'
 
 /**
- * Partner API clients and their keys (ADR 36).
+ * Partner API clients and their keys (ADR 37).
  *
  * The secret never reaches this package and the hash never leaves it. The
  * caller hands in the SHA-256 of the presented secret; the repository

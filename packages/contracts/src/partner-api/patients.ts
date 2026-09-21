@@ -3,7 +3,7 @@ import { locationSlugSchema } from '../location.ts'
 import { blankAsAbsent } from '../patient.ts'
 
 /**
- * Patient lookup and verification on the partner API (ADR 36).
+ * Patient lookup and verification on the partner API (ADR 37).
  *
  * Both are `POST` with a body, so no identifier lands in a URL or an access
  * log. Both inputs are strict objects: a field the contract does not

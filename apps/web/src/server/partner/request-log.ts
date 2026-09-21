@@ -3,7 +3,7 @@
  * key id, the method, the route template, the status, and the duration.
  *
  * Never the query string, the body, a header value, or the concrete path
- * (a patient id lives in it). The audit trail (ADR 35) is the record; this
+ * (a patient id lives in it). The audit trail (ADR 36) is the record; this
  * line is the correlation between it and whatever the proxy logged.
  */
 export interface RequestLogLine {

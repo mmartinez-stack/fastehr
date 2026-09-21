@@ -5,7 +5,7 @@ import { ADA, LOOKUP_BODY, OTHER_KEY_ID, partnerHarness, testClient, testKey, TE
  * The partner chain end to end through `handlePartnerRequest`, with fakes:
  * audit outermost, authentication, scope, rate limit, validation, output
  * shaping, and the transport rules. Every refusal must leave an audit row
- * (ADR 10, ADR 35) and never a word of the request.
+ * (ADR 10, ADR 36) and never a word of the request.
  */
 beforeEach(() => {
   vi.spyOn(console, 'info').mockImplementation(() => {})

@@ -10,7 +10,7 @@ import { PartnerApiError } from '../errors.ts'
 import { assertNotLockedOut, factorsMatch, issueVerificationToken } from '../verification.ts'
 
 /**
- * Patient lookup and verification (ADR 36).
+ * Patient lookup and verification (ADR 37).
  *
  * Lookup answers the minimum the bot needs to disambiguate: names, the last
  * four digits of the phone, the clinic, and the id. Never the date of

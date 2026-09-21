@@ -11,13 +11,13 @@ import { partnerQueueCountOutput, partnerQueueCountQuery } from './queue.ts'
 import type { PartnerScope } from './scopes.ts'
 
 /**
- * The partner API operation registry (ADR 36): the one list the router, the
+ * The partner API operation registry (ADR 37): the one list the router, the
  * chain, the OpenAPI document, the scope-matrix test, and the handler table
  * all read. An operation that is not here does not exist; a handler for an
  * id that is not here does not typecheck.
  *
  * `path` is the OpenAPI template, and it is also what the audit trail
- * records (ADR 35): the template, never the concrete URL.
+ * records (ADR 36): the template, never the concrete URL.
  */
 export interface PartnerOperation<
   Params extends z.ZodType = z.ZodType,

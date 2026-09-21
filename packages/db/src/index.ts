@@ -35,11 +35,11 @@ export interface Db {
   reviews: ReviewRepository
   locations: LocationRepository
   queue: QueueRepository
-  /** The PHI audit trail (ADR 35): append-only, `record` is its only method. */
+  /** The PHI audit trail (ADR 36): append-only, `record` is its only method. */
   audit: AuditRepository
-  /** Partner API clients and their keys (ADR 36). */
+  /** Partner API clients and their keys (ADR 37). */
   apiClients: ApiClientRepository
-  /** Patient verification tokens and the attempt counter behind the lockout (ADR 36). */
+  /** Patient verification tokens and the attempt counter behind the lockout (ADR 37). */
   verifications: VerificationRepository
 }
 

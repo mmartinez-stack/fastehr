@@ -127,10 +127,10 @@ Everything outside imports from `src/server/index.ts`, never a file inside it.
 - Chain order is **audit → authenticate → authorize** (ADR 10). Audit is
   outermost on purpose: a refused probe is exactly the event an investigation
   goes looking for, and an innermost audit records only the legitimate reads.
-  The sink is `ctx.audit` (ADR 35): the `[phi-audit]` stdout line plus a row
+  The sink is `ctx.audit` (ADR 36): the `[phi-audit]` stdout line plus a row
   in the append-only `phi_audit_events` table, whose event shape
   (`phiAuditEventSchema` in contracts) has no field for the request input.
-- The partner REST API (ADR 36) lives in `src/server/partner/` and is mounted
+- The partner REST API (ADR 37) lives in `src/server/partner/` and is mounted
   by `app/api/v1/[[...path]]/route.ts`: scoped API keys (hash-only rows,
   issued by `packages/db/scripts/partner-api-keys.ts`), a patient
   verification token, and a chain in the same order as tRPC's writing the

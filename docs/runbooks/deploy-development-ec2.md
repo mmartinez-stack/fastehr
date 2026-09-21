@@ -325,7 +325,7 @@ arrive through the migration runbooks (`user-migration.md`,
 Then prove the API end to end with `scripts/api-smoke.sh`
 (`docs/runbooks/test-development-api.md` explains every call).
 
-## 12. Partner API keys (ADR 36)
+## 12. Partner API keys (ADR 37)
 
 The partner API (`/api/v1`, the phone assistant's integration) is off until
 `PARTNER_API_ENABLED=true` is in `/opt/fastehr/.env`, and inert until a key
@@ -365,7 +365,7 @@ ORDER BY "occurredAt";
 
 Reading the trail is itself a PHI access: note who ran the query and why in
 the incident log. The table refuses `UPDATE`, `DELETE`, and `TRUNCATE`
-(ADR 35) and is kept for six years.
+(ADR 36) and is kept for six years.
 
 **The proxy.** Before a partner key is live, the Caddy site block must
 have: `tls { protocols tls1.2 tls1.3 }`; `header Strict-Transport-Security
