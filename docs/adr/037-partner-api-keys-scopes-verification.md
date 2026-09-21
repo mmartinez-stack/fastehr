@@ -61,8 +61,8 @@ identity, the wrong permissions, and the wrong audit line.
    from the Zod schemas natively (Zod 4 emits JSON Schema 2020-12), lives in
    contracts because only contracts may import Zod (ADR 5), is committed at
    `docs/partner-api/openapi.json` with a drift test, and is served at
-   `/api/v1/openapi.json`. The docs page serves Swagger UI from this origin
-   (assets copied at build time), so no third-party script runs here.
+   `/api/v1/openapi.json`. The docs page serves the Swagger UI vendored under
+   `public/swagger-ui` (ADR 35), so no third-party script runs here.
 6. **Errors are codes (ADR 12), and coarse where a distinction would inform a
    probe.** The envelope is `{ error: { code, requestId, validation? } }`;
    validation is field paths and issue codes. `forbidden` (a scope the key

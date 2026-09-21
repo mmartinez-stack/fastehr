@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node scripts/copy-api-docs-assets.mjs && next dev",
-    "build": "node scripts/copy-api-docs-assets.mjs && next build",
+    "dev": "next dev",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -47,7 +47,6 @@
     "@types/react-dom": "^19",
     "eslint": "^9.39.5",
     "postcss": "^8.5",
-    "swagger-ui-dist": "5.33.0",
     "tailwindcss": "^4.3.3",
     "typescript": "5.7.3",
     "vitest": "^4.1.10"

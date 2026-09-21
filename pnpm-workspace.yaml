@@ -9,9 +9,6 @@ allowBuilds:
   # bundle, which is why next.config.mjs no longer has to work around it.
   '@prisma/client': true
   '@prisma/engines': true
-  # Pulled in by swagger-ui-dist (the partner API docs page, ADR 36). Its
-  # postinstall is install-time telemetry that phones home: never run it.
-  '@scarf/scarf': false
   prisma: true
   # native bindings for eslint-import-resolver-typescript
   unrs-resolver: true
