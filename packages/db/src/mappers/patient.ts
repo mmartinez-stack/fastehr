@@ -74,6 +74,7 @@ export function toPatient(row: PatientRecordRow): Patient {
       condition: condition.condition,
       onset: condition.onset,
       treatedBy: condition.treatedBy,
+      details: condition.details,
       medicated: condition.medicated,
       medications: condition.medications,
     })),

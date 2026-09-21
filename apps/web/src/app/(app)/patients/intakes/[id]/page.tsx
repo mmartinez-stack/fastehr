@@ -50,6 +50,18 @@ function formatSigned(iso: string): string {
   })
 }
 
+/** Display formatting only; storage stays ten bare digits. */
+function formatPhone(phone: string): string {
+  return phone.length === 10 ? `(${phone.slice(0, 3)}) ${phone.slice(3, 6)}-${phone.slice(6)}` : phone
+}
+
+/** The submission's name once there is one, the request's when typed, the phone otherwise. */
+function requestName(request: { firstName: string | null; lastName: string | null; phone: string; submission?: { firstName: string; lastName: string } | null }): string {
+  if (request.submission) return `${request.submission.firstName} ${request.submission.lastName}`
+  const typed = `${request.firstName ?? ""} ${request.lastName ?? ""}`.trim()
+  return typed === "" ? formatPhone(request.phone) : typed
+}
+
 export default function ReviewIntakePage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
@@ -64,7 +76,7 @@ export default function ReviewIntakePage() {
   const reject = trpc.intake.reject.useMutation({
     onSuccess: (rejected) => {
       void utils.intake.listPending.invalidate()
-      toast.success(`Intake from ${rejected.firstName} ${rejected.lastName} rejected`)
+      toast.success(`Intake from ${requestName(rejected)} rejected`)
       router.push("/patients")
     },
     onError: () => toast.error("The intake could not be rejected. It may already have been reviewed."),
@@ -131,7 +143,7 @@ export default function ReviewIntakePage() {
         </Button>
         <PageHeader
           className="mb-0 flex-1"
-          title={`${pending.firstName} ${pending.lastName}`}
+          title={requestName(pending)}
           description={`Pending intake for ${pending.office === null ? "an office" : nameForOffice(pending.office)}. Review, edit if needed, then accept or reject.`}
         />
       </div>

@@ -2,7 +2,7 @@
 
 import { useRef } from "react"
 import { DownloadIcon } from "lucide-react"
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { Bar, BarChart, CartesianGrid, LabelList, XAxis, YAxis } from "recharts"
 import type { XAxisTickContentProps } from "recharts/types/util/types"
 import { toast } from "sonner"
 
@@ -155,10 +155,13 @@ export function WeightChart({
         <BarChart
         accessibilityLayer
         data={data}
-        margin={{ left: 4, right: 8, top: 8, bottom: 16 }}
+        margin={{ left: 4, right: 4, top: 18, bottom: 16 }}
         barCategoryGap="25%"
       >
-        <CartesianGrid vertical={false} strokeDasharray="3 3" />
+        {/* The Sep 14 review: the numbers on both sides, joined by light
+            horizontal lines, so a bar's value reads at a glance from either
+            column; each bar also carries its own value. */}
+        <CartesianGrid vertical={false} stroke="var(--border)" />
         <XAxis
           dataKey="date"
           tickLine={false}
@@ -168,6 +171,16 @@ export function WeightChart({
           tick={renderTick}
         />
         <YAxis
+          yAxisId="left"
+          tickLine={false}
+          axisLine={false}
+          width={34}
+          domain={["dataMin - 10", "dataMax + 5"]}
+          fontSize={11}
+        />
+        <YAxis
+          yAxisId="right"
+          orientation="right"
           tickLine={false}
           axisLine={false}
           width={34}
@@ -180,7 +193,9 @@ export function WeightChart({
             <ChartTooltipContent labelFormatter={(value) => fmtDateLong(String(value))} />
           }
         />
-        <Bar dataKey="weight" fill="var(--color-weight)" radius={[4, 4, 0, 0]} maxBarSize={36} />
+        <Bar yAxisId="left" dataKey="weight" fill="var(--color-weight)" radius={[4, 4, 0, 0]} maxBarSize={36}>
+          <LabelList dataKey="weight" position="top" fontSize={11} fill="var(--foreground)" />
+        </Bar>
       </BarChart>
       </ChartContainer>
       {exportName !== undefined && (

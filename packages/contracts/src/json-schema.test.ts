@@ -8,7 +8,8 @@ describe('toJsonSchema', () => {
   it('describes a contract as a plain JSON Schema object without the dialect key', () => {
     const schema = toJsonSchema(sendPatientIntakeInput)
     expect(schema).not.toHaveProperty('$schema')
-    expect(schema).toMatchObject({ type: 'object', required: expect.arrayContaining(['firstName', 'lastName', 'phone']) })
+    // Only the phone is required to send (the Sep 14 decision); the names are optional.
+    expect(schema).toMatchObject({ type: 'object', required: ['phone'] })
   })
 
   it('describes the input side of a transform, not its output', () => {

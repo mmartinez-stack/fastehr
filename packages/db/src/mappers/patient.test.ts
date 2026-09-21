@@ -113,6 +113,7 @@ describe('toPatient', () => {
           treatedBy: null,
           medicated: true,
           medications: 'Metformin',
+          details: null,
         },
       ],
     })
@@ -123,7 +124,7 @@ describe('toPatient', () => {
       { name: 'Metformin', dose: null, frequency: null },
     ])
     expect(mapped.conditions).toEqual([
-      { condition: 'diabetes', onset: '2019', treatedBy: null, medicated: true, medications: 'Metformin' },
+      { condition: 'diabetes', onset: '2019', treatedBy: null, medicated: true, medications: 'Metformin', details: null },
     ])
     expect(mapped.medications[0]).not.toHaveProperty('position')
     expect(mapped.medications[0]).not.toHaveProperty('patientId')
@@ -151,7 +152,16 @@ describe('toPatient', () => {
       toPatient({
         ...row,
         conditions: [
-          { id: 'c9', patientId: row.id, condition: 'gout', onset: null, treatedBy: null, medicated: false, medications: null },
+          {
+            id: 'c9',
+            patientId: row.id,
+            condition: 'gout',
+            onset: null,
+            treatedBy: null,
+            medicated: false,
+            medications: null,
+            details: null,
+          },
         ],
       }).conditions[0]?.condition,
     ).toBe('gout')

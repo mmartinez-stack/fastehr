@@ -35,8 +35,14 @@ const probe = router({
 
 const ENFORCED = ['clerical', 'staff', 'review'] as const satisfies readonly RoleSurface[]
 
-function call(procedure: keyof typeof probe._def.procedures, roles: readonly string[]) {
-  const caller = probe.createCaller(createContext({ actor: { id: 'probe', roles, locations: ['sylmar'] }, db: fakeDb() }))
+function call(
+  procedure: keyof typeof probe._def.procedures,
+  roles: readonly string[],
+  actor: { mustChangePassword?: boolean } = {},
+) {
+  const caller = probe.createCaller(
+    createContext({ actor: { id: 'probe', roles, locations: ['sylmar'], ...actor }, db: fakeDb() }),
+  )
   return caller[procedure]()
 }
 
@@ -72,5 +78,35 @@ describe('the access matrix, enforced', () => {
     for (const surface of ENFORCED) {
       await expect(call(surface, ['superuser'])).rejects.toMatchObject({ code: 'FORBIDDEN' })
     }
+  })
+})
+
+/**
+ * A temporary password opens a session but not the API (DIA-77): until the
+ * person proves a password of their own, every chain refuses with the same
+ * code the page guards use, whatever the role and whatever the surface.
+ */
+describe('a pending password change', () => {
+  const PENDING = { mustChangePassword: true }
+
+  for (const role of STAFF_ROLES) {
+    it(`refuses ${role} on the any-role chain`, async () => {
+      await expect(call('any', [role], PENDING)).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+        message: 'PASSWORD_CHANGE_REQUIRED',
+      })
+    })
+  }
+
+  it('refuses before the surface is even considered', async () => {
+    for (const surface of ENFORCED) {
+      await expect(call(surface, ['medical_director'], PENDING)).rejects.toMatchObject({
+        message: 'PASSWORD_CHANGE_REQUIRED',
+      })
+    }
+  })
+
+  it('is not the ordinary forbidden: an allowed role with a settled password still passes', async () => {
+    await expect(call('any', ['provider'], { mustChangePassword: false })).resolves.toBe('ok')
   })
 })

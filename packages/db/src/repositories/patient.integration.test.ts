@@ -205,8 +205,8 @@ describe('patient repository', () => {
         { name: 'Lisinopril', dose: null, frequency: null },
       ],
       conditions: [
-        { condition: 'diabetes', onset: '2019', treatedBy: 'Dr. Smith', medicated: true, medications: 'Metformin' },
-        { condition: 'hypertension', onset: null, treatedBy: null, medicated: false, medications: null },
+        { condition: 'diabetes', onset: '2019', treatedBy: 'Dr. Smith', medicated: true, medications: 'Metformin', details: null },
+        { condition: 'hypertension', onset: null, treatedBy: null, medicated: false, medications: null, details: null },
       ],
       historyOther: null,
       pcpName: 'Dr. Jones',
@@ -287,7 +287,9 @@ describe('patient repository', () => {
       ...created,
       heightInches: 61.5,
       medications: [{ name: 'Lisinopril', dose: '10 mg', frequency: 'daily' }],
-      conditions: [{ condition: 'hypertension', onset: '2021', treatedBy: null, medicated: true, medications: 'Lisinopril' }],
+      conditions: [
+        { condition: 'hypertension', onset: '2021', treatedBy: null, medicated: true, medications: 'Lisinopril', details: null },
+      ],
       pcpName: 'Dr. Lee',
       pcpAddress: '2 Clinic Rd',
       pcpPhone: null,

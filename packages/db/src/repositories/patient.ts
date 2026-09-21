@@ -147,6 +147,7 @@ function clinicalLists(input: Omit<UpdatePatientClinicalInput, 'id'>) {
       condition: row.condition,
       onset: row.onset ?? null,
       treatedBy: row.treatedBy ?? null,
+      details: row.details ?? null,
       medicated: row.medicated,
       medications: row.medications ?? null,
     })),

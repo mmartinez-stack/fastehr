@@ -22,8 +22,9 @@ import { toPatient } from '../mappers/patient.ts'
  */
 export interface IntakeRepository {
   create(input: {
-    firstName: string
-    lastName: string
+    /** Absent when the front desk gave only the phone (the Sep 14 decision). */
+    firstName: string | undefined
+    lastName: string | undefined
     phone: string
     language: PatientLanguage | undefined
     /** SHA-256 of the token; the token itself is never stored. */
@@ -63,8 +64,8 @@ export function createIntakeRepository(getClient: () => PrismaClient): IntakeRep
     async create(input) {
       const row = await getClient().intakeRequest.create({
         data: {
-          firstName: input.firstName,
-          lastName: input.lastName,
+          firstName: input.firstName ?? null,
+          lastName: input.lastName ?? null,
           phone: input.phone,
           language: input.language ?? null,
           tokenHash: input.tokenHash,
@@ -166,6 +167,7 @@ export function createIntakeRepository(getClient: () => PrismaClient): IntakeRep
                   condition: row.condition,
                   onset: row.onset ?? null,
                   treatedBy: row.treatedBy ?? null,
+                  details: row.details ?? null,
                   medicated: row.medicated,
                   medications: row.medications ?? null,
                 })),

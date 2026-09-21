@@ -19,6 +19,7 @@ deploy/
     Caddyfile             TLS termination and the reverse proxy; no access log (ADR 29); the peer
                           address overwrites X-Forwarded-For and bodies are capped (ADR 38)
     deploy.sh             GHCR login, pull, migrate, roll, smoke-gate, roll back; run by SSM
+    fastehr-jobs.cron     the weekly note sampling, run from the jobs image (DIA-79)
 ```
 
 The `${...}` placeholders in `iam/` and `user-data.sh` are rendered by the
@@ -96,20 +97,18 @@ deploy role is far narrower.
 
 ## Follow-ups
 
-- **Scheduled jobs have nowhere to run.** The runtime image is Next's
-  standalone output only; `apps/web/scripts/sample-notes-for-review.ts`
-  (ADR 30) is not in it and neither is the workspace it imports. The weekly
-  sampling runs from the admin's "run now" button until a `jobs` image target
-  exists.
-- **A temporary password is enough to call the API.** The tRPC middleware
-  does not check `mustChangePassword`; only the page guards do. Found by
-  `docs/runbooks/test-development-api.md`; fix in
-  `apps/web/src/server/middleware/auth.ts` with procedure tests.
-- **The migrator image cannot run the db scripts.** It carries `packages/db`
-  without `packages/contracts`, so `issue-temp-password` and the migration
-  scripts fail there with `ERR_MODULE_NOT_FOUND`; they run locally through
-  the SSM port-forward instead. Copying `packages/contracts` into that stage
-  would make them runnable on the instance.
+- **Scheduled jobs** run from the `jobs` image (the `Dockerfile`'s fourth
+  target: the workspace packages, the generated client, and
+  `apps/web/scripts` with `apps/web/src/server`), through
+  `fastehr-jobs.cron`, which `deploy.sh` installs into `/etc/cron.d` and
+  which reads the image tag from `/opt/fastehr/.env`. Output is the log
+  group's `jobs` stream.
+- **The db scripts run on the instance** from the migrator image, which
+  now carries `packages/contracts` and the generated client:
+  `docker run --rm --env-file /etc/fastehr/app.env -v /etc/fastehr/rds-ca.pem:/etc/fastehr/rds-ca.pem:ro <migrator image> node scripts/issue-temp-password.ts --email …`.
+  The temporary password then prints into Run Command's stored output, so
+  prefer a Session Manager shell for that one script; the migrations are
+  fine either way.
 - **Migrations roll forward only.** `deploy.sh` rolls the image back, never
   the schema, so only expand/contract migrations are safe through it.
 - **GHCR tags accumulate.** GHCR has no lifecycle policy; old `dev-*` tags

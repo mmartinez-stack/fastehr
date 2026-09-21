@@ -102,6 +102,7 @@ export interface ConditionRowValues {
   onset: string
   treatedBy: string
   medicated: boolean
+  details: string
   medications: string
 }
 
@@ -170,25 +171,34 @@ function emptyConditions(): ConditionRowValues[] {
     onset: "",
     treatedBy: "",
     medicated: false,
+    details: "",
     medications: "",
   }))
 }
 
 /** Stored "Yes" items over the full list: everything else stays "No". */
 function toConditionRows(
-  stored: ReadonlyArray<{ condition: string; onset?: string | null; treatedBy?: string | null; medicated: boolean; medications?: string | null }>,
+  stored: ReadonlyArray<{
+    condition: string
+    onset?: string | null
+    treatedBy?: string | null
+    medicated: boolean
+    medications?: string | null
+    details?: string | null
+  }>,
 ): ConditionRowValues[] {
   const present = new Map(stored.map((row) => [row.condition, row]))
   return PATIENT_CONDITIONS.map((condition) => {
     const row = present.get(condition)
     return row === undefined
-      ? { condition, present: false, onset: "", treatedBy: "", medicated: false, medications: "" }
+      ? { condition, present: false, onset: "", treatedBy: "", medicated: false, medications: "", details: "" }
       : {
           condition,
           present: true,
           onset: row.onset ?? "",
           treatedBy: row.treatedBy ?? "",
           medicated: row.medicated,
+          details: row.details ?? "",
           medications: row.medications ?? "",
         }
   })
@@ -364,6 +374,7 @@ const COPY: FormCopy = {
   "medications.frequency": { too_big: "Frequency can be at most 50 characters." },
   medications: { too_big: "The list is limited to 50 medications." },
   "conditions.onset": { too_big: "Keep this under 100 characters." },
+  "conditions.details": { too_big: "Keep this under 500 characters." },
   "conditions.treatedBy": { too_big: "Keep this under 100 characters." },
   "conditions.medications": { too_big: "Keep this under 200 characters." },
   pcpName: { too_big: "Name can be at most 100 characters." },
@@ -929,6 +940,8 @@ export function PatientForm({
             <div className="grid gap-4 sm:grid-cols-2">
               {textField(`conditions[${index}].onset`, "When", { placeholder: "2019, or age 40" })}
               {textField(`conditions[${index}].treatedBy`, "Who is treating it", { placeholder: "Dr. Name, clinic" })}
+              {/* The person's own description when the intake form filled this in (the Sep 14 review). */}
+              {textField(`conditions[${index}].details`, "Details", { placeholder: "In the patient's words" })}
               <form.Field name={`conditions[${index}].medicated` as "phoneFollowUpAllowed"}>
                 {(medicatedField) => (
                   <Field>

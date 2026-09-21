@@ -26,8 +26,16 @@ const FORM = {
   heightInchesPart: '4',
   medications: [{ name: 'Metformin', dose: '', frequency: '' }],
   conditions: [
-    { condition: 'diabetes', present: true, onset: '2019', treatedBy: '', medicated: false, medications: '' },
-    { condition: 'thyroid', present: false, onset: '', treatedBy: '', medicated: false, medications: '' },
+    {
+      condition: 'diabetes',
+      present: true,
+      onset: '2019',
+      treatedBy: '',
+      medicated: false,
+      medications: '',
+      details: 'Type 2, controlled with diet',
+    },
+    { condition: 'thyroid', present: false, onset: '', treatedBy: '', medicated: false, medications: '', details: '' },
   ],
   pcpName: '',
   pcpAddress: '',
@@ -62,11 +70,20 @@ describe('submitIntakeInput', () => {
       preferredContactTime: 'morning',
       heightInches: 64,
       medications: [{ name: 'Metformin' }],
-      conditions: [{ condition: 'diabetes', onset: '2019', medicated: false }],
+      conditions: [{ condition: 'diabetes', onset: '2019', medicated: false, details: 'Type 2, controlled with diet' }],
       consentSignature: 'ada lovelace',
     })
     expect(submission).not.toHaveProperty('heightFeet')
     expect(submission).not.toHaveProperty('creditCardNumber')
+  })
+
+  it('requires the person’s description for every condition marked yes, and nothing for a no', () => {
+    const [diabetes, thyroid] = FORM.conditions
+    if (diabetes === undefined || thyroid === undefined) throw new Error('fixture')
+    const result = submitIntakeInput.safeParse({ ...FORM, conditions: [{ ...diabetes, details: '' }, thyroid] })
+    expect(result.success).toBe(false)
+    expect(result.error?.issues.map((issue) => issue.path.join('.'))).toEqual(['conditions.0.details'])
+    expect(submitIntakeInput.safeParse({ ...FORM, conditions: [{ ...thyroid, details: '' }] }).success).toBe(true)
   })
 
   it('requires the office — it decides the queue', () => {

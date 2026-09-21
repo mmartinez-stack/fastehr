@@ -248,7 +248,7 @@ describe('intake.send', () => {
     const [message] = sms.sent
     expect(message?.to).toBe('9515550000')
     expect(message?.body).toContain('Hola Ada')
-    expect(message?.body).toContain('48 horas')
+    expect(message?.body).toContain('válido por 1 hora')
     const link = /https:\/\/dev\.example\.com\/intake\/([A-Za-z0-9_-]+)/.exec(message?.body ?? '')
     expect(link).not.toBeNull()
     const token = link?.[1] ?? ''
@@ -258,9 +258,9 @@ describe('intake.send', () => {
     if (stored === undefined) throw new Error('expected the repository to be called')
     expect(stored.tokenHash).toBe(sha256(token))
     expect(stored.createdById).toBe(FRONTDESK.id)
-    // Forty-eight hours, give or take the test's own runtime.
-    expect(stored.expiresAt.getTime() - Date.now()).toBeGreaterThan(47.9 * 3_600_000)
-    expect(stored.expiresAt.getTime() - Date.now()).toBeLessThan(48.1 * 3_600_000)
+    // One hour (the Sep 14 decision), give or take the test's own runtime.
+    expect(stored.expiresAt.getTime() - Date.now()).toBeGreaterThan(0.99 * 3_600_000)
+    expect(stored.expiresAt.getTime() - Date.now()).toBeLessThan(1.01 * 3_600_000)
     expect(JSON.stringify(result)).not.toContain(token)
   })
 
@@ -272,7 +272,23 @@ describe('intake.send', () => {
 
     expect(result.link).toMatch(/^https:\/\/dev\.example\.com\/intake\/[A-Za-z0-9_-]{40,}$/)
     expect(sms.sent[0]?.body).toContain(result.link)
-    expect(sms.sent[0]?.body).toContain('48 hours')
+    expect(sms.sent[0]?.body).toContain('valid for 1 hour')
+  })
+
+  it('sends with a phone alone: no names typed, a greeting without one, a request with null names', async () => {
+    const sms = fakeSms('logged')
+    const create = vi.fn(async (input: Parameters<Db['intakes']['create']>[0]) => ({
+      ...REQUEST,
+      firstName: input.firstName ?? null,
+      lastName: input.lastName ?? null,
+    }))
+    const caller = callerWith(fakeDb({ create }), FRONTDESK, sms)
+
+    const result = await caller.intake.send({ firstName: '', lastName: '', phone: '(951) 555-0000' })
+
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ firstName: undefined, lastName: undefined })
+    expect(result.request.firstName).toBeNull()
+    expect(sms.sent[0]?.body).toMatch(/^Hi, please fill out/)
   })
 
   it('is clerical: a provider cannot send, and nothing is texted', async () => {

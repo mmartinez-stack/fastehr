@@ -156,6 +156,7 @@ export const patientConditionEntrySchema = z.object({
   treatedBy: z.string().nullable(),
   medicated: z.boolean(),
   medications: z.string().nullable(),
+  details: z.string().nullable(),
 })
 export type PatientConditionEntry = z.infer<typeof patientConditionEntrySchema>
 
@@ -391,6 +392,8 @@ const conditionRow = z.object({
   treatedBy: optionalText(100),
   medicated: z.boolean(),
   medications: optionalText(200),
+  /** A description in the person's words (the Sep 14 review); the intake form requires it for a "Yes". */
+  details: optionalText(500),
 })
 
 /** Two-letter state/territory code, as the legacy state dropdown stored it. */
@@ -559,9 +562,14 @@ export type SetPatientStatusInput = z.infer<typeof setPatientStatusInput>
  * Requiredness and lengths are the legacy panel's validators. The request
  * this creates, and what comes back through the link, are in intake.ts.
  */
+/**
+ * A valid phone is all the front desk must give: the person types their own
+ * name on the form anyway (the Sep 14 decision). Names, when typed, prefill
+ * the form and name the request in the queue.
+ */
 export const sendPatientIntakeInput = z.object({
-  firstName: z.string().trim().min(1).max(50),
-  lastName: z.string().trim().min(1).max(100),
+  firstName: blankAsAbsent(z.string().trim().min(1).max(50)),
+  lastName: blankAsAbsent(z.string().trim().min(1).max(100)),
   phone: normalizedPhone,
   language: blankAsAbsent(patientLanguageSchema),
 })

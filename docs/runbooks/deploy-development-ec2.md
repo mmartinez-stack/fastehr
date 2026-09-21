@@ -399,6 +399,10 @@ option on this host: both print bound query parameters, which are PHI.
 - **Deploy a specific commit:** the workflow with `workflow_dispatch` and
   the ref. By hand, from an SSM session: `/opt/fastehr/deploy.sh dev-<sha>`
   for any tag already in GHCR.
+- **Weekly note sampling (ADR 30):** `/etc/cron.d/fastehr-jobs`, installed
+  by every deploy, runs the `jobs` image Mondays 13:00 UTC; its output is
+  the log group's `jobs` stream. To run it now, from an SSM session:
+  `cd /opt/fastehr && . ./.env && docker run --rm --env-file /etc/fastehr/app.env -v /etc/fastehr/rds-ca.pem:/etc/fastehr/rds-ca.pem:ro "$JOBS_IMAGE"`.
 - **Rotate a secret:** `aws ssm put-parameter --overwrite …`, then redeploy
   the current tag; `deploy.sh` re-reads the level every run. The GHCR token
   is a GitHub setting with an expiry; rotate it the same way.

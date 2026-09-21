@@ -5,8 +5,24 @@ import { t } from '../trpc.ts'
 /**
  * Authentication. Narrows `actor` to non-null for everything downstream.
  */
+/**
+ * A session under an admin-issued temporary password is real but not yet
+ * the person's own: the page guards send it to /change-password, and the
+ * procedures refuse it the same way (DIA-77), so a temporary credential
+ * cannot read through `/api/trpc` what the screens would not show. The
+ * change itself goes through Better Auth, never a procedure, so no
+ * procedure needs an exception. The message is a code, not prose, for the
+ * client to act on.
+ */
+function refusePendingPasswordChange(actor: { mustChangePassword?: boolean }): void {
+  if (actor.mustChangePassword === true) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'PASSWORD_CHANGE_REQUIRED' })
+  }
+}
+
 export const requireAuth = t.middleware(({ ctx, next }) => {
   if (ctx.actor === null) throw new TRPCError({ code: 'UNAUTHORIZED' })
+  refusePendingPasswordChange(ctx.actor)
   return next({ ctx: { ...ctx, actor: ctx.actor } })
 })
 
@@ -19,6 +35,7 @@ export const requireAuth = t.middleware(({ ctx, next }) => {
 export const requireRole = t.middleware(({ ctx, next }) => {
   const actor = ctx.actor
   if (actor === null) throw new TRPCError({ code: 'UNAUTHORIZED' })
+  refusePendingPasswordChange(actor)
   if (!ROLE_SURFACES.some((surface) => hasSurface(actor, surface))) throw new TRPCError({ code: 'FORBIDDEN' })
   return next()
 })
@@ -45,6 +62,7 @@ export function isClerical(actor: { roles: readonly string[] }): boolean {
 export function requireSurface(surface: RoleSurface) {
   return t.middleware(({ ctx, next }) => {
     if (ctx.actor === null) throw new TRPCError({ code: 'UNAUTHORIZED' })
+    refusePendingPasswordChange(ctx.actor)
     if (!hasSurface(ctx.actor, surface)) throw new TRPCError({ code: 'FORBIDDEN' })
     return next({ ctx: { ...ctx, actor: ctx.actor } })
   })

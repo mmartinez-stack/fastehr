@@ -211,13 +211,27 @@ export, visit photos, delete visit, and a New visit consultation form in
 the legacy form's four sections, Visit info and Prescription for the
 clinical surface, Billing and Admin for the clerical one;
 docs/provider-record-migrations.md lists what it needs from the schema);
+reworked again per the Sep 14 review: one box across the top split in
+half, patient information left and medical history right with Conditions
+and Drug allergies lines above the free text, medication and the weight
+chart staying in the fixed right column; the chart's axis on both sides
+with light horizontal gridlines and a value on each bar; on each clinical
+note its visit's weight and BMI beside the medication, a full-width
+"Signed by" line beneath the note as the legacy Sign panel had it, addenda
+as a thread, Save and Save and sign as two buttons on the consultation form
+and on addenda, "Sign reviewed as" after a review, and a Provider view
+checkbox that hides the front desk's comments and marks clinical notes
+green, on for a provider and off for an administrator);
 tabs everywhere are styled as distinct buttons through the slot attributes
 in `globals.css`; the record itself has three tabs, Medical, Patient
 Info, and Billing, each served by its own procedure per ADR 28 as amended,
 with Medical open to every role and the other two clerical; the medical
 history checklist defaults to No, the history text box beneath it is
 writable (the legacy text migrated into it), and allergies are out of scope). The self-service intake is wired end to end (ADR 29 as amended): a texted
-single-use link that lives 48 hours, a phone-first bilingual form at
+single-use link that lives one hour (48 hours before the Sep 14 review,
+which also made the names optional when sending, the birthdate a typed
+field, and a description required for every condition marked yes), a
+phone-first bilingual form at
 `/intake/[token]` that ends with a signed treatment consent (recorded on the
 request until DIA-56), and a per-office Pending tab on the roster; until
 `TWILIO_*` is set, text messages go to the server log and the send panel
