@@ -29,6 +29,7 @@ export { publicProcedure }
  * events an investigation actually goes looking for.
  */
 export const protectedProcedure = publicProcedure
+  .meta({ access: 'session' })
   .use(auditPhiAccess)
   .use(requireAuth)
   .use(requireRole)
@@ -38,17 +39,17 @@ export const protectedProcedure = publicProcedure
  * Composed on top of the protected chain, so audit → authenticate → authorize
  * still runs first and a refused probe still leaves its trace.
  */
-export const adminProcedure = protectedProcedure.use(requireAdminRole)
+export const adminProcedure = protectedProcedure.meta({ access: 'staff' }).use(requireAdminRole)
 
 /**
  * Procedures for the clerical half of a patient record — demographics,
  * billing, and creating a record (ADR 28). Admins and the front desk. A
  * provider gets FORBIDDEN, and the audit trail shows the probe.
  */
-export const clericalProcedure = protectedProcedure.use(requireClericalRole)
+export const clericalProcedure = protectedProcedure.meta({ access: 'clerical' }).use(requireClericalRole)
 
 /** The note review queue and its sign-off (DIA-74, ADR 31): the medical director role. */
-export const medicalDirectorProcedure = protectedProcedure.use(requireMedicalDirector)
+export const medicalDirectorProcedure = protectedProcedure.meta({ access: 'review' }).use(requireMedicalDirector)
 
 /**
  * Procedures that list for one clinic, or for all of them (`'all'`).
@@ -67,6 +68,7 @@ export const medicalDirectorProcedure = protectedProcedure.use(requireMedicalDir
  * describes, and failed at import with `Cannot read properties of undefined`.
  */
 export const locationFilteredProcedure = protectedProcedure
+  .meta({ access: 'session', locationScoped: true })
   .input(locationFilteredInput)
   .use(({ ctx, input, next }) => {
     if (input.location !== 'all' && !ctx.actor.locations.includes(input.location)) {
@@ -79,4 +81,6 @@ export const locationFilteredProcedure = protectedProcedure
   })
 
 /** A clinic's clerical queue (the pending intakes): location-filtered *and* clerical. */
-export const clericalLocationProcedure = locationFilteredProcedure.use(requireClericalRole)
+export const clericalLocationProcedure = locationFilteredProcedure
+  .meta({ access: 'clerical' })
+  .use(requireClericalRole)

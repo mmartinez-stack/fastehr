@@ -100,6 +100,12 @@ const generatedUiBoundary = {
   },
 }
 
-const config = [...next, serverLayerBoundary, dataAccessBoundary, generatedUiBoundary]
+/**
+ * Vendored, minified third-party code served as static assets (Swagger UI,
+ * ADR 35). Not ours to lint; upgraded by copying files, never by editing.
+ */
+const vendoredAssets = { ignores: ['public/swagger-ui/**'] }
+
+const config = [...next, serverLayerBoundary, dataAccessBoundary, generatedUiBoundary, vendoredAssets]
 
 export default config

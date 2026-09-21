@@ -31,6 +31,7 @@ export {
   type SearchStaffUsersInput,
 } from './staff-user.ts'
 export { describeValidationFailure, type ValidationFailure } from './errors.ts'
+export { toJsonSchema, type JsonSchema } from './json-schema.ts'
 export { officeSchema, type Office } from './office.ts'
 export {
   LOCATION_SLUGS,
