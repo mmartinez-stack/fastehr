@@ -10,6 +10,16 @@
 {$APP_HOST} {
 	encode zstd gzip
 
+	tls {
+		protocols tls1.2 tls1.3
+	}
+
+	# Larger than any form here and far above the partner API's own 16 KiB cap
+	# (ADR 37); stops a stray upload from reaching the app at all.
+	request_body {
+		max_size 256KB
+	}
+
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options nosniff
@@ -21,5 +31,14 @@
 		# tRPC's httpBatchStreamLink (ADR 17) and RSC both stream: flush every
 		# chunk as it arrives rather than buffering the response.
 		flush_interval -1
+
+		# Overwrite, never append: the partner API's key allowlist and the
+		# audit trail's address column read X-Forwarded-For (ADR 37), and an
+		# appended header would carry whatever the caller chose to send.
+		header_up X-Forwarded-For {remote_host}
+
+		transport http {
+			response_header_timeout 30s
+		}
 	}
 }

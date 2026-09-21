@@ -65,10 +65,10 @@ Authentication
 - [ ] `PARTNER_API_ENABLED=true` set only on the environment whose BAA is signed.
 - [ ] `partner-api-keys list` reviewed; no dev key on the live database.
 
-Proxy (Caddy)
+Proxy (Caddy, `deploy/instance/Caddyfile`)
 - [ ] TLS 1.2+ only, HSTS, a request body cap, an upstream timeout.
 - [ ] `X-Forwarded-For` overwritten with the peer address, never appended.
-- [ ] Access log filter deletes `Authorization`, `Cookie`, and `X-Patient-Verification`.
+- [ ] No access log (ADR 29), so `Authorization` and `X-Patient-Verification` are never written by the proxy.
 
 Application
 - [ ] `phi_audit_events` receiving rows for `/api/v1` calls, denials included; `UPDATE` on the table refused.

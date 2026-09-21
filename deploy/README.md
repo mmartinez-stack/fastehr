@@ -16,7 +16,8 @@ deploy/
   instance/
     user-data.sh          first boot: Docker, compose, deploy.env, the RDS CA bundle
     docker-compose.yml    the two containers on the box: web (the app) and caddy (TLS)
-    Caddyfile             TLS termination and the reverse proxy; no access log (ADR 29)
+    Caddyfile             TLS termination and the reverse proxy; no access log (ADR 29); the peer
+                          address overwrites X-Forwarded-For and bodies are capped (ADR 37)
     deploy.sh             GHCR login, pull, migrate, roll, smoke-gate, roll back; run by SSM
 ```
 
@@ -62,6 +63,7 @@ variable, named as `.env.example` names them:
 | `/fastehr/<env>/BETTER_AUTH_SECRET` | `openssl rand -base64 32` |
 | `/fastehr/<env>/BETTER_AUTH_URL` | `https://<host name>` |
 | `/fastehr/<env>/TWILIO_ACCOUNT_SID`, `…_AUTH_TOKEN`, `…_FROM_NUMBER` | optional; all three or none (ADR 29) |
+| `/fastehr/<env>/PARTNER_API_ENABLED` | optional; `true` opens `/api/v1` (ADR 37). Absent, every path under it is 404 |
 | `/fastehr/<env>/rds/master-password` | one level down: not an app variable |
 | `/fastehr/<env>/ghcr/username`, `/fastehr/<env>/ghcr/token` | one level down: a classic GitHub token with only `read:packages` |
 
