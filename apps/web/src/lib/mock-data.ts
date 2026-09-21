@@ -156,6 +156,8 @@ export interface VisitAddendum {
   author: RecordAuthor
   signedBy: string
   signedAt: string // ISO datetime
+  /** Saved without signing (the Sep 14 review's Save button); shown as a draft until signed. */
+  draft?: boolean
 }
 
 export interface Visit {
@@ -207,6 +209,10 @@ export interface Patient {
   atHome: boolean
   program?: string
   medsHistory: string
+  /** Diagnosed conditions, one line each on the record (the Sep 14 review). */
+  conditions: string[]
+  /** Drug allergies, one line each; empty means none known. */
+  drugAllergies: string[]
   lastVisit: string
   missingConsents: string[]
   coupons: Coupon[]
@@ -401,6 +407,16 @@ const referralSources = [
   "Google", "Instagram", "Friend Referral", "Facebook", "Walk-in", "Yelp",
 ]
 
+/** Invented histories, cycled through the fixtures so every kind of record view has an example. */
+const CONDITION_SETS: readonly (readonly string[])[] = [
+  ["Hypertension", "Hyperlipidemia"],
+  ["Type 2 diabetes", "Sleep apnea"],
+  ["Hypothyroidism"],
+  [],
+  ["PCOS", "Prediabetes", "GERD"],
+]
+const ALLERGY_SETS: readonly (readonly string[])[] = [[], ["Penicillin"], [], ["Sulfa drugs", "Codeine"], []]
+
 function makePatients(): Patient[] {
   const out: Patient[] = []
   for (let i = 0; i < 15; i++) {
@@ -442,6 +458,8 @@ function makePatients(): Patient[] {
       program: atHome ? "At-Home GLP-1" : undefined,
       medsHistory:
         "HTN, mild hyperlipidemia. No known drug allergies. Prior trial of phentermine with good tolerance.",
+      conditions: [...(CONDITION_SETS[i % CONDITION_SETS.length] ?? [])],
+      drugAllergies: [...(ALLERGY_SETS[i % ALLERGY_SETS.length] ?? [])],
       lastVisit: iso((i % 6) + 1),
       missingConsents: missing,
       referralCredits: i % 4 === 0 ? 2 : i % 4 === 2 ? 1 : 0,
