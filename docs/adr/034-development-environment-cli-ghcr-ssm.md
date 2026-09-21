@@ -46,7 +46,10 @@ credential on the box, and it can read images and nothing else.
 **IAM roles rather than access keys, still.** The instance role is what lets
 the box read its secrets and write its logs without a stored key, and the
 GitHub deploy role is what turns a push into a deploy through a fifteen-minute
-federated token scoped to one repository and one GitHub Environment. Both are
+federated token scoped to one repository and one GitHub Environment. The
+repository is matched by GitHub's immutable subject (owner and repository
+ids, not names), so a renamed or re-created repository cannot assume the
+role; the runbook reads the exact prefix from GitHub's API. Both roles are
 `fastehr-*` by name, which is exactly what the granted IAM permission covers.
 Everything this environment does to avoid standing credentials rests on
 those two roles; they are the non-negotiable part of the permission request.
