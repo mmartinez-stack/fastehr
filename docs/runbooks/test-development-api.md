@@ -5,7 +5,8 @@ session from Better Auth, then call tRPC procedures with it. Written against
 the development environment (`https://dev.fastehr.diagnosticpartners.net`,
 ADR 34) and verified there on 2026-09-20; every example below was run.
 
-Signed in, `/api-docs` is Swagger UI over `/api/openapi.json`, a document
+Signed in as an administrator or the medical director (the `staff`
+surface), `/api-docs` is Swagger UI over `/api/openapi.json`, a document
 generated from the router on every request (ADR 35): every mounted
 procedure with its method, input schema, and access level, and the
 authentication endpoints. "Try it out" runs as you, with your role.

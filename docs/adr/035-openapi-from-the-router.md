@@ -1,6 +1,6 @@
 # ADR 35 — The API documentation is generated from the router and viewed in a vendored Swagger UI
 
-**Status:** accepted (2026-09-21)  
+**Status:** accepted (2026-09-21); amended 2026-09-22 (staff surface)  
 **Applies to:** `apps/web/src/server/openapi.ts` · `apps/web/src/server/procedure-meta.ts` · `apps/web/src/app/api/openapi.json` · `apps/web/src/app/api-docs` · `apps/web/public/swagger-ui` · `packages/contracts/src/json-schema.ts`
 
 `/api/openapi.json` is an OpenAPI 3.1 document built from `appRouter` on
@@ -57,9 +57,14 @@ Apache-2.0, copied verbatim. Neither the npm package nor a CDN:
 The cost is 1.7 MB in the repository and a manual upgrade, documented next
 to the files.
 
-## Why behind a session
+## Why behind the `staff` surface
 
 The schema of a clinic's API is not patient data, but it is not a public
-notice either, and "try it out" runs real calls as the viewer. Any signed-in
-staff account may read the page; what a call does is still decided by that
-account's role, exactly as from the browser client.
+notice either, and "try it out" runs real calls as the viewer. As accepted,
+any signed-in staff account could read the page. **Amended 2026-09-22:**
+the page and the document it reads sit behind the `staff` surface (ADR 31:
+the administrator and the medical director), because the reference is an
+operator's tool and a clinician or the front desk has no use for it. What a
+call does is still decided by the viewer's role, exactly as from the
+browser client; the partner's own reference is a different page, cut to
+their key (ADR 38).
