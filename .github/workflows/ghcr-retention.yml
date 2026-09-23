@@ -1,0 +1,29 @@
+name: GHCR retention
+
+# Every deploy pushes two images tagged dev-<sha> (DIA-82), and GHCR has no
+# lifecycle policy of its own. Keep the newest twenty versions of each
+# package, which is far more than a rollback needs, and delete the rest once
+# a week. The deployed tag is always among the newest, so it is never
+# touched; a rollback target older than twenty deploys is not a rollback.
+on:
+  schedule:
+    - cron: '17 9 * * 1' # Mondays, 09:17 UTC
+  workflow_dispatch:
+
+permissions:
+  packages: write
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: [fastehr/web, fastehr/migrator]
+    steps:
+      - uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ matrix.package }}
+          package-type: container
+          min-versions-to-keep: 20
+          # Untagged versions are layers left by a cancelled push; nothing references them.
+          delete-only-untagged-versions: false
