@@ -4,6 +4,7 @@ import { db } from '@fastehr/db'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAuditSink } from '../audit-log.ts'
 import { apiKeyEndpoints } from '../auth.ts'
+import { mintIntegrationKey, rotateOwnKey } from '../integration-keys.ts'
 import { createPartnerContext } from './context.ts'
 import { handlePartnerRequest } from './handle.ts'
 import { createRateLimiter } from './rate-limit.ts'
@@ -160,6 +161,19 @@ describe('partner API end to end', () => {
     )
     expect(elsewhere.status).toBe(401)
     expect((await send('/queue/count', { key: 'fehr_dev_notakey' })).status).toBe(401)
+  })
+
+  it('rotates a key through the plugin: the copy works, the old key keeps working for a day', async () => {
+    const rotated = await rotateOwnKey(db, mintIntegrationKey, { integrationId, keyId })
+    expect(rotated.key.startsWith('fehr_dev_')).toBe(true)
+    expect(rotated.issued).toMatchObject({ integrationId, scopes: ['patients:lookup', 'patients:verify', 'queue:read'], enabled: true })
+    expect(rotated.issued.metadata).toMatchObject({ environment: 'dev', allowedIps: ['203.0.113.0/24'], issuedBy: `self-service: Integration test ${run}` })
+    expect((await send('/queue/count', { key: rotated.key })).status).toBe(200)
+    expect((await send('/queue/count')).status).toBe(200)
+    const previous = await db.integrations.findKey(keyId)
+    expect(new Date(previous?.expiresAt ?? 0).getTime() - Date.now()).toBeLessThanOrEqual(24 * 60 * 60 * 1000)
+    // Once an hour: the second attempt right away is refused.
+    await expect(rotateOwnKey(db, mintIntegrationKey, { integrationId, keyId: rotated.issued.id })).rejects.toMatchObject({ code: 'TOO_MANY_REQUESTS' })
   })
 
   it('locks a patient out across processes, then refuses a revoked key at once', async () => {

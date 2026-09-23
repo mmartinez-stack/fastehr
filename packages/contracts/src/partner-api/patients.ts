@@ -72,7 +72,7 @@ export const partnerPatientLookupInput = z
   .meta({
     id: 'PatientLookupRequest',
     description:
-      'Either patientId alone, or dateOfBirth with phone and/or lastName (firstName narrows a lastName).',
+      'Two valid shapes. Shape A: patientId alone, nothing else. Shape B: dateOfBirth is required, plus phone and/or lastName (at least one of the two); firstName is optional and only allowed together with lastName. dateOfBirth alone, phone alone, lastName alone, or firstName without lastName are refused.',
   })
 export type PartnerPatientLookupInput = z.infer<typeof partnerPatientLookupInput>
 

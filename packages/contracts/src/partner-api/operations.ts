@@ -61,7 +61,13 @@ export const lookupPatientsOperation = defineOperation({
   path: '/patients/lookup',
   summary: 'Find a patient',
   description:
-    'Returns up to five candidates matching the identifiers given. No date of birth is ever returned: it is a verification factor.',
+    'Returns up to five candidates matching the identifiers given. Two request shapes are valid, and nothing else: ' +
+    '(1) patientId on its own, for a record you already hold; ' +
+    '(2) dateOfBirth (required) with phone and/or lastName (at least one), where firstName may be added only alongside lastName to narrow it. ' +
+    'Anything else is refused with 400 invalid_input and the offending field names. ' +
+    'Names match exactly, case-insensitively; the phone is compared as ten digits. ' +
+    'No date of birth is ever returned: it is a verification factor, which is also why it is required as input. ' +
+    'More than five matches answers an empty list with truncated: true; ask for another identifier.',
   scope: 'patients:lookup',
   requiresVerification: false,
   body: partnerPatientLookupInput,
