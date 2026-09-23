@@ -23,6 +23,11 @@ import { API_SCOPES, partnerScopeSchema, type PartnerScope } from './scopes.ts'
 export const API_KEY_DEFAULT_TTL_DAYS = 90
 export const API_KEY_MAX_TTL_DAYS = 365
 
+/** A replaced key keeps working this long, so a partner cuts over without an outage. */
+export const API_KEY_ROTATION_OVERLAP_HOURS = 24
+/** A partner account may rotate its own key at most this often (ADR 36 as amended). */
+export const API_KEY_SELF_ROTATION_MIN_INTERVAL_MINUTES = 60
+
 /** How long a verification token is honoured. */
 export const PATIENT_VERIFICATION_TTL_MINUTES = 15
 
@@ -156,6 +161,24 @@ export const issueIntegrationKeyInput = z
   })
   .refine((input) => input.environment !== 'live' || input.baaSignedAt !== undefined)
 export type IssueIntegrationKeyInput = z.infer<typeof issueIntegrationKeyInput>
+
+/** The partner account asks to replace one of its own keys. */
+export const rotateIntegrationKeyInput = z.object({
+  keyId: z.string().min(1),
+})
+export type RotateIntegrationKeyInput = z.infer<typeof rotateIntegrationKeyInput>
+
+/**
+ * The one response that ever carries a key: the answer to a rotation, shown
+ * once. Nothing stores it; a page copies it and forgets it.
+ */
+export const rotatedIntegrationKeySchema = z.object({
+  key: z.string().min(1),
+  issued: integrationKeySchema,
+  /** When the key it replaces stops working. */
+  previousExpiresAt: z.iso.datetime(),
+})
+export type RotatedIntegrationKey = z.infer<typeof rotatedIntegrationKeySchema>
 
 export const PATIENT_VERIFICATION_METHODS = ['dob_phone'] as const
 export const patientVerificationMethodSchema = z.enum(PATIENT_VERIFICATION_METHODS)

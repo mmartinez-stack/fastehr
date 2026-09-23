@@ -58,6 +58,13 @@ describe('integration.mine', () => {
     await expect(caller.integration.mine()).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
   })
 
+  it('lets only the integration role ask for a rotation', async () => {
+    const { caller } = callerFor({ id: 'person', roles: ['admin'], locations: ['sylmar'] })
+    await expect(caller.integration.rotateKey({ keyId: 'key-1' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    const anonymous = callerFor(null)
+    await expect(anonymous.caller.integration.rotateKey({ keyId: 'key-1' })).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+  })
+
   it('keeps the integration role out of a staff procedure', async () => {
     const { caller } = callerFor({ id: 'integration-1', roles: ['integration'], locations: [] })
     await expect(caller.patient.recent()).rejects.toMatchObject({ code: 'FORBIDDEN' })
