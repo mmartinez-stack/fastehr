@@ -1,10 +1,11 @@
-import { ROLE_ACCESS, ROLE_SURFACES, STAFF_ROLES, type RoleSurface } from '@fastehr/contracts'
+import { ROLE_ACCESS, ROLE_SURFACES, STAFF_ROLES, STAFF_SURFACES, type RoleSurface } from '@fastehr/contracts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContext } from './context.ts'
 import { fakeDb } from './test-support/fake-db.ts'
 import {
   adminProcedure,
   clericalProcedure,
+  integrationProcedure,
   medicalDirectorProcedure,
   protectedProcedure,
 } from './procedures.ts'
@@ -22,8 +23,9 @@ import { router } from './trpc.ts'
  * from the front desk), so `protectedProcedure` admits every role that
  * reaches any surface and the `clinical` surface only shapes the client (the
  * Queues entry, the chart's clinical cards). That asymmetry is pinned below
- * rather than hidden. The one role with no surface, `integration` (ADR 36),
- * is refused by every chain, the any-role one included.
+ * rather than hidden. The `integration` role (ADR 36) holds only its own
+ * surface, so it is refused by every staff chain, the any-role one included,
+ * and admitted by the integration chain alone.
  */
 
 const probe = router({
@@ -31,9 +33,10 @@ const probe = router({
   clerical: clericalProcedure.query(() => 'ok'),
   staff: adminProcedure.query(() => 'ok'),
   review: medicalDirectorProcedure.query(() => 'ok'),
+  integration: integrationProcedure.query(() => 'ok'),
 })
 
-const ENFORCED = ['clerical', 'staff', 'review'] as const satisfies readonly RoleSurface[]
+const ENFORCED = ['clerical', 'staff', 'review', 'integration'] as const satisfies readonly RoleSurface[]
 
 function call(
   procedure: keyof typeof probe._def.procedures,
@@ -56,7 +59,8 @@ afterEach(() => {
 
 describe('the access matrix, enforced', () => {
   for (const role of STAFF_ROLES) {
-    const reachesAnything = ROLE_SURFACES.some((surface) => ROLE_ACCESS[role][surface])
+    // The any-role chain is a staff chain: a role reaches it by holding a staff surface.
+    const reachesAnything = STAFF_SURFACES.some((surface) => ROLE_ACCESS[role][surface])
     it(`${role} ${reachesAnything ? 'reaches' : 'is refused by'} the any-role chain`, async () => {
       if (reachesAnything) await expect(call('any', [role])).resolves.toBe('ok')
       else await expect(call('any', [role])).rejects.toMatchObject({ code: 'FORBIDDEN' })

@@ -92,10 +92,14 @@ Notes that carry weight:
 ## Integrations (partner keys, ADR 36 and ADR 38)
 
 A partner key belongs to a fifth role, `integration`: a `users` row whose
-`ROLE_ACCESS` row is `false` on every surface, which the Users screen
-lists apart and never assigns, the role switcher never offers,
-`requireRole` refuses (no surface at all), and `actorFromHeaders` refuses
-by name. `/api/v1` resolves no session, and `/api/trpc` accepts no key.
+`ROLE_ACCESS` row is `false` on every staff surface and `true` on one of
+its own, `integration`, which grants a single page (`/integration`: the
+account's keys and the door to `/api/v1/docs`) and a single procedure
+(`integration.mine`). The Users screen lists these principals apart and
+never assigns the role, the role switcher never offers it, `requireRole`
+refuses it on every staff chain (no staff surface), and the staff shell
+redirects it to its page. `/api/v1` resolves no session, and `/api/trpc`
+accepts no key.
 A key's permissions are **scopes** on the key row, checked by the partner
 chain against the operation registry in `packages/contracts/src/partner-api/operations.ts`,
 default deny. Patient-specific operations additionally require a

@@ -129,11 +129,13 @@ export const integrationKeySchema = z.object({
 })
 export type IntegrationKey = z.infer<typeof integrationKeySchema>
 
-/** An integration principal with its keys, for the Users screen. */
+/** An integration principal with its keys, for the Users screen and the partner's own page. */
 export const integrationSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   isActive: z.boolean(),
+  /** Whether the partner's team can sign in to the integration page (ADR 36 as amended). */
+  hasCredential: z.boolean(),
   createdAt: z.iso.datetime(),
   keys: z.array(integrationKeySchema),
 })

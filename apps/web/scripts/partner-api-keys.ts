@@ -13,8 +13,13 @@
  *   node --env-file=.env apps/web/scripts/partner-api-keys.ts issue \
  *       --name "Voice assistant" --environment dev \
  *       --scopes patients:lookup,patients:verify,queue:read --issued-by you@clinic.example \
- *       [--vendor "Acme"] [--expires-in-days 90] [--allow-ip 203.0.113.5/32]... \
- *       [--location sylmar]... [--baa-signed 2026-09-01]
+ *       [--email integrations@vendor.example] [--vendor "Acme"] [--expires-in-days 90] \
+ *       [--allow-ip 203.0.113.5/32]... [--location sylmar]... [--baa-signed 2026-09-01]
+ *
+ * `--email` gives the principal a real address, so the partner's team can be
+ * issued a temporary password (`pnpm --filter @fastehr/db issue-temp-password`)
+ * and sign in to the integration page (ADR 36 as amended). Without it the
+ * principal exists under a synthetic address nobody signs in with.
  *   node --env-file=.env apps/web/scripts/partner-api-keys.ts list
  *   node --env-file=.env apps/web/scripts/partner-api-keys.ts revoke --key-id <id>
  *   node --env-file=.env apps/web/scripts/partner-api-keys.ts rotate --key-id <id> [--issued-by you@clinic.example]
@@ -101,9 +106,22 @@ process.on('uncaughtException', (error: unknown) => {
 const args = parseArgs(process.argv.slice(2))
 const now = new Date()
 
-async function issue(input: IssueIntegrationKeyInput): Promise<{ key: IntegrationKey; secret: string }> {
-  const integration = await db.integrations.findOrCreate({ name: input.name })
-  if (!integration.isActive) throw new Error(`integration "${input.name}" is deactivated; enable it before issuing a key`)
+async function principalFor(
+  input: IssueIntegrationKeyInput,
+  existingId?: string,
+): Promise<{ id: string; name: string; isActive: boolean }> {
+  if (existingId !== undefined) {
+    const found = await db.integrations.find(existingId)
+    if (found === null) throw new Error(`no integration with id ${existingId}`)
+    return found
+  }
+  const email = one(args, '--email')
+  return db.integrations.findOrCreate(email === undefined ? { name: input.name } : { name: input.name, email })
+}
+
+async function issue(input: IssueIntegrationKeyInput, existingId?: string): Promise<{ key: IntegrationKey; secret: string }> {
+  const integration = await principalFor(input, existingId)
+  if (!integration.isActive) throw new Error(`integration "${integration.name}" is deactivated; enable it before issuing a key`)
 
   const metadata: ApiKeyMetadata = {
     environment: input.environment,
@@ -160,7 +178,9 @@ switch (args.command) {
       break
     }
     for (const integration of integrations) {
-      console.log(`${integration.name}  ${integration.isActive ? 'active' : 'DEACTIVATED'}  principal ${integration.id}`)
+      console.log(
+        `${integration.name}  ${integration.isActive ? 'active' : 'DEACTIVATED'}  login ${integration.hasCredential ? 'issued' : 'none'}  principal ${integration.id}`,
+      )
       if (integration.keys.length === 0) console.log('  (no keys)')
       for (const key of integration.keys) {
         const state = !key.enabled ? 'revoked' : key.expiresAt !== null && new Date(key.expiresAt) <= now ? 'expired' : 'enabled'
@@ -184,7 +204,7 @@ switch (args.command) {
     if (keyId === undefined) throw new Error('--key-id is required')
     const previous = await findKey(keyId)
     if (!previous.enabled) throw new Error(`${keyId} is revoked; issue a new key instead`)
-    const issued = await issue(issueInput(args, previous))
+    const issued = await issue(issueInput(args, previous), previous.integrationId)
     await db.integrations.expireKeyAt(previous.id, new Date(now.getTime() + ROTATION_OVERLAP_MS))
     printIssued(issued)
     console.log(`\n  ${keyId} keeps working for 24 hours, then expires.`)

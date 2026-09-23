@@ -22,7 +22,7 @@ export const auditPhiAccess = t.middleware(async ({ ctx, path, type, next }) => 
 
   ctx.audit.record({
     transport: 'trpc',
-    actorKind: ctx.actor === null ? 'anonymous' : 'staff',
+    actorKind: ctx.actor === null ? 'anonymous' : ctx.actor.roles.includes('integration') ? 'integration' : 'staff',
     actorId: ctx.actor?.id ?? null,
     action: path,
     method: type,

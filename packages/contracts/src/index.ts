@@ -14,6 +14,7 @@ export {
   humanStaffRoleSchema,
   HUMAN_STAFF_ROLES,
   ROLE_SURFACES,
+  STAFF_SURFACES,
   ROLE_ACCESS,
   roleHasAccess,
   type StaffRole,

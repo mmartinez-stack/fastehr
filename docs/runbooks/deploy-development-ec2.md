@@ -352,6 +352,13 @@ keys issue --name "Voice assistant" --environment dev \
 keys list
 keys rotate --key-id <id>   # new key; the old one expires in 24 h
 keys revoke --key-id <id>   # immediate, no restart
+
+# A login for the partner's team (ADR 36 as amended): issue the key with
+# --email <their address>, then a temporary password the same way as for
+# staff. They sign in, change it, and see only /integration and the reference.
+keys issue --name "Voice assistant" --email integrations@vendor.example --environment dev ...
+docker run --rm --env-file /etc/fastehr/app.env -v /etc/fastehr/rds-ca.pem:/etc/fastehr/rds-ca.pem:ro \
+  "ghcr.io/$GHCR_OWNER/fastehr/jobs:$IMAGE_TAG" node packages/db/scripts/issue-temp-password.ts --email integrations@vendor.example
 ```
 
 Locally, against a database over the port-forward of step 11, the same

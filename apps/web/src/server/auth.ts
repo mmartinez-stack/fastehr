@@ -98,8 +98,8 @@ export function createAuthOptions(env: { secret: string; baseURL: string }): Bet
      * rows, the hashing, the expiry, and the per-key request counter. The
      * partner chain verifies a bearer token through `verifyApiKey`; a key
      * never becomes a session (`enableSessionForAPIKeys` stays off), so it
-     * cannot reach `/api/trpc` or a page, and `actorFromHeaders` refuses the
-     * `integration` role besides.
+     * cannot reach `/api/trpc` or a page. The principal that owns the key
+     * may sign in with a credential of its own, to its one page.
      */
     plugins: [
       apiKey({
@@ -246,10 +246,9 @@ export async function actorFromHeaders(headers: Headers): Promise<Actor | null> 
 
   const role = staffRoleSchema.safeParse(user.role)
   if (!role.success) return null
-  // An integration principal (ADR 36) is a key's owner, not a person: it has
-  // no surface and no session of its own, and a session claiming the role is
-  // refused outright rather than admitted with nothing to reach.
-  if (role.data === 'integration') return null
+  // An integration principal (ADR 36 as amended) resolves like anyone else;
+  // what it reaches is decided by the matrix, where its one surface is the
+  // integration page and every staff chain refuses it.
 
   return {
     id: user.id,

@@ -1,4 +1,5 @@
 import type React from "react"
+import { redirect } from "next/navigation"
 import { LocationProvider } from "@/components/location-provider"
 import { RoleProvider } from "@/components/role-provider"
 import { api } from "@/trpc/server"
@@ -16,6 +17,10 @@ export default async function AppLayout({
   // passes auth like everything else (ADR 22, ADR 32). The providers only
   // carry that down.
   const identity = await sessionIdentity()
+  // A partner's account (the integration role, ADR 36 as amended) has one
+  // page and it is not in this shell: send it there before anything clinical
+  // renders. The procedures behind these screens refuse it anyway.
+  if (identity?.role === "integration") redirect("/integration")
   // Every clinic, inactive ones too: the filter offers the active ones, and
   // a record from a closed clinic still shows that clinic's name.
   const locations = identity === null ? [] : await api.location.list()

@@ -3,6 +3,7 @@ import { patientDisplayName } from '@fastehr/core'
 import { protectedProcedure, publicProcedure } from '../procedures.ts'
 import { router } from '../trpc.ts'
 import { intakeRouter } from './intake.ts'
+import { integrationRouter } from './integration.ts'
 import { locationRouter } from './location.ts'
 import { patientRouter } from './patient.ts'
 import { reviewRouter } from './review.ts'
@@ -29,6 +30,8 @@ export const appRouter = router({
   review: reviewRouter,
 
   staffUsers: staffUserRouter,
+
+  integration: integrationRouter,
 
   patientDisplayName: protectedProcedure
     .input(patientSchema.pick({ firstName: true, lastName: true }))

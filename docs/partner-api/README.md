@@ -13,6 +13,14 @@ Regenerate the committed copy after any contract change:
 pnpm --filter @fastehr/contracts openapi:write
 ```
 
+## Your account
+
+If the clinic issued your team a login, sign in at `/login`. The account
+sees one page, `/integration`: your integration's name, the state of each
+key (start, scopes, expiry, last use; never the key itself), the calling
+conventions, and a button to the reference. Nothing else in the
+application is reachable from it.
+
 ## Calling the API
 
 - Base URL: `https://<host>/api/v1`. TLS only, terminated at the clinic's proxy, with HSTS.

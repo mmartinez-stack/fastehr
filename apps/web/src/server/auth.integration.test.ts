@@ -237,13 +237,15 @@ describe('guards', () => {
     })
   })
 
-  it('never resolves an integration principal to an actor, even with a session (ADR 36)', async () => {
-    // A principal has no credential in practice; give it one here to prove
-    // the refusal is by role, not by the accident of having no password.
+  it('resolves an integration principal to an actor that reaches its page and nothing clinical (ADR 36 as amended)', async () => {
     const integration = await seedUser('integration', 'integration')
     const cookie = await signInCookie(integration.email)
-    expect(await actorFromHeaders(new Headers({ cookie }))).toBeNull()
-    await expect(requireSession(new Headers({ cookie }))).rejects.toMatchObject({ code: 'UNAUTHENTICATED' })
+    const actor = await actorFromHeaders(new Headers({ cookie }))
+    expect(actor).toMatchObject({ id: integration.id, roles: ['integration'] })
+    await expect(requireSurface(new Headers({ cookie }), 'integration')).resolves.toMatchObject({ id: integration.id })
+    for (const surface of ['clinical', 'clerical', 'staff', 'review'] as const) {
+      await expect(requireSurface(new Headers({ cookie }), surface)).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    }
   })
 
   it('never turns a partner key into a session, in either header (ADR 36)', async () => {

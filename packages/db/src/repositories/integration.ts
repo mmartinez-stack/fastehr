@@ -18,10 +18,14 @@ export interface IntegrationRepository {
   /** The active integration behind a key, or `null`: an inactive principal refuses every key it holds. */
   findActive(id: string): Promise<{ id: string; name: string } | null>
   /**
-   * The principal for an integration name, created on first use. The
-   * synthetic email is the uniqueness key; nobody signs in with it.
+   * The principal for an integration, created on first use and found by
+   * email afterwards. With `email`, the partner's team can later be issued
+   * a credential and sign in to the integration page (ADR 36 as amended);
+   * without it, a synthetic address that nobody signs in with.
    */
-  findOrCreate(input: { name: string }): Promise<{ id: string; name: string; isActive: boolean }>
+  findOrCreate(input: { name: string; email?: string }): Promise<{ id: string; name: string; isActive: boolean }>
+  /** One principal with its keys, active or not; `null` for an id that is not an integration. */
+  find(id: string): Promise<Integration | null>
   list(): Promise<Integration[]>
   findKey(keyId: string): Promise<IntegrationKey | null>
   /** Shortens an enabled key's life to `expiresAt` (the rotation overlap); `null` when the key is not enabled. */
@@ -39,6 +43,11 @@ export function integrationEmail(name: string): string {
   return `integration+${slug || 'unnamed'}@fastehr.invalid`
 }
 
+const WITH_KEYS = {
+  apiKeys: { orderBy: [{ createdAt: 'asc' as const }] },
+  accounts: { where: { providerId: 'credential' }, select: { id: true as const } },
+}
+
 export function createIntegrationRepository(getClient: () => PrismaClient): IntegrationRepository {
   return {
     async findActive(id) {
@@ -47,9 +56,8 @@ export function createIntegrationRepository(getClient: () => PrismaClient): Inte
       return { id: row.id, name: row.name }
     },
 
-    async findOrCreate({ name }) {
+    async findOrCreate({ name, email = integrationEmail(name) }) {
       const client = getClient()
-      const email = integrationEmail(name)
       const existing = await client.user.findUnique({ where: { email } })
       if (existing !== null) {
         if (existing.role !== 'integration') throw new Error(`${email} exists and is not an integration`)
@@ -61,12 +69,13 @@ export function createIntegrationRepository(getClient: () => PrismaClient): Inte
       return { id: row.id, name: row.name, isActive: row.isActive }
     },
 
+    async find(id) {
+      const row = await getClient().user.findUnique({ where: { id }, include: WITH_KEYS })
+      return row === null || row.role !== 'integration' ? null : toIntegration(row)
+    },
+
     async list() {
-      const rows = await getClient().user.findMany({
-        where: { role: 'integration' },
-        orderBy: [{ name: 'asc' }],
-        include: { apiKeys: { orderBy: [{ createdAt: 'asc' }] } },
-      })
+      const rows = await getClient().user.findMany({ where: { role: 'integration' }, orderBy: [{ name: 'asc' }], include: WITH_KEYS })
       return rows.map(toIntegration)
     },
 
