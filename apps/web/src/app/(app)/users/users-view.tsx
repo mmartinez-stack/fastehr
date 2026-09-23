@@ -617,13 +617,15 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
           <div>
             <h2 className="text-base font-semibold">Integrations</h2>
             <p className="text-sm text-muted-foreground">
-              Partner systems holding an API key. Keys are issued, rotated, and revoked from the runbook, never here.
+              Partner systems holding an API key. Keys are issued, rotated, and revoked from the runbook, never here. An
+              integration with a login sees only its own page and the API reference.
             </p>
           </div>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Integration</TableHead>
+                <TableHead>Login</TableHead>
                 <TableHead>Key</TableHead>
                 <TableHead>Scopes</TableHead>
                 <TableHead>Expires</TableHead>
@@ -637,6 +639,7 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
                   ? [
                       <TableRow key={integration.id}>
                         <TableCell className="font-medium">{integration.name}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{integration.hasCredential ? "Issued" : "None"}</TableCell>
                         <TableCell colSpan={4} className="text-muted-foreground">No keys</TableCell>
                         <TableCell>{integrationStatus(integration.isActive, null)}</TableCell>
                       </TableRow>,
@@ -644,6 +647,7 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
                   : integration.keys.map((key) => (
                       <TableRow key={key.id}>
                         <TableCell className="font-medium">{integration.name}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{integration.hasCredential ? "Issued" : "None"}</TableCell>
                         <TableCell>
                           <span className="font-mono text-xs">{key.start ?? key.id}</span>
                           {key.metadata?.environment === "live" ? (
@@ -659,13 +663,13 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
               )}
               {integrations.isPending ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                     Loading integrations…
                   </TableCell>
                 </TableRow>
               ) : (integrations.data ?? []).length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                     No integrations yet.
                   </TableCell>
                 </TableRow>

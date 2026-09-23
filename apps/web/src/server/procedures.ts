@@ -5,6 +5,7 @@ import {
   requireAdminRole,
   requireAuth,
   requireClericalRole,
+  requireIntegration,
   requireMedicalDirector,
   requireRole,
 } from './middleware/auth.ts'
@@ -50,6 +51,18 @@ export const clericalProcedure = protectedProcedure.meta({ access: 'clerical' })
 
 /** The note review queue and its sign-off (DIA-74, ADR 31): the medical director role. */
 export const medicalDirectorProcedure = protectedProcedure.meta({ access: 'review' }).use(requireMedicalDirector)
+
+/**
+ * The partner account's own page (ADR 36 as amended). Not composed on the
+ * protected chain, whose `requireRole` refuses the integration role by
+ * design; the chain is the same shape (audit, authenticate, authorize) with
+ * the one surface that role holds.
+ */
+export const integrationProcedure = publicProcedure
+  .meta({ access: 'integration' })
+  .use(auditPhiAccess)
+  .use(requireAuth)
+  .use(requireIntegration)
 
 /**
  * Procedures that list for one clinic, or for all of them (`'all'`).

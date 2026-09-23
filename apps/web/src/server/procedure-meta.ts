@@ -16,6 +16,8 @@ export type ProcedureAccess =
   | 'staff'
   /** The note-review surface (the medical director). */
   | 'review'
+  /** The partner account's own page: its integration and keys (ADR 36 as amended). */
+  | 'integration'
 
 export interface ProcedureMeta {
   access: ProcedureAccess

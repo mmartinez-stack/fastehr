@@ -1,4 +1,4 @@
-import { ROLE_SURFACES, roleHasAccess, type RoleSurface } from '@fastehr/contracts'
+import { STAFF_SURFACES, roleHasAccess, type RoleSurface } from '@fastehr/contracts'
 import { TRPCError } from '@trpc/server'
 import { t } from '../trpc.ts'
 
@@ -28,15 +28,15 @@ export const requireAuth = t.middleware(({ ctx, next }) => {
 
 /**
  * Role check (RBAC), coarsest form: the actor carries at least one role that
- * reaches some surface. The per-surface checks below are the real matrix.
- * A role with no surface at all (`integration`, ADR 36) is refused here, so
- * a session-only procedure is not the one door such a role could open.
+ * reaches a staff surface. The per-surface checks below are the real matrix.
+ * The `integration` role (ADR 36) holds none of the four, so every staff
+ * chain refuses it here; its one page has its own chain.
  */
 export const requireRole = t.middleware(({ ctx, next }) => {
   const actor = ctx.actor
   if (actor === null) throw new TRPCError({ code: 'UNAUTHORIZED' })
   refusePendingPasswordChange(actor)
-  if (!ROLE_SURFACES.some((surface) => hasSurface(actor, surface))) throw new TRPCError({ code: 'FORBIDDEN' })
+  if (!STAFF_SURFACES.some((surface) => hasSurface(actor, surface))) throw new TRPCError({ code: 'FORBIDDEN' })
   return next()
 })
 
@@ -76,3 +76,6 @@ export const requireAdminRole = requireSurface('staff')
 
 /** The note review queue and its sign-off (DIA-74, ADR 31): the medical director role alone. */
 export const requireMedicalDirector = requireSurface('review')
+
+/** The partner account's own integration page (ADR 36 as amended): the integration role alone. */
+export const requireIntegration = requireSurface('integration')

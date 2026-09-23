@@ -33,6 +33,7 @@ const ACCESS_TEXT: Record<ProcedureAccess, string> = {
   clerical: 'The clerical surface: front desk and administrators.',
   staff: 'The staff-administration surface: administrators.',
   review: 'The note-review surface: the medical director.',
+  integration: 'The partner account (the integration role): its own integration and keys.',
 }
 
 const SECURITY_SCHEME = 'sessionCookie'

@@ -42,11 +42,12 @@ export function toIntegrationKey(row: ApiKeyRow): IntegrationKey {
   })
 }
 
-export function toIntegration(row: UserRow & { apiKeys: ApiKeyRow[] }): Integration {
+export function toIntegration(row: UserRow & { apiKeys: ApiKeyRow[]; accounts: { id: string }[] }): Integration {
   return integrationSchema.parse({
     id: row.id,
     name: row.name,
     isActive: row.isActive,
+    hasCredential: row.accounts.length > 0,
     createdAt: row.createdAt.toISOString(),
     keys: row.apiKeys.map(toIntegrationKey),
   })

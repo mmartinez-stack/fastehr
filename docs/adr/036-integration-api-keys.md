@@ -1,6 +1,6 @@
 # ADR 36 — Integrations authenticate with per-integration API keys, never with a staff login
 
-**Status:** accepted (2026-09-21); amended the same day, below; implemented with ADR 38  
+**Status:** accepted (2026-09-21); amended 2026-09-21 and 2026-09-22, below; implemented with ADR 38  
 **Applies to:** `apps/web/src/server/auth.ts` · `apps/web/src/server/partner/keys.ts` · `apps/web/scripts/partner-api-keys.ts` · `packages/contracts/src/partner-api/keys.ts` · `packages/contracts/src/staff-role.ts` · `packages/db/prisma/migrations/20260917130000_integration_keys` · `packages/db/src/repositories/integration.ts`
 
 A system that calls FastEHR on its own (a partner such as the one in
@@ -102,3 +102,32 @@ from the text above, and what does not:
   over TLS, keys prefixed `fehr_<env>_` for a human reading one, the
   development environment first, a `live` key refused without the date
   the business associate agreement was signed.
+
+## Amended 2026-09-22: the principal may sign in, to one page
+
+The first amendment kept the principal without a session. The clinic then
+asked for the partner's team to have a login that shows their integration
+and nothing clinical, so:
+
+- **The principal may hold a credential.** Issued the way a staff account's
+  is (`issue-temp-password`), against a real address given at key issuance
+  (`--email`). The account signs in, changes its temporary password, and
+  lands on `/integration`.
+- **One surface, one page.** `integration` is a fifth surface in
+  `ROLE_ACCESS`, held by the `integration` role alone. It grants
+  `/integration` and the `integration.mine` procedure: the account's own
+  principal and the state of its keys (never a key), how to call the API,
+  and a button to the reference at `/api/v1/docs`, which asks for the key
+  and shows the operations it covers (ADR 38).
+- **Nothing clinical, enforced three times.** `requireRole`, which every
+  staff chain runs, demands one of the four staff surfaces, which the role
+  lacks, so every staff procedure answers `FORBIDDEN`; the staff shell's
+  layout redirects the role to `/integration` before any screen renders;
+  and `/api-docs` requires the `staff` surface (ADR 35 as amended). The
+  integration page has its own shell, with no navigation.
+- **The audit trail names it.** A call from the account's session is
+  recorded with `actorKind: integration` and the principal's id, the same
+  actor its keys are recorded under.
+- **Unchanged.** A key never becomes a session; the Users screen lists
+  principals apart, read-only, and never assigns the role; the role
+  switcher never offers it.

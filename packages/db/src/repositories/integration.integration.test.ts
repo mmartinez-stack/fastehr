@@ -42,6 +42,12 @@ describe('integration repository', () => {
     const row = await prisma.user.findUniqueOrThrow({ where: { id: created.id } })
     expect(row).toMatchObject({ role: 'integration', email: integrationEmail('Voice assistant'), isActive: true })
     expect(await prisma.account.count()).toBe(0)
+    expect(await db.integrations.find(created.id)).toMatchObject({ id: created.id, hasCredential: false, keys: [] })
+
+    // With a real address, the partner's team can later sign in to their page.
+    const withLogin = await db.integrations.findOrCreate({ name: 'Voice assistant login', email: 'integrations@vendor.example' })
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: withLogin.id } })).email).toBe('integrations@vendor.example')
+    expect((await db.integrations.findOrCreate({ name: 'renamed', email: 'integrations@vendor.example' })).id).toBe(withLogin.id)
     // People are listed apart: the staff list never shows a principal.
     expect(await db.staffUsers.list()).toEqual([])
   })
@@ -49,6 +55,7 @@ describe('integration repository', () => {
   it('refuses a person and an inactive principal as a key owner', async () => {
     const person = await db.staffUsers.create({ name: 'Ada', email: 'ada@example.com', role: 'admin' })
     expect(await db.integrations.findActive(person.id)).toBeNull()
+    expect(await db.integrations.find(person.id)).toBeNull()
     const integration = await db.integrations.findOrCreate({ name: 'Voice assistant' })
     expect(await db.integrations.findActive(integration.id)).toEqual({ id: integration.id, name: 'Voice assistant' })
     await prisma.user.update({ where: { id: integration.id }, data: { isActive: false } })

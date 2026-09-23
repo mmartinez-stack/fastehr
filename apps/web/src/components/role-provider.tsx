@@ -94,7 +94,7 @@ export function useSurfaces(): RoleSurfaces & { role: StaffRole } {
   return { role, ...surfacesFor(role) }
 }
 
-const NO_ACCESS: RoleSurfaces = { clinical: false, clerical: false, staff: false, review: false }
+const NO_ACCESS: RoleSurfaces = { clinical: false, clerical: false, staff: false, review: false, integration: false }
 
 /**
  * The session's own surfaces, never a preview's. For the one thing a preview

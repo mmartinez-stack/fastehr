@@ -19,11 +19,12 @@ export type StaffRole = z.infer<typeof staffRoleSchema>
 export const STAFF_ROLES = staffRoleSchema.options
 
 /**
- * `integration` is the principal behind a partner API key (ADR 36): a
- * `users` row so the audit trail names it, with no surface, no credential,
- * and no session. It is never assigned from the Users screen, never offered
- * by the role switcher, and never resolves to a staff actor; the human
- * vocabulary below is what those surfaces use.
+ * `integration` is the principal behind a partner API key (ADR 36, as
+ * amended): a `users` row so the audit trail names it, which may hold a
+ * credential so the partner's team can sign in to one page, their own
+ * integration, and nothing else. It is never assigned from the Users
+ * screen and never offered by the role switcher; the human vocabulary
+ * below is what those surfaces use.
  */
 export const humanStaffRoleSchema = staffRoleSchema.exclude(['integration'])
 export type HumanStaffRole = z.infer<typeof humanStaffRoleSchema>
@@ -36,21 +37,30 @@ export const HUMAN_STAFF_ROLES = humanStaffRoleSchema.options
  * one division, the clinical record against the clerical record; `staff` is
  * clinic-wide reporting and the staff accounts, which sit in neither half;
  * `review` is the medical director's queue of sampled notes; `integration`
- * holds none of them, because a key's reach is a scope on the key (ADR 38),
+ * is the partner account's one page, its keys and the API reference, and
+ * nothing clinical, because a key's reach is a scope on the key (ADR 38),
  * not a surface. The server
  * middleware and the client's navigation and tabs all read this table, so a
  * role's reach is decided in exactly one place. A role or surface the table
  * does not name is denied (`roleHasAccess`), never allowed by omission.
  */
-export const ROLE_SURFACES = ['clinical', 'clerical', 'staff', 'review'] as const
+export const ROLE_SURFACES = ['clinical', 'clerical', 'staff', 'review', 'integration'] as const
 export type RoleSurface = (typeof ROLE_SURFACES)[number]
 
+/**
+ * The surfaces a person works in. `integration` is not one of them: it is
+ * the single page a partner's account sees (its keys and the reference),
+ * held by the `integration` role alone, and every staff chain refuses a
+ * role that holds none of these four (ADR 36 as amended).
+ */
+export const STAFF_SURFACES = ['clinical', 'clerical', 'staff', 'review'] as const satisfies readonly RoleSurface[]
+
 export const ROLE_ACCESS: Readonly<Record<StaffRole, Readonly<Record<RoleSurface, boolean>>>> = {
-  provider: { clinical: true, clerical: false, staff: false, review: false },
-  frontdesk: { clinical: false, clerical: true, staff: false, review: false },
-  admin: { clinical: true, clerical: true, staff: true, review: false },
-  medical_director: { clinical: true, clerical: true, staff: true, review: true },
-  integration: { clinical: false, clerical: false, staff: false, review: false },
+  provider: { clinical: true, clerical: false, staff: false, review: false, integration: false },
+  frontdesk: { clinical: false, clerical: true, staff: false, review: false, integration: false },
+  admin: { clinical: true, clerical: true, staff: true, review: false, integration: false },
+  medical_director: { clinical: true, clerical: true, staff: true, review: true, integration: false },
+  integration: { clinical: false, clerical: false, staff: false, review: false, integration: true },
 }
 
 /** Default deny: an unknown role, or an unknown surface, is `false`. */
