@@ -63,7 +63,12 @@ identity, the wrong permissions, and the wrong audit line.
    from the Zod schemas natively (Zod 4 emits JSON Schema 2020-12), lives in
    contracts because only contracts may import Zod (ADR 5), is committed at
    `docs/partner-api/openapi.json` with a drift test, and is served at
-   `/api/v1/openapi.json`. The docs page serves the Swagger UI vendored under
+   `/api/v1/openapi.json` **cut to the key presented with it**: the
+   operations that key's scopes cover, the schemas they reach, and no
+   other; no key, no operations. A partner therefore sees their surface,
+   never the registry, and a bad key on the document is refused and counted
+   like a bad key on a call. The docs page asks for the key and fetches
+   the document with it, holding the key in the page's memory only. The docs page serves the Swagger UI vendored under
    `public/swagger-ui` (ADR 35), so no third-party script runs here.
 6. **Errors are codes (ADR 12), and coarse where a distinction would inform a
    probe.** The envelope is `{ error: { code, requestId, validation? } }`;

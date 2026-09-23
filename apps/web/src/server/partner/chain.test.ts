@@ -219,19 +219,39 @@ describe('partner chain: transport', () => {
     expect((await on.send({ path: '/openapi.json' })).status).toBe(200)
   })
 
-  it('serves the OpenAPI document and the docs page without a key', async () => {
-    const harness = partnerHarness()
-    const spec = await harness.send({ path: '/openapi.json', key: null })
-    expect(spec.status).toBe(200)
-    expect(spec.body).toMatchObject({ openapi: '3.1.0' })
-    expect(spec.headers.get('cache-control')).toBe('no-store')
+  it('serves the docs page without a key, and the document cut to the key presented', async () => {
+    const harness = partnerHarness({ keys: [testKey(), testKey({ token: OTHER_TOKEN, id: 'key-2', scopes: ['queue:read'] })] })
+    type Doc = { openapi: string; paths: Record<string, unknown> }
+
+    const skeleton = await harness.send({ path: '/openapi.json', key: null })
+    expect(skeleton.status).toBe(200)
+    expect(skeleton.body).toMatchObject({ openapi: '3.1.0', paths: {} })
+    expect(skeleton.headers.get('cache-control')).toBe('no-store')
+
+    const mine = await harness.send({ path: '/openapi.json' })
+    expect(Object.keys((mine.body as Doc).paths).sort()).toEqual(['/patients/lookup', '/patients/{patientId}/verify', '/queue/count'])
+    const queueOnly = await harness.send({ path: '/openapi.json', key: OTHER_TOKEN })
+    expect(Object.keys((queueOnly.body as Doc).paths)).toEqual(['/queue/count'])
+
+    const wrong = await harness.send({ path: '/openapi.json', key: 'fehr_dev_wrong' })
+    expect(wrong.status).toBe(401)
+    expect(JSON.stringify(wrong.body)).not.toContain('paths')
 
     const docs = await harness.send({ path: '/docs', key: null })
     expect(docs.status).toBe(200)
     expect(docs.headers.get('content-type')).toContain('text/html')
     expect(docs.headers.get('content-security-policy')).toContain("script-src 'self'")
+    expect(String(docs.body)).toContain('Your API key')
     expect(String(docs.body)).not.toMatch(/https?:\/\/(?!test\.invalid)/)
+    // Documents are not PHI: no audit row for any of it.
     expect(harness.audit.events).toEqual([])
+  })
+
+  it('counts a bad key on the document against the same failed-authentication bucket as a call', async () => {
+    const harness = partnerHarness()
+    for (let i = 0; i < 30; i += 1) expect((await harness.send({ path: '/openapi.json', key: 'fehr_dev_wrong' })).status).toBe(401)
+    expect((await harness.send({ path: '/openapi.json' })).status).toBe(429)
+    expect((await harness.send({ path: '/queue/count' })).status).toBe(429)
   })
 
   it('answers 404 for an unknown route and 405 with Allow for the wrong verb', async () => {

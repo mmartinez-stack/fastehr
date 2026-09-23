@@ -139,6 +139,18 @@ describe('partner API end to end', () => {
     expect(JSON.stringify(audit.events)).not.toContain('Lovelace')
   })
 
+  it('cuts the OpenAPI document to the key presented, and shows nobody anything without one', async () => {
+    const mine = (await (await send('/openapi.json')).json()) as { paths: Record<string, unknown> }
+    expect(Object.keys(mine.paths).sort()).toEqual(['/patients/lookup', '/patients/{patientId}/verify', '/queue/count'])
+    const anonymous = await handlePartnerRequest(new Request('http://localhost:3000/api/v1/openapi.json'), {
+      enabled: true,
+      env: {},
+      rateLimiter: createRateLimiter(),
+      audit: sink,
+    })
+    expect(((await anonymous.json()) as { paths: Record<string, unknown> }).paths).toEqual({})
+  })
+
   it('refuses a key from outside the allowlist and a key that is not one of ours', async () => {
     const elsewhere = await handlePartnerRequest(
       new Request('http://localhost:3000/api/v1/queue/count', {

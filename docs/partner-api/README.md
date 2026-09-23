@@ -1,9 +1,13 @@
 # FastEHR Partner API
 
-Server-to-server access for an approved partner (ADR 38). The reference is
-the OpenAPI document in this directory, `openapi.json`, also served at
-`/api/v1/openapi.json` and rendered at `/api/v1/docs` on any environment
-where the API is enabled. Regenerate it after any contract change:
+Server-to-server access for an approved partner (ADR 36, ADR 38). The
+clinic's full reference is the OpenAPI document in this directory,
+`openapi.json`. A partner reads theirs at `/api/v1/docs` on any environment
+where the API is enabled: the page asks for the key and shows exactly the
+operations that key covers, nothing else; without a key it shows how to
+authenticate and the error format. The same cut is served as JSON at
+`/api/v1/openapi.json` when the key is presented as a Bearer token.
+Regenerate the committed copy after any contract change:
 
 ```bash
 pnpm --filter @fastehr/contracts openapi:write

@@ -42,6 +42,33 @@ describe('partner OpenAPI document', () => {
     expect(text).not.toContain('creditCard')
   })
 
+  it('cut to a key\'s scopes, shows only what that key can call, and only the schemas those calls reach', () => {
+    type Doc = { paths: Record<string, unknown>; tags: { name: string }[]; components: { schemas: Record<string, unknown>; securitySchemes: { bearerKey: { description: string } } } }
+    const queueOnly = buildPartnerOpenApiDocument({ scopes: ['queue:read'] }) as Doc
+    expect(Object.keys(queueOnly.paths)).toEqual(['/queue/count'])
+    expect(queueOnly.tags.map((tag) => tag.name)).toEqual(['queue'])
+    expect(Object.keys(queueOnly.components.schemas).sort()).toEqual(['ErrorResponse', 'QueueCountResponse', 'QueueLocationCount'])
+    expect(queueOnly.components.securitySchemes.bearerKey.description).toContain('queue:read')
+    expect(queueOnly.components.securitySchemes.bearerKey.description).not.toContain('patients:lookup')
+
+    const identity = buildPartnerOpenApiDocument({ scopes: ['patients:lookup', 'patients:verify'] }) as Doc
+    expect(Object.keys(identity.paths).sort()).toEqual(['/patients/lookup', '/patients/{patientId}/verify'])
+    expect(identity.components.schemas).toHaveProperty('PatientCandidate')
+    expect(identity.components.schemas).not.toHaveProperty('QueueCountResponse')
+
+    const skeleton = buildPartnerOpenApiDocument({ scopes: [] }) as Doc
+    expect(skeleton.paths).toEqual({})
+    expect(skeleton.tags).toEqual([])
+    expect(Object.keys(skeleton.components.schemas)).toEqual(['ErrorResponse'])
+    expect(skeleton.components.securitySchemes.bearerKey.description).toContain('Present yours')
+
+    // A scope with no mounted operation adds nothing, and the full reference names only mounted scopes.
+    expect(buildPartnerOpenApiDocument({ scopes: ['medications:read'] }).paths).toEqual({})
+    expect((document as unknown as Doc).components.securitySchemes.bearerKey.description).toBe(
+      'A partner API key. Scopes: patients:lookup, patients:verify, queue:read.',
+    )
+  })
+
   it('names the candidate schema once and references it', () => {
     expect(document.components.schemas).toHaveProperty('PatientCandidate')
     expect(JSON.stringify(document.components.schemas.PatientLookupResponse)).toContain('#/components/schemas/PatientCandidate')

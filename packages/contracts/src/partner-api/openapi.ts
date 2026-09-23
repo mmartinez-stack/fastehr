@@ -4,7 +4,7 @@ import { PARTNER_ERROR_STATUS, partnerErrorSchema } from './errors.ts'
 import { documentedErrors, PARTNER_OPERATIONS, type PartnerOperation } from './operations.ts'
 import { partnerPatientCandidateSchema } from './patients.ts'
 import { partnerQueueLocationCountSchema } from './queue.ts'
-import { API_SCOPES } from './scopes.ts'
+import type { PartnerScope } from './scopes.ts'
 
 /**
  * The OpenAPI 3.1 document for the partner API, built from the registry and
@@ -23,6 +23,14 @@ import { API_SCOPES } from './scopes.ts'
  * The committed copy at `docs/partner-api/openapi.json` is regenerated with
  * `pnpm --filter @fastehr/contracts openapi:write`; the drift test fails
  * when the two disagree.
+ *
+ * **Scoped to a key.** Called with `scopes`, the document describes only the
+ * operations a key holding those scopes may call, and only the schemas
+ * those operations reach: what a partner sees at `/api/v1/docs` is exactly
+ * their surface, not the clinic's whole registry. No `scopes` at all is the
+ * clinic's own full reference (the committed copy); an empty list is the
+ * skeleton a visitor without a key gets: authentication and the error
+ * format, no operations.
  */
 
 export const PARTNER_API_VERSION = '1.0.0'
@@ -84,14 +92,60 @@ function queryParameters(operation: PartnerOperation): JsonObject[] {
   }))
 }
 
-export function buildPartnerOpenApiDocument(): JsonObject {
+/** Every `#/components/schemas/<id>` reference inside a value, transitively resolved against `schemas`. */
+function reachableSchemas(roots: readonly string[], schemas: Record<string, JsonObject>): Record<string, JsonObject> {
+  const seen = new Set<string>()
+  const pending = [...roots]
+  while (pending.length > 0) {
+    const id = pending.pop()
+    if (id === undefined || seen.has(id)) continue
+    const schema = schemas[id]
+    if (schema === undefined) continue
+    seen.add(id)
+    for (const match of JSON.stringify(schema).matchAll(/#\/components\/schemas\/([A-Za-z0-9_]+)/g)) {
+      const referenced = match[1]
+      if (referenced !== undefined) pending.push(referenced)
+    }
+  }
+  const kept: Record<string, JsonObject> = {}
+  for (const id of Object.keys(schemas)) if (seen.has(id)) kept[id] = schemas[id] as JsonObject
+  return kept
+}
+
+export interface PartnerOpenApiOptions {
+  /**
+   * The scopes of the key the document is for. Omitted: the full reference.
+   * Given: only the operations those scopes cover (an operation with no
+   * scope is covered by any key), so an empty list yields no operations.
+   */
+  scopes?: readonly PartnerScope[]
+}
+
+export function buildPartnerOpenApiDocument(options: PartnerOpenApiOptions = {}): JsonObject {
+  const operations =
+    options.scopes === undefined
+      ? PARTNER_OPERATIONS
+      : PARTNER_OPERATIONS.filter((operation) => operation.scope === null || options.scopes?.includes(operation.scope))
+
   const bodies = PARTNER_OPERATIONS.flatMap((operation) => (operation.body === undefined ? [] : [operation.body]))
   const outputs = [
     ...PARTNER_OPERATIONS.map((operation) => operation.output),
     ...NESTED_OUTPUT_SCHEMAS,
     partnerErrorSchema.meta({ id: 'ErrorResponse' }),
   ]
-  const schemas = { ...renderComponents(bodies, 'input'), ...renderComponents(outputs, 'output') }
+  // Rendered from the whole registry, so every nested schema lands under its
+  // own id, then cut down to what the included operations reach.
+  const rendered = { ...renderComponents(bodies, 'input'), ...renderComponents(outputs, 'output') }
+  const roots = [
+    'ErrorResponse',
+    ...operations.flatMap((operation) => [
+      metaId(operation.output),
+      ...(operation.body === undefined ? [] : [metaId(operation.body)]),
+    ]),
+  ]
+  const schemas = reachableSchemas(roots, rendered)
+  const scopes = [...new Set(operations.flatMap((operation) => (operation.scope === null ? [] : [operation.scope])))]
+  const tagNames = new Set(operations.map((operation) => operation.id.split('.')[0]))
 
   const errorResponse = (codes: readonly string[]) => ({
     description: codes.join(' | '),
@@ -99,7 +153,7 @@ export function buildPartnerOpenApiDocument(): JsonObject {
   })
 
   const paths: Record<string, JsonObject> = {}
-  for (const operation of PARTNER_OPERATIONS) {
+  for (const operation of operations) {
     const responses: Record<string, JsonObject> = {
       [String(operation.successStatus)]: {
         description: 'Success',
@@ -154,14 +208,17 @@ export function buildPartnerOpenApiDocument(): JsonObject {
     tags: [
       { name: 'patients', description: 'Lookup and verification' },
       { name: 'queue', description: 'The live clinic queue' },
-    ],
+    ].filter((tag) => tagNames.has(tag.name)),
     paths,
     components: {
       securitySchemes: {
         bearerKey: {
           type: 'http',
           scheme: 'bearer',
-          description: `A partner API key. Scopes: ${API_SCOPES.join(', ')}.`,
+          description:
+            scopes.length === 0
+              ? 'A partner API key. Present yours as a Bearer token to this document to see the operations it covers.'
+              : `A partner API key. Scopes: ${scopes.join(', ')}.`,
         },
       },
       parameters: {

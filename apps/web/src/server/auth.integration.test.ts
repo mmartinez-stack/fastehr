@@ -3,7 +3,7 @@ import { isLegacyCredential, serializeLegacyCredential } from '@fastehr/contract
 import { betterAuth } from 'better-auth'
 import { APIError } from 'better-auth/api'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { actorFromHeaders, createAuthOptions, getAuth } from './auth.ts'
+import { actorFromHeaders, apiKeyEndpoints, createAuthOptions, getAuth } from './auth.ts'
 import { GuardDenied, requireRole, requireSession, requireSurface } from './guards.ts'
 
 /**
@@ -244,6 +244,18 @@ describe('guards', () => {
     const cookie = await signInCookie(integration.email)
     expect(await actorFromHeaders(new Headers({ cookie }))).toBeNull()
     await expect(requireSession(new Headers({ cookie }))).rejects.toMatchObject({ code: 'UNAUTHENTICATED' })
+  })
+
+  it('never turns a partner key into a session, in either header (ADR 36)', async () => {
+    const integration = await seedUser('keyed-integration', 'integration')
+    const created = await apiKeyEndpoints().createApiKey({
+      body: { userId: integration.id, name: 'guard test', prefix: 'fehr_dev_', expiresIn: 24 * 60 * 60, metadata: { environment: 'dev', issuedBy: 'test' } },
+    })
+    const attempts: Record<string, string>[] = [{ 'x-api-key': created.key }, { authorization: `Bearer ${created.key}` }]
+    for (const headers of attempts) {
+      expect(await getAuth().api.getSession({ headers: new Headers(headers) })).toBeNull()
+      expect(await actorFromHeaders(new Headers(headers))).toBeNull()
+    }
   })
 })
 
