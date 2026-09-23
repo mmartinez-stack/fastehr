@@ -21,6 +21,18 @@ key (start, scopes, expiry, last use; never the key itself), the calling
 conventions, and a button to the reference. Nothing else in the
 application is reachable from it.
 
+## Trying it
+
+`scripts/partner-api-smoke.sh` runs every rule below against an environment
+with one key: the document cut to the key, each accepted and refused
+lookup shape, a failed and a successful verification, the queue count, and
+the refusals for no key and a wrong key.
+
+```bash
+BASE_URL=https://dev.fastehr.diagnosticpartners.net KEY='fehr_dev_…' \
+DOB=1985-12-10 PHONE=9515550101 LAST_NAME=Lovelace scripts/partner-api-smoke.sh
+```
+
 ## Calling the API
 
 - Base URL: `https://<host>/api/v1`. TLS only, terminated at the clinic's proxy, with HSTS.
