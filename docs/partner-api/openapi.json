@@ -376,7 +376,7 @@
       "bearerKey": {
         "type": "http",
         "scheme": "bearer",
-        "description": "A partner API key. Scopes: patients:lookup, patients:verify, medications:read, refills:write, tasks:write, queue:read, appointments:read, appointments:write, interactions:write."
+        "description": "A partner API key. Scopes: patients:lookup, patients:verify, queue:read."
       }
     },
     "parameters": {
