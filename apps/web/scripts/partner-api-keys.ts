@@ -30,19 +30,17 @@
  * partner can cut over without an outage. Revocation is immediate.
  */
 import {
-  apiKeyPrefix,
+  API_KEY_ROTATION_OVERLAP_HOURS,
   describeValidationFailure,
   issueIntegrationKeyInput,
-  PARTNER_RATE_LIMITS,
-  scopesToPermissions,
   type ApiKeyMetadata,
   type IntegrationKey,
   type IssueIntegrationKeyInput,
 } from '@fastehr/contracts'
 import { db } from '@fastehr/db'
-import { apiKeyEndpoints } from '../src/server/auth.ts'
+import { mintIntegrationKey } from '../src/server/integration-keys.ts'
 
-const ROTATION_OVERLAP_MS = 24 * 60 * 60 * 1000
+const ROTATION_OVERLAP_MS = API_KEY_ROTATION_OVERLAP_HOURS * 60 * 60 * 1000
 
 type Command = 'issue' | 'list' | 'revoke' | 'rotate'
 
@@ -131,18 +129,13 @@ async function issue(input: IssueIntegrationKeyInput, existingId?: string): Prom
     baaSignedAt: input.baaSignedAt ?? null,
     issuedBy: input.issuedBy,
   }
-  const created = await apiKeyEndpoints().createApiKey({
-    body: {
-      userId: integration.id,
-      name: input.name,
-      prefix: apiKeyPrefix(input.environment),
-      expiresIn: input.expiresInDays * 24 * 60 * 60,
-      permissions: scopesToPermissions(input.scopes),
-      metadata,
-      rateLimitEnabled: true,
-      rateLimitTimeWindow: 60 * 1000,
-      rateLimitMax: PARTNER_RATE_LIMITS.perKeyPerMinute,
-    },
+  const created = await mintIntegrationKey({
+    integrationId: integration.id,
+    name: input.name,
+    environment: input.environment,
+    scopes: input.scopes,
+    metadata,
+    expiresInDays: input.expiresInDays,
   })
   const key = await db.integrations.findKey(created.id)
   if (key === null) throw new Error('the key was created but cannot be read back')

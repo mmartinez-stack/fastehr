@@ -1,6 +1,6 @@
 # ADR 36 — Integrations authenticate with per-integration API keys, never with a staff login
 
-**Status:** accepted (2026-09-21); amended 2026-09-21 and 2026-09-22, below; implemented with ADR 38  
+**Status:** accepted (2026-09-21); amended 2026-09-21, 2026-09-22, and 2026-09-23, below; implemented with ADR 38  
 **Applies to:** `apps/web/src/server/auth.ts` · `apps/web/src/server/partner/keys.ts` · `apps/web/scripts/partner-api-keys.ts` · `packages/contracts/src/partner-api/keys.ts` · `packages/contracts/src/staff-role.ts` · `packages/db/prisma/migrations/20260917130000_integration_keys` · `packages/db/src/repositories/integration.ts`
 
 A system that calls FastEHR on its own (a partner such as the one in
@@ -131,3 +131,27 @@ and nothing clinical, so:
 - **Unchanged.** A key never becomes a session; the Users screen lists
   principals apart, read-only, and never assigns the role; the role
   switcher never offers it.
+
+## Amended 2026-09-23: the account may rotate its own key
+
+The first amendment made issuance an operator's act. The partner's page now
+offers **Rotate** on each of the account's enabled keys
+(`integration.rotateKey`, `apps/web/src/server/integration-keys.ts`), with
+the constraints that keep the operator's act meaningful:
+
+- the new key copies the old one's scopes, environment, allowlist, clinic
+  restriction, and agreement date, so a login can never widen what a key
+  reaches, and its metadata records `issuedBy: self-service: <name>`;
+- the first key, a change of scopes or allowlist, and a revocation remain
+  the clinic's, through the script;
+- the new key lives as long as the old one had left, never longer:
+  rotation is not renewal;
+- the old key keeps working for the same 24-hour overlap the script gives;
+- a principal rotates at most once an hour, so a stolen login cannot churn
+  the vendor's live key into an outage;
+- the new key is returned once in the mutation's answer, shown in a dialog
+  with a Copy button, and stored nowhere; the call is audited like any
+  other under the integration's id.
+
+The operator's script and the page mint through one function
+(`mintIntegrationKey`), so both write the same row.

@@ -17,9 +17,15 @@ pnpm --filter @fastehr/contracts openapi:write
 
 If the clinic issued your team a login, sign in at `/login`. The account
 sees one page, `/integration`: your integration's name, the state of each
-key (start, scopes, expiry, last use; never the key itself), the calling
+key (start, scopes, expiry, last use; never a stored key), the calling
 conventions, and a button to the reference. Nothing else in the
 application is reachable from it.
+
+From that page you can **rotate** a key: a new key with the same scopes
+and settings replaces it, is shown once with a Copy button, and the old
+key keeps working for 24 hours. Rotation never widens a key and is
+allowed once an hour; the first key, a change of scopes, a new allowlist,
+or a revocation are the clinic's to make.
 
 ## Trying it
 
@@ -48,20 +54,35 @@ DOB=1985-12-10 PHONE=9515550101 LAST_NAME=Lovelace scripts/partner-api-smoke.sh
 
 ## The two identity operations
 
-1. `POST /patients/lookup` with the caller's date of birth plus a phone
-   and/or a last name (a first name narrows a last name), or a `patientId`
-   you already hold. Up to five candidates come back with names, the last
-   four digits of the phone on file, and the clinic. **No date of birth is
-   ever returned.** More than five matches answers an empty list with
-   `truncated: true`: ask for another identifier and look up again. The
-   assistant must not speak a name or digits to the caller until verify has
-   succeeded.
-2. `POST /patients/{patientId}/verify` with the date of birth and the phone.
-   Success returns `verificationToken` and `expiresAt` (fifteen minutes).
-   Send the token in `X-Patient-Verification` on every patient-specific
-   operation. Failure is `403 verification_failed` whichever factor was
-   wrong; five failures lock the patient for thirty minutes
-   (`429 verification_locked`, `Retry-After`).
+1. `POST /patients/lookup` finds the caller's record. **Two request shapes
+   are valid, and nothing else:**
+
+   | shape | fields | notes |
+   | --- | --- | --- |
+   | A | `patientId` only | for a record you already hold; no other field may be present |
+   | B | `dateOfBirth` **required**, plus `phone` and/or `lastName` (at least one) | `firstName` is optional and allowed only together with `lastName`, to narrow it |
+
+   So `dateOfBirth` + `phone`, `dateOfBirth` + `lastName`, `dateOfBirth` +
+   `lastName` + `firstName`, and all of them together are accepted;
+   `dateOfBirth` alone, `phone` alone, `lastName` alone, and
+   `dateOfBirth` + `firstName` are refused with `400 invalid_input` naming
+   the missing field. The date of birth is required because lookup never
+   returns it: it is a verification factor, and a caller who cannot state
+   it must not be able to fish for it. Names match exactly,
+   case-insensitively; the phone is compared as ten digits, punctuation and
+   a leading 1 stripped.
+
+   Up to five candidates come back with names, the last four digits of the
+   phone on file, and the clinic. **No date of birth is ever returned.**
+   More than five matches answers an empty list with `truncated: true`:
+   ask for another identifier and look up again. The assistant must not
+   speak a name or digits to the caller until verify has succeeded.
+2. `POST /patients/{patientId}/verify` with the date of birth and the phone,
+   **both required**. Success returns `verificationToken` and `expiresAt`
+   (fifteen minutes). Send the token in `X-Patient-Verification` on every
+   patient-specific operation. Failure is `403 verification_failed`
+   whichever factor was wrong; five failures lock the patient for thirty
+   minutes (`429 verification_locked`, `Retry-After`).
 
 `GET /queue/count` answers how many patients are waiting per clinic. It is
 exact once the front desk records arrivals on the queue screen; until that
