@@ -87,7 +87,7 @@ function AddendumThread({
     <ol className="ml-1 flex flex-col gap-3 border-l-2 border-primary/30 pl-4" aria-label="Addenda">
       {addenda.map((addendum, index) => (
         <li key={`${addendum.signedAt}:${index}`} className="flex flex-col gap-1.5">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
             <span className="font-semibold text-foreground">{addendum.signedBy}</span>
             <span className="text-muted-foreground">{fmtDateTime(addendum.signedAt)}</span>
             {addendum.draft === true && (
@@ -96,7 +96,7 @@ function AddendumThread({
               </Badge>
             )}
           </div>
-          <p className="text-sm leading-relaxed text-pretty">{addendum.notes}</p>
+          <p className="text-base leading-relaxed text-pretty">{addendum.notes}</p>
           {addendum.draft === true && (
             <div>
               <Button variant="outline" size="sm" onClick={() => onSign(index)}>
@@ -198,7 +198,7 @@ export function VisitRecords({
           checked={providerView}
           onCheckedChange={(checked) => setProviderView(checked === true)}
         />
-        <Label htmlFor={providerViewId} className="text-sm font-normal text-muted-foreground">
+        <Label htmlFor={providerViewId} className="text-base font-normal text-muted-foreground">
           Provider view: clinical notes and refill requests only, in green
         </Label>
       </div>
@@ -208,7 +208,7 @@ export function VisitRecords({
     return (
       <div className="flex flex-col gap-4">
         {providerViewToggle}
-        <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+        <p className="px-2 py-6 text-center text-base text-muted-foreground">
           No {RECORD_KIND_LABEL[kind].toLowerCase()} on file.
         </p>
       </div>
@@ -226,7 +226,7 @@ export function VisitRecords({
               key={`${visit.id}:${addendum.signedAt}`}
               className="rounded-lg border border-foreground/15 bg-card shadow-sm"
             >
-              <header className="flex flex-wrap items-center justify-between gap-2 border-b border-foreground/10 bg-muted/50 px-4 py-2.5 text-sm">
+              <header className="flex flex-wrap items-center justify-between gap-2 border-b border-foreground/10 bg-muted/50 px-4 py-2.5 text-base">
                 <span className="font-semibold">Comment on the {fmtDateLong(visit.date)} visit</span>
                 <Badge variant="outline">{visit.type}</Badge>
               </header>
@@ -255,7 +255,7 @@ export function VisitRecords({
             )}
           >
             <header className="flex flex-wrap items-center justify-between gap-2 border-b border-foreground/10 bg-muted/50 px-4 py-2.5">
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-base">
                 <span className="font-semibold">On: {fmtDateLong(v.date)}</span>
                 <span className="text-foreground/80">{v.provider}</span>
                 {v.bloodPressure && (
@@ -307,14 +307,14 @@ export function VisitRecords({
                     {v.meds.map((m, i) => (
                       <span
                         key={i}
-                        className="rounded border border-foreground/15 bg-muted px-2 py-0.5 text-xs font-medium"
+                        className="rounded border border-foreground/15 bg-muted px-2 py-0.5 text-sm font-medium"
                       >
                         {m.name} {m.dosage}
                       </span>
                     ))}
                   </div>
                   {visitBmi !== null && (
-                    <dl className="flex items-baseline gap-3 text-xs">
+                    <dl className="flex items-baseline gap-3 text-sm">
                       <div className="flex items-baseline gap-1">
                         <dt className="text-muted-foreground">Weight</dt>
                         <dd className="font-semibold tabular-nums">{v.weight} lbs</dd>
@@ -328,10 +328,10 @@ export function VisitRecords({
                 </div>
               )}
 
-              <p className="text-sm leading-relaxed text-pretty">{v.notes}</p>
+              <p className="text-base leading-relaxed text-pretty">{v.notes}</p>
 
               {v.tracking && (
-                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   <TruckIcon className="size-3.5" />
                   Tracking: <span className="font-mono">{v.tracking}</span>
                 </p>
@@ -381,7 +381,7 @@ export function VisitRecords({
 
               {/* The signature, on its own line beneath the note, where the
                   legacy chart's Sign panel showed it. */}
-              <div className="flex flex-col gap-0.5 text-sm">
+              <div className="flex flex-col gap-0.5 text-base">
                 {isSigned && signedByName ? (
                   <p>
                     Signed by: <span className="font-medium">{signedByName}</span>
@@ -406,12 +406,12 @@ export function VisitRecords({
               <Separator />
 
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs text-muted-foreground">
+                <span className="text-sm text-muted-foreground">
                   Opened on {v.openedAt ? fmtDateTime(v.openedAt) : fmtDateLong(v.date)}
                 </span>
                 <div className="flex flex-wrap items-center gap-2">
                   {v.photo && (
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1 text-sm text-muted-foreground">
                       <CameraIcon className="size-3.5" />
                       Photo on file
                     </span>

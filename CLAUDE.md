@@ -211,11 +211,15 @@ export, visit photos, delete visit, and a New visit consultation form in
 the legacy form's four sections, Visit info and Prescription for the
 clinical surface, Billing and Admin for the clerical one;
 docs/provider-record-migrations.md lists what it needs from the schema);
-reworked again per the Sep 14 review: one box across the top split in
-half, patient information left and medical history right with Conditions
-and Drug allergies lines above the free text, medication and the weight
-chart staying in the fixed right column; the chart's axis on both sides
-with light horizontal gridlines and a value on each bar; on each clinical
+reworked again per the Sep 14 review (re-read with the user on Sep 28):
+the patient information card stays at the top of the fixed right column
+but is split in half, patient information left and medical history right
+with Conditions and Drug allergies lines above the free text, medication
+and the weight chart beneath it; the chart's axis on both sides with
+light horizontal gridlines, a value on each bar, and a trend line over
+the bars joining one visit's weight to the next; the record view's text
+one step larger than the rest of the app (notes 16px, metadata 14px) for
+the clinic's 1080p screens; on each clinical
 note its visit's weight and BMI beside the medication, a full-width
 "Signed by" line beneath the note as the legacy Sign panel had it, addenda
 as a thread, Save and Save and sign as two buttons on the consultation form

@@ -178,14 +178,6 @@ export function PatientDetail({
         proportional rather than a fixed side width so the chart grows with
         the screen instead of the text.
       */}
-      <PatientSummary
-        patient={patient}
-        age={age}
-        currentWeight={clinical ? currentWeight : null}
-        currentBmi={clinical ? currentBmi : null}
-        showHistory={clinical}
-      />
-
       <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="flex min-w-0 flex-col gap-6">
           {composing && (
@@ -217,7 +209,7 @@ export function PatientDetail({
                   <Card>
                     <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
                       <FileTextIcon className="size-6 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">No visit records on file.</p>
+                      <p className="text-base text-muted-foreground">No visit records on file.</p>
                     </CardContent>
                   </Card>
                 ) : (
@@ -262,6 +254,20 @@ export function PatientDetail({
         </div>
 
         <aside className="flex flex-col gap-4 xl:sticky xl:top-20 xl:self-start">
+          {/* The Sep 14 review, re-read on Sep 28: the patient information
+              card stays where the Sep 7 layout put it, at the top of the
+              fixed right column, and is split in half so the width is used:
+              patient information left, medical history right, with its
+              Conditions and Drug allergies lines above the free text.
+              Medication and the chart follow beneath it as before. */}
+          <PatientSummary
+            patient={patient}
+            age={age}
+            currentWeight={clinical ? currentWeight : null}
+            currentBmi={clinical ? currentBmi : null}
+            showHistory={clinical}
+          />
+
           {clinical && (
             <Card>
               <CardHeader>
@@ -270,7 +276,7 @@ export function PatientDetail({
                   Medication
                 </CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-col gap-2 text-sm">
+              <CardContent className="flex flex-col gap-2 text-base">
                 {currentMeds.length === 0 ? (
                   <p className="text-muted-foreground">No current medication.</p>
                 ) : (
@@ -282,7 +288,7 @@ export function PatientDetail({
                   ))
                 )}
                 {latest && (
-                  <p className="text-xs text-muted-foreground">As of the {fmtDateLong(latest.date)} visit.</p>
+                  <p className="text-sm text-muted-foreground">As of the {fmtDateLong(latest.date)} visit.</p>
                 )}
               </CardContent>
             </Card>
@@ -295,7 +301,7 @@ export function PatientDetail({
               </CardHeader>
               <CardContent>
                 {visits.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No visits to chart.</p>
+                  <p className="text-base text-muted-foreground">No visits to chart.</p>
                 ) : (
                   <WeightChart
                     className="h-[220px] w-full 3xl:h-[280px]"
@@ -328,7 +334,7 @@ export function PatientDetail({
                         <div className="flex aspect-[3/4] items-center justify-center rounded-md border border-dashed border-border bg-muted/40">
                           <CameraIcon className="size-5 text-muted-foreground" />
                         </div>
-                        <figcaption className="text-center text-xs text-muted-foreground">{fmtDateLong(v.date)}</figcaption>
+                        <figcaption className="text-center text-sm text-muted-foreground">{fmtDateLong(v.date)}</figcaption>
                       </figure>
                     ))}
                 </div>
@@ -349,7 +355,7 @@ export function PatientDetail({
       </div>
 
       {!clinical && !clerical && (
-        <p className="mt-6 text-sm text-muted-foreground">
+        <p className="mt-6 text-base text-muted-foreground">
           The {ROLE_LABEL[role]} view has no content on this screen.
         </p>
       )}
@@ -374,7 +380,7 @@ function AtHomeCard({ patient }: { patient: Patient }) {
           At-Home program
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3 text-sm">
+      <CardContent className="flex flex-col gap-3 text-base">
         {patient.program === undefined && (
           <p className="flex items-center gap-2 text-warning-foreground">
             <CircleAlertIcon className="size-4" />
@@ -382,7 +388,7 @@ function AtHomeCard({ patient }: { patient: Patient }) {
           </p>
         )}
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="tracking-number" className="text-sm font-medium">
+          <label htmlFor="tracking-number" className="text-base font-medium">
             Welcome package tracking number
           </label>
           <Input
@@ -394,7 +400,7 @@ function AtHomeCard({ patient }: { patient: Patient }) {
           />
         </div>
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-muted-foreground">
+          <span className="text-sm text-muted-foreground">
             {sent ? "Package sent, patient texted." : "Not sent yet."}
           </span>
           <Button
@@ -436,14 +442,14 @@ function PatientSummary({
   showHistory: boolean
 }) {
   return (
-    <Card className="mt-6">
-      <CardContent className={cn("grid gap-6 pt-6", showHistory && "md:grid-cols-2")}>
+    <Card>
+      <CardContent className={cn("grid gap-6 pt-6", showHistory && "sm:grid-cols-2")}>
         <section className="flex flex-col gap-3">
           <h2 className="flex items-center gap-2 text-base font-semibold">
             <StethoscopeIcon className="size-4 text-primary" />
             Patient information
           </h2>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-base">
             <Term>Gender</Term>
             <Detail>{patient.gender}</Detail>
             <Term>Age</Term>
@@ -470,12 +476,12 @@ function PatientSummary({
         </section>
 
         {showHistory && (
-          <section className="flex flex-col gap-3 md:border-l md:border-border md:pl-6">
+          <section className="flex flex-col gap-3 sm:border-l sm:border-border sm:pl-6">
             <h2 className="flex items-center gap-2 text-base font-semibold">
               <HeartPulseIcon className="size-4 text-primary" />
               Medical history
             </h2>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-base">
               <Term>Conditions</Term>
               <Detail>{patient.conditions.length === 0 ? "None on file" : patient.conditions.join(", ")}</Detail>
               <Term>Drug allergies</Term>
@@ -522,7 +528,7 @@ function MedicalHistoryNotes({ initial }: { initial: string }) {
         rows={3}
         aria-label="Medical history notes"
         placeholder="Prior treatments, anything the next provider should read first."
-        className="text-sm leading-relaxed"
+        className="text-base leading-relaxed"
       />
       <div className="flex justify-end">
         <Button
