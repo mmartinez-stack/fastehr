@@ -365,7 +365,10 @@ export function PatientIntakeForm({
             {label}
             {options.required === true ? <RequiredMark /> : null}
           </FieldLabel>
+          {/* `items` lets the closed select show the chosen item's label
+              rather than its value: "California", not "CA". */}
           <Select
+            items={items}
             value={field.state.value}
             onValueChange={(value) => field.handleChange(typeof value === "string" ? value : "")}
           >
@@ -394,12 +397,19 @@ export function PatientIntakeForm({
    * reveals a text box beneath it. The contract's error for the line lands
    * on the select and is shown under whichever control is last.
    */
+  const frequencyItems = [
+    ...MEDICATION_FREQUENCIES.map((value) => ({ value, label: copy.options.frequency[value] })),
+    { value: OTHER_FREQUENCY, label: copy.options.otherFrequency },
+  ]
   const frequencyField = (index: number) => (
     <form.Field name={`medications[${index}].frequency` as "firstName"}>
       {(field) => (
         <Field data-invalid={!field.state.meta.isValid}>
           <FieldLabel htmlFor={field.name}>{copy.labels.frequency}</FieldLabel>
+          {/* The stored value is the English text; the closed select shows
+              the label in the person's language through `items`. */}
           <Select
+            items={frequencyItems}
             value={field.state.value}
             onValueChange={(value) => field.handleChange(typeof value === "string" ? value : "")}
           >
@@ -407,12 +417,11 @@ export function PatientIntakeForm({
               <SelectValue placeholder={copy.options.select} />
             </SelectTrigger>
             <SelectContent>
-              {MEDICATION_FREQUENCIES.map((value) => (
-                <SelectItem key={value} value={value}>
-                  {copy.options.frequency[value]}
+              {frequencyItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
                 </SelectItem>
               ))}
-              <SelectItem value={OTHER_FREQUENCY}>{copy.options.otherFrequency}</SelectItem>
             </SelectContent>
           </Select>
           {field.state.value === OTHER_FREQUENCY ? (
@@ -616,7 +625,7 @@ export function PatientIntakeForm({
             birthdate read as unrelated questions). The legend carries the
             asterisk; the two controls are labelled by their unit. */}
         <FieldSet className="gap-2">
-          <FieldLegend variant="label" className="mb-0">
+          <FieldLegend variant="label" className="mb-0.5">
             {copy.labels.height}
             <RequiredMark />
           </FieldLegend>

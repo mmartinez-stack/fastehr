@@ -26,7 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { useSurfaces } from "@/components/role-provider"
+import { useRole, useSurfaces } from "@/components/role-provider"
 import { LanguageTag, PatientStatusBadge } from "@/components/status-badges"
 import { WaiversColumn } from "@/features/consents/waivers-column"
 import { formatHeight } from "@/features/patients/height"
@@ -87,7 +87,10 @@ export function PatientDetail({
   waivers: PendingWaiver[]
 }) {
   const { role, clinical, clerical } = useSurfaces()
-  const currentUser = "Mauricio Martinez"
+  // The signer is the session, never the previewed role: an admin previewing
+  // the provider view still signs as themselves.
+  const { sessionName } = useRole()
+  const currentUser = sessionName ?? "Staff"
 
   // A visit opened on this screen (the consultation form) joins the records
   // at once, newest first; mockup state, gone on reload.

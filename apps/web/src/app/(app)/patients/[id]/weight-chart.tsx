@@ -178,9 +178,13 @@ export function WeightChart({
           domain={["dataMin - 10", "dataMax + 5"]}
           fontSize={11}
         />
+        {/* No series is bound to this axis (the bars use the left one), so
+            it takes its domain from the data key directly; without it the
+            axis has no domain and Recharts draws no ticks. */}
         <YAxis
           yAxisId="right"
           orientation="right"
+          dataKey="weight"
           tickLine={false}
           axisLine={false}
           width={34}

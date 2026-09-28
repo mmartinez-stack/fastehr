@@ -34,6 +34,12 @@ export interface Actor {
    * false.
    */
   mustChangePassword?: boolean
+  /**
+   * The account's display name, for screens that show whose name a
+   * signature will carry ("Save and sign as …"). Presentation only: the
+   * server signs with the actor's id. Optional so fixtures stay terse.
+   */
+  name?: string
 }
 
 export interface Context {

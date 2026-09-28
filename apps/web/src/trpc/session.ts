@@ -18,6 +18,8 @@ import { actorFromHeaders } from '@/server'
 export interface SessionIdentity {
   /** The account's one role — what decides which sections and menus render. */
   role: StaffRole
+  /** The account's display name, shown where a signature is about to be made. */
+  name: string | null
 }
 
 /**
@@ -34,5 +36,5 @@ export async function sessionIdentity(): Promise<SessionIdentity | null> {
   const role = staffRoleSchema.safeParse(actor.roles[0])
   if (!role.success) return null
 
-  return { role: role.data }
+  return { role: role.data, name: actor.name ?? null }
 }

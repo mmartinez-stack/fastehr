@@ -26,7 +26,7 @@ export default async function AppLayout({
   const locations = identity === null ? [] : await api.location.list()
 
   return (
-    <RoleProvider sessionRole={identity?.role ?? null}>
+    <RoleProvider sessionRole={identity?.role ?? null} sessionName={identity?.name ?? null}>
       <LocationProvider locations={locations}>
         <div className="flex min-h-screen flex-col bg-background">
           <TopNav />
