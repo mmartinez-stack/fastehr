@@ -28,6 +28,8 @@ interface RoleContextValue {
   role: StaffRole
   /** The session's own role; `null` only for an anonymous render. */
   sessionRole: StaffRole | null
+  /** The signed-in person's display name, for "Sign as …" labels; `null` when anonymous. */
+  sessionName: string | null
   /** Every role the switcher offers — the full vocabulary. */
   roles: readonly StaffRole[]
   /** Whether this session may preview other roles' views. */
@@ -39,10 +41,13 @@ const RoleContext = React.createContext<RoleContextValue | null>(null)
 
 export function RoleProvider({
   sessionRole,
+  sessionName = null,
   children,
 }: {
   /** The session's role from the server; `null` only for an anonymous render. */
   sessionRole: StaffRole | null
+  /** The session's display name from the server; a preview never changes it. */
+  sessionName?: string | null
   children: React.ReactNode
 }) {
   // Anonymous renders (the login redirect is already in flight) get the
@@ -55,6 +60,7 @@ export function RoleProvider({
     () => ({
       role: canSwitch ? preview : actual,
       sessionRole,
+      sessionName,
       // The switcher previews people's views; an integration principal (ADR 36) has none.
       roles: HUMAN_STAFF_ROLES,
       canSwitch,
@@ -62,7 +68,7 @@ export function RoleProvider({
         if (canSwitch) setPreview(next)
       },
     }),
-    [actual, canSwitch, preview, sessionRole],
+    [actual, canSwitch, preview, sessionName, sessionRole],
   )
 
   return <RoleContext.Provider value={value}>{children}</RoleContext.Provider>

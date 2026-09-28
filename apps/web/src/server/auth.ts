@@ -256,5 +256,6 @@ export async function actorFromHeaders(headers: Headers): Promise<Actor | null> 
     // Every clinic, for every role: a location is a filter (ADR 32).
     locations: LOCATION_SLUGS,
     mustChangePassword: user.mustChangePassword === true,
+    ...(typeof user.name === 'string' && user.name !== '' ? { name: user.name } : {}),
   }
 }
