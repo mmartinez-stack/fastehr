@@ -1,6 +1,6 @@
 # ADR 29 — Self-service intake: a single-use token bound to a request, not a patient
 
-**Status:** accepted, amended 2026-09-13  
+**Status:** accepted, amended 2026-09-13, 2026-09-14, 2026-09-27  
 **Applies to:** `packages/contracts/src/intake.ts` · `packages/contracts/src/intake-consent.ts` · `packages/db/src/repositories/intake.ts` · `apps/web/src/server/routers/intake.ts` · `apps/web/src/server/sms.ts` · `apps/web/src/app/intake/[token]`
 
 The Aug 31 sync (DIA-72) kept the legacy intake model — the front desk texts a
@@ -93,6 +93,20 @@ from code).
   form (a `custom` issue on `conditions.N.details`) and optional on the
   staff form, where the clinician's note holds the detail. Conditions not on
   the list go into the medical history text under "Other conditions".
+- **Amended 2026-09-27: how often is a pick-list with "Other".** The Sep
+  14 notes disagreed (a dropdown with set options, or free text for now);
+  the Sep 27 decision is both. `MEDICATION_FREQUENCIES` in contracts lists
+  six options (once, twice, three times daily, every other day, weekly, as
+  needed) and both forms offer them plus "Other", which reveals a text box.
+  The stored field stays free text: an option is stored as its own English
+  text, an "Other" answer as typed, and a form reading a value off the list
+  shows it under "Other". The intake shows the options in the person's
+  language and stores the English text, which is what the clinic reads.
+- **Amended 2026-09-27: height is one question.** Two fields labelled
+  "Height (feet)" and "Height (inches)" beside the birthdate read as
+  unrelated questions. The intake now asks "How tall are you?" once, with
+  the feet and inches controls side by side beneath it, labelled by unit,
+  and an example ("5 ft 4 in"). The staff form is unchanged.
 - **The link is handed back when it could not be sent.** `send` answers
   `{ request, link }`, and `link` is non-null only when the transport
   *logged* the message rather than delivered it (the console transport, in

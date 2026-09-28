@@ -1,5 +1,6 @@
 import type {
   IntakeContactTime,
+  MedicationFrequency,
   PatientCondition,
   PatientGender,
   PatientLanguage,
@@ -62,6 +63,9 @@ export interface IntakeCopy {
     office: string
     officeHint: string
     referralSource: string
+    /** The one question above the two height controls. */
+    height: string
+    /** The unit labels on the two controls beneath it. */
     heightFeet: string
     heightInches: string
     heightHint: string
@@ -74,6 +78,8 @@ export interface IntakeCopy {
     medication: string
     dose: string
     frequency: string
+    /** The text box "Other" reveals. */
+    frequencyOther: string
     addMedication: string
     removeMedication: string
     pcpName: string
@@ -87,6 +93,8 @@ export interface IntakeCopy {
   options: {
     gender: Record<PatientGender, string>
     contactTime: Record<IntakeContactTime, string>
+    frequency: Record<MedicationFrequency, string>
+    otherFrequency: string
     yes: string
     no: string
     select: string
@@ -142,9 +150,10 @@ export const INTAKE_COPY: Readonly<Record<PatientLanguage, IntakeCopy>> = {
       office: "Office you will visit",
       officeHint: "Your form goes to this office.",
       referralSource: "How did you hear about us?",
-      heightFeet: "Height (feet)",
-      heightInches: "Height (inches)",
-      heightHint: "0 to 11.",
+      height: "How tall are you?",
+      heightFeet: "Feet",
+      heightInches: "Inches",
+      heightHint: "For example, 5 ft 4 in.",
       conditionsIntro: "Do you have, or have you had, any of the following?",
       onset: "Since when?",
       details: "Tell us about it",
@@ -154,6 +163,7 @@ export const INTAKE_COPY: Readonly<Record<PatientLanguage, IntakeCopy>> = {
       medication: "Medication",
       dose: "Dose",
       frequency: "How often",
+      frequencyOther: "Tell us how often",
       addMedication: "Add a medication",
       removeMedication: "Remove medication",
       pcpName: "Your primary care doctor",
@@ -167,6 +177,15 @@ export const INTAKE_COPY: Readonly<Record<PatientLanguage, IntakeCopy>> = {
     options: {
       gender: { male: "Male", female: "Female" },
       contactTime: { morning: "Morning", afternoon: "Afternoon", evening: "Evening" },
+      frequency: {
+        "Once daily": "Once a day",
+        "Twice daily": "Twice a day",
+        "Three times daily": "Three times a day",
+        "Every other day": "Every other day",
+        Weekly: "Once a week",
+        "As needed": "As needed",
+      },
+      otherFrequency: "Other",
       yes: "Yes",
       no: "No",
       select: "Select…",
@@ -271,9 +290,10 @@ export const INTAKE_COPY: Readonly<Record<PatientLanguage, IntakeCopy>> = {
       office: "Oficina que visitará",
       officeHint: "Su formulario se envía a esta oficina.",
       referralSource: "¿Cómo se enteró de nosotros?",
-      heightFeet: "Estatura (pies)",
-      heightInches: "Estatura (pulgadas)",
-      heightHint: "De 0 a 11.",
+      height: "¿Cuánto mide?",
+      heightFeet: "Pies",
+      heightInches: "Pulgadas",
+      heightHint: "Por ejemplo, 5 pies 4 pulgadas.",
       conditionsIntro: "¿Tiene o ha tenido alguna de las siguientes condiciones?",
       onset: "¿Desde cuándo?",
       details: "Cuéntenos al respecto",
@@ -283,6 +303,7 @@ export const INTAKE_COPY: Readonly<Record<PatientLanguage, IntakeCopy>> = {
       medication: "Medicamento",
       dose: "Dosis",
       frequency: "Con qué frecuencia",
+      frequencyOther: "Díganos con qué frecuencia",
       addMedication: "Agregar un medicamento",
       removeMedication: "Quitar medicamento",
       pcpName: "Su médico de cabecera",
@@ -296,6 +317,15 @@ export const INTAKE_COPY: Readonly<Record<PatientLanguage, IntakeCopy>> = {
     options: {
       gender: { male: "Masculino", female: "Femenino" },
       contactTime: { morning: "Mañana", afternoon: "Tarde", evening: "Noche" },
+      frequency: {
+        "Once daily": "Una vez al día",
+        "Twice daily": "Dos veces al día",
+        "Three times daily": "Tres veces al día",
+        "Every other day": "Cada dos días",
+        Weekly: "Una vez a la semana",
+        "As needed": "Cuando sea necesario",
+      },
+      otherFrequency: "Otra",
       yes: "Sí",
       no: "No",
       select: "Seleccione…",

@@ -8,6 +8,7 @@ import {
   INTAKE_CONSENT_TEXT,
   INTAKE_CONSENT_VERSION,
   INTAKE_CONTACT_TIMES,
+  MEDICATION_FREQUENCIES,
   PATIENT_CONDITIONS,
   PATIENT_GENDERS,
   PATIENT_REFERRAL_SOURCES,
@@ -35,8 +36,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field"
 import { RequiredMark } from "@/components/required-mark"
+import {
+  composeFrequency,
+  OTHER_FREQUENCY,
+  type FrequencyFields,
+} from "@/features/patients/medication-frequency.ts"
 import { US_STATES } from "@/features/patients/us-states.ts"
 import { validationFrom, type FormErrors } from "@/lib/form-errors"
 import { trpc } from "@/trpc/client"
@@ -59,10 +73,10 @@ import { INTAKE_COPY } from "./intake-copy.ts"
  * language the page is in. The page scrolls to the first field that failed.
  */
 
-interface MedicationRowValues {
+/** One medication line; the frequency as its two controls (`medication-frequency.ts`). */
+interface MedicationRowValues extends FrequencyFields {
   name: string
   dose: string
-  frequency: string
 }
 
 interface ConditionRowValues {
@@ -103,7 +117,7 @@ export interface PatientIntakeValues {
   consentSignature: string
 }
 
-const EMPTY_MEDICATION: MedicationRowValues = { name: "", dose: "", frequency: "" }
+const EMPTY_MEDICATION: MedicationRowValues = { name: "", dose: "", frequency: "", frequencyOther: "" }
 
 export function emptyIntakeValues(firstName: string, lastName: string): PatientIntakeValues {
   return {
@@ -153,6 +167,7 @@ function toSubmitInput(value: PatientIntakeValues, token: string, language: Pati
   return {
     ...rest,
     dateOfBirth: isoDateFromTyped(value.dateOfBirth),
+    medications: value.medications.map((row) => ({ name: row.name, dose: row.dose, frequency: composeFrequency(row) })),
     token,
     language,
     referredByPatientId: "",
@@ -374,6 +389,55 @@ export function PatientIntakeForm({
     </form.Field>
   )
 
+  /**
+   * How often: the pick-list in the person's language plus "Other", which
+   * reveals a text box beneath it. The contract's error for the line lands
+   * on the select and is shown under whichever control is last.
+   */
+  const frequencyField = (index: number) => (
+    <form.Field name={`medications[${index}].frequency` as "firstName"}>
+      {(field) => (
+        <Field data-invalid={!field.state.meta.isValid}>
+          <FieldLabel htmlFor={field.name}>{copy.labels.frequency}</FieldLabel>
+          <Select
+            value={field.state.value}
+            onValueChange={(value) => field.handleChange(typeof value === "string" ? value : "")}
+          >
+            <SelectTrigger id={field.name} className="h-10 w-full" aria-invalid={!field.state.meta.isValid}>
+              <SelectValue placeholder={copy.options.select} />
+            </SelectTrigger>
+            <SelectContent>
+              {MEDICATION_FREQUENCIES.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {copy.options.frequency[value]}
+                </SelectItem>
+              ))}
+              <SelectItem value={OTHER_FREQUENCY}>{copy.options.otherFrequency}</SelectItem>
+            </SelectContent>
+          </Select>
+          {field.state.value === OTHER_FREQUENCY ? (
+            <form.Field name={`medications[${index}].frequencyOther` as "firstName"}>
+              {(other) => (
+                <Input
+                  id={other.name}
+                  name={other.name}
+                  value={other.state.value}
+                  onChange={(event) => other.handleChange(event.target.value)}
+                  onBlur={other.handleBlur}
+                  aria-label={copy.labels.frequencyOther}
+                  aria-invalid={!field.state.meta.isValid}
+                  placeholder={copy.labels.frequencyOther}
+                  className="h-10"
+                />
+              )}
+            </form.Field>
+          ) : null}
+          <FieldError errors={field.state.meta.errors} />
+        </Field>
+      )}
+    </form.Field>
+  )
+
   /** A row of large touch targets: one radio per option, label included in the target. */
   const radioField = (
     name: string,
@@ -547,20 +611,24 @@ export function PatientIntakeForm({
       </Section>
 
       <Section title={copy.sections.health} step={5}>
-        <div className="grid grid-cols-2 gap-4">
-          {selectField(
-            "heightFeet",
-            copy.labels.heightFeet,
-            FEET.map((value) => ({ value, label: value })),
-            { required: true },
-          )}
-          {textField("heightInchesPart", copy.labels.heightInches, {
-            inputMode: "decimal",
-            placeholder: "4",
-            description: copy.labels.heightHint,
-            required: true,
-          })}
-        </div>
+        {/* One question, two answers side by side (the Sep 27 decision on
+            DIA-84: two separately labelled height fields next to the
+            birthdate read as unrelated questions). The legend carries the
+            asterisk; the two controls are labelled by their unit. */}
+        <FieldSet className="gap-2">
+          <FieldLegend variant="label" className="mb-0">
+            {copy.labels.height}
+            <RequiredMark />
+          </FieldLegend>
+          <div className="grid grid-cols-2 gap-4">
+            {selectField("heightFeet", copy.labels.heightFeet, FEET.map((value) => ({ value, label: value })))}
+            {textField("heightInchesPart", copy.labels.heightInches, {
+              inputMode: "decimal",
+              placeholder: "4",
+            })}
+          </div>
+          <FieldDescription>{copy.labels.heightHint}</FieldDescription>
+        </FieldSet>
 
         <div className="flex flex-col">
           <p className="text-sm font-medium">{copy.labels.conditionsIntro}</p>
@@ -582,7 +650,7 @@ export function PatientIntakeForm({
                   {textField(`medications[${index}].name`, copy.labels.medication, { required: true })}
                   <div className="grid grid-cols-2 gap-3">
                     {textField(`medications[${index}].dose`, copy.labels.dose, { placeholder: "10 mg" })}
-                    {textField(`medications[${index}].frequency`, copy.labels.frequency)}
+                    {frequencyField(index)}
                   </div>
                   <Button
                     type="button"

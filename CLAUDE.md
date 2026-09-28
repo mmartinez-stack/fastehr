@@ -230,7 +230,10 @@ history checklist defaults to No, the history text box beneath it is
 writable (the legacy text migrated into it), and allergies are out of scope). The self-service intake is wired end to end (ADR 29 as amended): a texted
 single-use link that lives one hour (48 hours before the Sep 14 review,
 which also made the names optional when sending, the birthdate a typed
-field, and a description required for every condition marked yes), a
+field, and a description required for every condition marked yes; the Sep
+27 decisions made medication frequency a pick-list plus Other on both
+forms, `MEDICATION_FREQUENCIES` in contracts, and the intake's height one
+question with feet and inches beneath it), a
 phone-first bilingual form at
 `/intake/[token]` that ends with a signed treatment consent (recorded on the
 request until DIA-56), and a per-office Pending tab on the roster; until

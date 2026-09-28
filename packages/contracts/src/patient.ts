@@ -373,9 +373,29 @@ const droppingBlankRows = <Row extends z.ZodType>(row: Row, max: number) =>
     z.array(row).max(max),
   )
 
+/**
+ * How often a medication is taken: the pick-list both forms offer (the Sep
+ * 14 review asked for a dropdown; the Sep 27 decision added an "Other"
+ * choice that reveals a text box). The stored value is the option's text
+ * itself, not a key: the column is free text, an "Other" answer is stored
+ * as typed, and a reader needs no table to understand a row. A form that
+ * loads a value on this list selects it; anything else selects "Other" with
+ * the text shown. Labels in the person's language live with the intake copy.
+ */
+export const MEDICATION_FREQUENCIES = [
+  'Once daily',
+  'Twice daily',
+  'Three times daily',
+  'Every other day',
+  'Weekly',
+  'As needed',
+] as const
+export type MedicationFrequency = (typeof MEDICATION_FREQUENCIES)[number]
+
 const medicationRow = z.object({
   name: z.string().trim().min(1).max(100),
   dose: optionalText(50),
+  /** Free text on the wire: one of `MEDICATION_FREQUENCIES` or an "Other" answer as typed. */
   frequency: optionalText(50),
 })
 

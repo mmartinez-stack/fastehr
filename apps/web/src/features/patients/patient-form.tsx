@@ -9,6 +9,7 @@ import {
   patientClinicalInput,
   patientDemographicsInput,
   formatCardExpiry,
+  MEDICATION_FREQUENCIES,
   PATIENT_CONDITIONS,
   PATIENT_GENDERS,
   PATIENT_LANGUAGES,
@@ -57,6 +58,7 @@ import {
 } from "@/lib/form-errors"
 import { trpc } from "@/trpc/client"
 import { splitHeight } from "./height.ts"
+import { composeFrequency, OTHER_FREQUENCY, toFrequencyFields, type FrequencyFields } from "./medication-frequency.ts"
 import { PATIENT_TAB_LABEL, PATIENT_TABS, type PatientTab } from "./patient-tabs.ts"
 import { US_STATES } from "./us-states.ts"
 
@@ -88,9 +90,22 @@ import { US_STATES } from "./us-states.ts"
  * vocabulary. The narrowing is safe where it happens — inside the submit
  * validator, after the section schemas have already accepted the value.
  */
-export type PatientFormSubmission = Omit<PatientFormValues, "gender"> & { gender: PatientGender }
+export type PatientFormSubmission = Omit<PatientFormValues, "gender" | "medications"> & {
+  gender: PatientGender
+  medications: MedicationRowSubmission[]
+}
 
-export interface MedicationRowValues {
+/**
+ * One medication line as the form holds it: the frequency as its two
+ * controls, a pick-list and the "Other" text (`medication-frequency.ts`).
+ */
+export interface MedicationRowValues extends FrequencyFields {
+  name: string
+  dose: string
+}
+
+/** The line as the contract takes it: the two frequency controls composed into one string. */
+export interface MedicationRowSubmission {
   name: string
   dose: string
   frequency: string
@@ -161,7 +176,7 @@ export interface PatientFormValues {
   creditCardZip: string
 }
 
-const EMPTY_MEDICATION: MedicationRowValues = { name: "", dose: "", frequency: "" }
+const EMPTY_MEDICATION: MedicationRowValues = { name: "", dose: "", frequency: "", frequencyOther: "" }
 
 /** Every checklist item, answered "No" — the form's starting point. */
 function emptyConditions(): ConditionRowValues[] {
@@ -271,7 +286,7 @@ export function toPatientFormValues(
     medications: chart.medications.map((row) => ({
       name: row.name,
       dose: row.dose ?? "",
-      frequency: row.frequency ?? "",
+      ...toFrequencyFields(row.frequency),
     })),
     conditions: toConditionRows(chart.conditions),
     historyOther: chart.historyOther ?? "",
@@ -316,7 +331,7 @@ export function toIntakeFormValues(submission: IntakeSubmission): PatientFormVal
     medications: submission.medications.map((row) => ({
       name: row.name,
       dose: row.dose ?? "",
-      frequency: row.frequency ?? "",
+      ...toFrequencyFields(row.frequency),
     })),
     conditions: toConditionRows(submission.conditions),
     historyOther: submission.historyOther ?? "",
@@ -425,14 +440,27 @@ function toTabbedErrors(
 }
 
 /**
+ * The form's values as the contract reads them: every medication line's two
+ * frequency controls composed into the one field. Both parses (the client's
+ * and the mutation's) see the same shape.
+ */
+function composeSubmission(value: PatientFormValues): Omit<PatientFormSubmission, "gender"> & { gender: string } {
+  return {
+    ...value,
+    medications: value.medications.map((row) => ({ name: row.name, dose: row.dose, frequency: composeFrequency(row) })),
+  }
+}
+
+/**
  * The client-side parse: each rendered section's schema against the whole
  * value (a Zod object ignores the keys it does not declare), failures merged.
  * Runs before the network, so a submit with an error never leaves the page.
  */
 function clientFailure(
-  value: PatientFormValues,
+  values: PatientFormValues,
   sections: readonly PatientTab[],
 ): ValidationFailure | null {
+  const value = composeSubmission(values)
   const schemas = [
     ...(sections.includes("patientInfo") ? [patientDemographicsInput] : []),
     ...(sections.includes("medical") ? [patientClinicalInput] : []),
@@ -621,7 +649,7 @@ export function PatientForm({
       // errors; returning them (rather than resolving) keeps the submit failed.
       onSubmitAsync: async ({ value }) => {
         try {
-          await submit({ ...value, gender: value.gender as PatientGender })
+          await submit({ ...composeSubmission(value), gender: value.gender as PatientGender })
           return undefined
         } catch (error) {
           const failure = validationFrom(error)
@@ -724,6 +752,54 @@ export function PatientForm({
   )
 
   const asItems = (values: readonly string[]) => values.map((value) => ({ value, label: value }))
+
+  /**
+   * How often: the pick-list plus "Other", which reveals a text box beneath
+   * it. The contract's error for the line (`medications.N.frequency`) lands
+   * on the select and is shown under whichever control is last.
+   */
+  const frequencyField = (index: number) => (
+    <form.Field name={`medications[${index}].frequency` as "firstName"}>
+      {(field) => (
+        <Field data-invalid={!field.state.meta.isValid}>
+          <FieldLabel htmlFor={field.name}>Frequency</FieldLabel>
+          <Select
+            value={field.state.value}
+            onValueChange={(value) => field.handleChange(typeof value === "string" ? value : "")}
+          >
+            <SelectTrigger id={field.name} className="w-full" aria-invalid={!field.state.meta.isValid}>
+              <SelectValue placeholder="Select…" />
+            </SelectTrigger>
+            <SelectContent>
+              {MEDICATION_FREQUENCIES.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {value}
+                </SelectItem>
+              ))}
+              <SelectItem value={OTHER_FREQUENCY}>Other</SelectItem>
+            </SelectContent>
+          </Select>
+          {field.state.value === OTHER_FREQUENCY ? (
+            <form.Field name={`medications[${index}].frequencyOther` as "firstName"}>
+              {(other) => (
+                <Input
+                  id={other.name}
+                  name={other.name}
+                  value={other.state.value}
+                  onChange={(event) => other.handleChange(event.target.value)}
+                  onBlur={other.handleBlur}
+                  aria-label="How often, in your words"
+                  aria-invalid={!field.state.meta.isValid}
+                  placeholder="Every Tuesday"
+                />
+              )}
+            </form.Field>
+          ) : null}
+          <FieldError errors={field.state.meta.errors} />
+        </Field>
+      )}
+    </form.Field>
+  )
 
   const patientInfoTab = (
     <FieldGroup>
@@ -870,7 +946,7 @@ export function PatientForm({
                   required: true,
                 })}
                 {textField(`medications[${index}].dose`, "Dose", { placeholder: "10 mg" })}
-                {textField(`medications[${index}].frequency`, "Frequency", { placeholder: "Twice daily" })}
+                {frequencyField(index)}
               </div>
               <Button
                 type="button"
