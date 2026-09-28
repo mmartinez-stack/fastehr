@@ -469,3 +469,31 @@ describe('searchPatientsInput', () => {
     }
   })
 })
+
+describe('MEDICATION_FREQUENCIES', () => {
+  it('every option is a stored value the row accepts as typed, and "Other" text stays free', async () => {
+    const { MEDICATION_FREQUENCIES } = await import('./patient.ts')
+    for (const frequency of MEDICATION_FREQUENCIES) {
+      const parsed = patientClinicalInput.parse({
+        heightFeet: '5',
+        heightInchesPart: '4',
+        medications: [{ name: 'Metformin', dose: '', frequency }],
+        conditions: [],
+        pcpName: '',
+        pcpAddress: '',
+        pcpPhone: '',
+      })
+      expect(parsed.medications[0]?.frequency).toBe(frequency)
+    }
+    const other = patientClinicalInput.parse({
+      heightFeet: '5',
+      heightInchesPart: '4',
+      medications: [{ name: 'Metformin', dose: '', frequency: 'Every Tuesday' }],
+      conditions: [],
+      pcpName: '',
+      pcpAddress: '',
+      pcpPhone: '',
+    })
+    expect(other.medications[0]?.frequency).toBe('Every Tuesday')
+  })
+})
