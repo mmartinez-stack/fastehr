@@ -181,7 +181,11 @@ export function ConsultationForm({
       <CardContent className="flex flex-col gap-4">
         {clinical && (
           <Section icon={<ClipboardListIcon className="size-4 text-primary" />} title="Visit info">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {/* The note is the main thing (the Sep 28 review, as the legacy
+                visit panel had it): the details in a narrow column, the
+                consultation box taking the rest and the full height. */}
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+            <div className="grid content-start gap-4 sm:grid-cols-2">
               <Field>
                 <FieldLabel htmlFor="visit-date">Visit date</FieldLabel>
                 <Input id="visit-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -248,7 +252,7 @@ export function ConsultationForm({
                   />
                 </div>
               </Field>
-              <div className="flex flex-col justify-end gap-2 sm:col-span-2">
+              <div className="flex flex-col justify-end gap-2">
                 <Label className="flex items-center gap-2">
                   <Checkbox checked={phoneVisit} onCheckedChange={(checked) => setPhoneVisit(checked === true)} />
                   Phone visit
@@ -263,16 +267,18 @@ export function ConsultationForm({
                 </Label>
               </div>
             </div>
-            <Field>
+            <Field className="min-h-0">
               <FieldLabel htmlFor="visit-notes">Consultation</FieldLabel>
               <Textarea
                 id="visit-notes"
-                rows={8}
+                rows={12}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="The consultation note: findings, plan, and what was discussed with the patient."
+                className="min-h-[280px] flex-1 text-base leading-relaxed"
               />
             </Field>
+            </div>
           </Section>
         )}
 

@@ -2,7 +2,7 @@
 
 import { useRef } from "react"
 import { DownloadIcon } from "lucide-react"
-import { Bar, BarChart, CartesianGrid, LabelList, XAxis, YAxis } from "recharts"
+import { Bar, CartesianGrid, ComposedChart, LabelList, Line, XAxis, YAxis } from "recharts"
 import type { XAxisTickContentProps } from "recharts/types/util/types"
 import { toast } from "sonner"
 
@@ -128,7 +128,7 @@ export function WeightChart({
           y={0}
           dy={12}
           textAnchor="middle"
-          fontSize={11}
+          fontSize={12}
           fill="var(--muted-foreground)"
         >
           {label.day}
@@ -138,7 +138,7 @@ export function WeightChart({
             y={0}
             dy={26}
             textAnchor="middle"
-            fontSize={11}
+            fontSize={12}
             fontWeight={600}
             fill="var(--foreground)"
           >
@@ -152,7 +152,7 @@ export function WeightChart({
   return (
     <div ref={container} className="flex flex-col gap-2">
       <ChartContainer config={config} className={className ?? "h-[240px] w-full"}>
-        <BarChart
+        <ComposedChart
         accessibilityLayer
         data={data}
         margin={{ left: 4, right: 4, top: 18, bottom: 16 }}
@@ -176,7 +176,7 @@ export function WeightChart({
           axisLine={false}
           width={34}
           domain={["dataMin - 10", "dataMax + 5"]}
-          fontSize={11}
+          fontSize={12}
         />
         {/* No series is bound to this axis (the bars use the left one), so
             it takes its domain from the data key directly; without it the
@@ -189,7 +189,7 @@ export function WeightChart({
           axisLine={false}
           width={34}
           domain={["dataMin - 10", "dataMax + 5"]}
-          fontSize={11}
+          fontSize={12}
         />
         <ChartTooltip
           cursor={{ fill: "color-mix(in oklab, var(--foreground) 6%, transparent)" }}
@@ -198,9 +198,24 @@ export function WeightChart({
           }
         />
         <Bar yAxisId="left" dataKey="weight" fill="var(--color-weight)" radius={[4, 4, 0, 0]} maxBarSize={36}>
-          <LabelList dataKey="weight" position="top" fontSize={11} fill="var(--foreground)" />
+          <LabelList dataKey="weight" position="top" fontSize={12} fill="var(--foreground)" />
         </Bar>
-      </BarChart>
+        {/* The Sep 14 review, as Dr. Penn meant it (clarified Sep 28): a line
+            over the bars joining one visit's weight to the next, so the
+            descent reads as a trend and not only as a row of heights. */}
+        <Line
+          yAxisId="left"
+          type="monotone"
+          dataKey="weight"
+          stroke="var(--foreground)"
+          strokeWidth={2}
+          dot={{ r: 3, fill: "var(--foreground)", strokeWidth: 0 }}
+          activeDot={{ r: 5 }}
+          isAnimationActive={false}
+          legendType="none"
+          tooltipType="none"
+        />
+      </ComposedChart>
       </ChartContainer>
       {exportName !== undefined && (
         <div className="flex justify-end">

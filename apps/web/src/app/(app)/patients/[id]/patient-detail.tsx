@@ -31,7 +31,6 @@ import { LanguageTag, PatientStatusBadge } from "@/components/status-badges"
 import { WaiversColumn } from "@/features/consents/waivers-column"
 import { formatHeight } from "@/features/patients/height"
 import { ROLE_LABEL } from "@/lib/staff-role-label"
-import { cn } from "@/lib/utils"
 import {
   ageFromDob,
   bmi,
@@ -95,7 +94,13 @@ export function PatientDetail({
   // A visit opened on this screen (the consultation form) joins the records
   // at once, newest first; mockup state, gone on reload.
   const [opened, setOpened] = useState<Visit[]>([])
-  const [composing, setComposing] = useState(false)
+  // The consultation note is the provider's main surface (the Sep 28 review,
+  // as the legacy chart had it: the open visit's note box at the top of the
+  // chart, not behind a button), so a provider starts with the form open and
+  // gets a fresh one after a save. Anyone with the clerical surface (the
+  // front desk, an administrator) opens it on demand, as with Provider view.
+  const noteFirst = clinical && !clerical
+  const [composing, setComposing] = useState(noteFirst)
   const visits = [...opened, ...onFile]
 
   const age = ageFromDob(patient.dob)
@@ -178,25 +183,18 @@ export function PatientDetail({
         proportional rather than a fixed side width so the chart grows with
         the screen instead of the text.
       */}
-      <PatientSummary
-        patient={patient}
-        age={age}
-        currentWeight={clinical ? currentWeight : null}
-        currentBmi={clinical ? currentBmi : null}
-        showHistory={clinical}
-      />
-
       <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="flex min-w-0 flex-col gap-6">
           {composing && (
             <ConsultationForm
+              key={visits.length}
               patient={patient}
               visitCount={visits.length}
               currentUser={currentUser}
               onCancel={() => setComposing(false)}
               onSave={(visit) => {
                 setOpened((prev) => [visit, ...prev])
-                setComposing(false)
+                setComposing(noteFirst)
               }}
             />
           )}
@@ -217,7 +215,7 @@ export function PatientDetail({
                   <Card>
                     <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
                       <FileTextIcon className="size-6 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">No visit records on file.</p>
+                      <p className="text-base text-muted-foreground">No visit records on file.</p>
                     </CardContent>
                   </Card>
                 ) : (
@@ -262,6 +260,22 @@ export function PatientDetail({
         </div>
 
         <aside className="flex flex-col gap-4 xl:sticky xl:top-20 xl:self-start">
+          {/* The Sep 14 review, re-read on Sep 28: the patient information
+              card stays where the Sep 7 layout put it, at the top of the
+              fixed right column, and is split in half so the width is used:
+              patient information left, medical history right, with its
+              Conditions and Drug allergies lines above the free text.
+              Medication and the chart follow beneath it as before. */}
+          <PatientSummary
+            patient={patient}
+            age={age}
+            currentWeight={clinical ? currentWeight : null}
+            currentBmi={clinical ? currentBmi : null}
+            showVitals={clinical}
+          />
+
+          {clinical && <MedicalHistoryCard patient={patient} />}
+
           {clinical && (
             <Card>
               <CardHeader>
@@ -270,7 +284,7 @@ export function PatientDetail({
                   Medication
                 </CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-col gap-2 text-sm">
+              <CardContent className="flex flex-col gap-2 text-base">
                 {currentMeds.length === 0 ? (
                   <p className="text-muted-foreground">No current medication.</p>
                 ) : (
@@ -282,7 +296,7 @@ export function PatientDetail({
                   ))
                 )}
                 {latest && (
-                  <p className="text-xs text-muted-foreground">As of the {fmtDateLong(latest.date)} visit.</p>
+                  <p className="text-sm text-muted-foreground">As of the {fmtDateLong(latest.date)} visit.</p>
                 )}
               </CardContent>
             </Card>
@@ -295,7 +309,7 @@ export function PatientDetail({
               </CardHeader>
               <CardContent>
                 {visits.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No visits to chart.</p>
+                  <p className="text-base text-muted-foreground">No visits to chart.</p>
                 ) : (
                   <WeightChart
                     className="h-[220px] w-full 3xl:h-[280px]"
@@ -328,7 +342,7 @@ export function PatientDetail({
                         <div className="flex aspect-[3/4] items-center justify-center rounded-md border border-dashed border-border bg-muted/40">
                           <CameraIcon className="size-5 text-muted-foreground" />
                         </div>
-                        <figcaption className="text-center text-xs text-muted-foreground">{fmtDateLong(v.date)}</figcaption>
+                        <figcaption className="text-center text-sm text-muted-foreground">{fmtDateLong(v.date)}</figcaption>
                       </figure>
                     ))}
                 </div>
@@ -349,7 +363,7 @@ export function PatientDetail({
       </div>
 
       {!clinical && !clerical && (
-        <p className="mt-6 text-sm text-muted-foreground">
+        <p className="mt-6 text-base text-muted-foreground">
           The {ROLE_LABEL[role]} view has no content on this screen.
         </p>
       )}
@@ -374,7 +388,7 @@ function AtHomeCard({ patient }: { patient: Patient }) {
           At-Home program
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3 text-sm">
+      <CardContent className="flex flex-col gap-3 text-base">
         {patient.program === undefined && (
           <p className="flex items-center gap-2 text-warning-foreground">
             <CircleAlertIcon className="size-4" />
@@ -382,7 +396,7 @@ function AtHomeCard({ patient }: { patient: Patient }) {
           </p>
         )}
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="tracking-number" className="text-sm font-medium">
+          <label htmlFor="tracking-number" className="text-base font-medium">
             Welcome package tracking number
           </label>
           <Input
@@ -394,7 +408,7 @@ function AtHomeCard({ patient }: { patient: Patient }) {
           />
         </div>
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-muted-foreground">
+          <span className="text-sm text-muted-foreground">
             {sent ? "Package sent, patient texted." : "Not sent yet."}
           </span>
           <Button
@@ -422,74 +436,88 @@ function AtHomeCard({ patient }: { patient: Patient }) {
  * text. The header's weight and BMI are the current values; each clinical
  * note carries its own visit's pair.
  */
+/**
+ * The patient facts, in two columns so the card's width is used (the Sep 28
+ * review). The weight and BMI here are the current ones, from the latest
+ * clinical visit; each note carries its own visit's pair.
+ */
 function PatientSummary({
   patient,
   age,
   currentWeight,
   currentBmi,
-  showHistory,
+  showVitals,
 }: {
   patient: Patient
   age: number
   currentWeight: number | null
   currentBmi: number | null
-  showHistory: boolean
+  showVitals: boolean
 }) {
   return (
-    <Card className="mt-6">
-      <CardContent className={cn("grid gap-6 pt-6", showHistory && "md:grid-cols-2")}>
-        <section className="flex flex-col gap-3">
-          <h2 className="flex items-center gap-2 text-base font-semibold">
-            <StethoscopeIcon className="size-4 text-primary" />
-            Patient information
-          </h2>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-            <Term>Gender</Term>
-            <Detail>{patient.gender}</Detail>
-            <Term>Age</Term>
-            <Detail>{age} yrs</Detail>
-            <Term>DOB</Term>
-            <Detail>{fmtDateLong(patient.dob)}</Detail>
-            <Term>Height</Term>
-            <Detail>{formatHeight(patient.heightIn)}</Detail>
-            {showHistory && (
-              <>
-                <Term>Weight</Term>
-                <Detail>{currentWeight === null ? "-" : `${currentWeight} lbs`}</Detail>
-                <Term>BMI</Term>
-                <Detail>{currentBmi === null || currentBmi === 0 ? "-" : currentBmi}</Detail>
-              </>
-            )}
-            <Term>Office</Term>
-            <Detail>{patient.office}</Detail>
-            <Term>Program</Term>
-            <Detail>{patient.program ?? "-"}</Detail>
-            <Term>Last visit</Term>
-            <Detail>{fmtDateLong(patient.lastVisit)}</Detail>
-          </dl>
-        </section>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <StethoscopeIcon className="size-4 text-primary" />
+          Patient information
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-base sm:grid-cols-[auto_1fr_auto_1fr] sm:gap-x-6">
+          <Term>Gender</Term>
+          <Detail>{patient.gender}</Detail>
+          <Term>Office</Term>
+          <Detail>{patient.office}</Detail>
+          <Term>Age</Term>
+          <Detail>{age} yrs</Detail>
+          <Term>Program</Term>
+          <Detail>{patient.program ?? "-"}</Detail>
+          <Term>DOB</Term>
+          <Detail>{fmtDateLong(patient.dob)}</Detail>
+          <Term>Last visit</Term>
+          <Detail>{fmtDateLong(patient.lastVisit)}</Detail>
+          <Term>Height</Term>
+          <Detail>{formatHeight(patient.heightIn)}</Detail>
+          {showVitals ? (
+            <>
+              <Term>Weight</Term>
+              <Detail>{currentWeight === null ? "-" : `${currentWeight} lbs`}</Detail>
+              <Term>BMI</Term>
+              <Detail>{currentBmi === null || currentBmi === 0 ? "-" : currentBmi}</Detail>
+            </>
+          ) : (
+            <span className="hidden sm:col-span-2 sm:block" aria-hidden />
+          )}
+        </dl>
+      </CardContent>
+    </Card>
+  )
+}
 
-        {showHistory && (
-          <section className="flex flex-col gap-3 md:border-l md:border-border md:pl-6">
-            <h2 className="flex items-center gap-2 text-base font-semibold">
-              <HeartPulseIcon className="size-4 text-primary" />
-              Medical history
-            </h2>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-              <Term>Conditions</Term>
-              <Detail>{patient.conditions.length === 0 ? "None on file" : patient.conditions.join(", ")}</Detail>
-              <Term>Drug allergies</Term>
-              <Detail>
-                {patient.drugAllergies.length === 0 ? (
-                  "None known"
-                ) : (
-                  <span className="text-destructive">{patient.drugAllergies.join(", ")}</span>
-                )}
-              </Detail>
-            </dl>
-            <MedicalHistoryNotes initial={patient.medsHistory} />
-          </section>
-        )}
+/** Medical history as its own card beneath the facts (the Sep 28 review): the two lines, then the free text. */
+function MedicalHistoryCard({ patient }: { patient: Patient }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <HeartPulseIcon className="size-4 text-primary" />
+          Medical history
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-base">
+          <Term>Conditions</Term>
+          <Detail>{patient.conditions.length === 0 ? "None on file" : patient.conditions.join(", ")}</Detail>
+          <Term>Drug allergies</Term>
+          <Detail>
+            {patient.drugAllergies.length === 0 ? (
+              "None known"
+            ) : (
+              <span className="text-destructive">{patient.drugAllergies.join(", ")}</span>
+            )}
+          </Detail>
+        </dl>
+        <MedicalHistoryNotes initial={patient.medsHistory} />
       </CardContent>
     </Card>
   )
@@ -522,7 +550,7 @@ function MedicalHistoryNotes({ initial }: { initial: string }) {
         rows={3}
         aria-label="Medical history notes"
         placeholder="Prior treatments, anything the next provider should read first."
-        className="text-sm leading-relaxed"
+        className="text-base leading-relaxed"
       />
       <div className="flex justify-end">
         <Button
