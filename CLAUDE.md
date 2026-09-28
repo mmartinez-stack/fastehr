@@ -213,14 +213,18 @@ clinical surface, Billing and Admin for the clerical one;
 docs/provider-record-migrations.md lists what it needs from the schema);
 reworked again per the Sep 14 review (re-read with the user on Sep 28):
 the patient information card stays at the top of the fixed right column
-but is split in half, patient information left and medical history right
-with Conditions and Drug allergies lines above the free text, medication
-and the weight chart beneath it; the chart's axis on both sides with
+with its facts in two columns, medical history as its own card beneath it
+with the Conditions and Drug allergies lines above the free text, then
+medication and the weight chart; the chart's axis on both sides with
 light horizontal gridlines, a value on each bar, and a trend line over
 the bars joining one visit's weight to the next; the record view's text
 one step larger than the rest of the app (notes 16px, metadata 14px) for
-the clinic's 1080p screens; on each clinical
-note its visit's weight and BMI beside the medication, a full-width
+the clinic's 1080p screens; the New visit form open by default for a
+provider with the consultation box as its main element and the visit
+details in a narrow column beside it, as the legacy visit panel had it;
+in Provider view the whole clinical card is tinted green rather than
+edged; on each clinical note a contrast strip with the medication
+dispensed and the visit's weight, BMI, and BP, a full-width
 "Signed by" line beneath the note as the legacy Sign panel had it, addenda
 as a thread, Save and Save and sign as two buttons on the consultation form
 and on addenda, "Sign reviewed as" after a review, and a Provider view

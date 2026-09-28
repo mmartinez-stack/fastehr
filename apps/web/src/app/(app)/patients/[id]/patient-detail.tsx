@@ -31,7 +31,6 @@ import { LanguageTag, PatientStatusBadge } from "@/components/status-badges"
 import { WaiversColumn } from "@/features/consents/waivers-column"
 import { formatHeight } from "@/features/patients/height"
 import { ROLE_LABEL } from "@/lib/staff-role-label"
-import { cn } from "@/lib/utils"
 import {
   ageFromDob,
   bmi,
@@ -95,7 +94,13 @@ export function PatientDetail({
   // A visit opened on this screen (the consultation form) joins the records
   // at once, newest first; mockup state, gone on reload.
   const [opened, setOpened] = useState<Visit[]>([])
-  const [composing, setComposing] = useState(false)
+  // The consultation note is the provider's main surface (the Sep 28 review,
+  // as the legacy chart had it: the open visit's note box at the top of the
+  // chart, not behind a button), so a provider starts with the form open and
+  // gets a fresh one after a save. Anyone with the clerical surface (the
+  // front desk, an administrator) opens it on demand, as with Provider view.
+  const noteFirst = clinical && !clerical
+  const [composing, setComposing] = useState(noteFirst)
   const visits = [...opened, ...onFile]
 
   const age = ageFromDob(patient.dob)
@@ -182,13 +187,14 @@ export function PatientDetail({
         <div className="flex min-w-0 flex-col gap-6">
           {composing && (
             <ConsultationForm
+              key={visits.length}
               patient={patient}
               visitCount={visits.length}
               currentUser={currentUser}
               onCancel={() => setComposing(false)}
               onSave={(visit) => {
                 setOpened((prev) => [visit, ...prev])
-                setComposing(false)
+                setComposing(noteFirst)
               }}
             />
           )}
@@ -265,8 +271,10 @@ export function PatientDetail({
             age={age}
             currentWeight={clinical ? currentWeight : null}
             currentBmi={clinical ? currentBmi : null}
-            showHistory={clinical}
+            showVitals={clinical}
           />
+
+          {clinical && <MedicalHistoryCard patient={patient} />}
 
           {clinical && (
             <Card>
@@ -428,74 +436,88 @@ function AtHomeCard({ patient }: { patient: Patient }) {
  * text. The header's weight and BMI are the current values; each clinical
  * note carries its own visit's pair.
  */
+/**
+ * The patient facts, in two columns so the card's width is used (the Sep 28
+ * review). The weight and BMI here are the current ones, from the latest
+ * clinical visit; each note carries its own visit's pair.
+ */
 function PatientSummary({
   patient,
   age,
   currentWeight,
   currentBmi,
-  showHistory,
+  showVitals,
 }: {
   patient: Patient
   age: number
   currentWeight: number | null
   currentBmi: number | null
-  showHistory: boolean
+  showVitals: boolean
 }) {
   return (
     <Card>
-      <CardContent className={cn("grid gap-6 pt-6", showHistory && "sm:grid-cols-2")}>
-        <section className="flex flex-col gap-3">
-          <h2 className="flex items-center gap-2 text-base font-semibold">
-            <StethoscopeIcon className="size-4 text-primary" />
-            Patient information
-          </h2>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-base">
-            <Term>Gender</Term>
-            <Detail>{patient.gender}</Detail>
-            <Term>Age</Term>
-            <Detail>{age} yrs</Detail>
-            <Term>DOB</Term>
-            <Detail>{fmtDateLong(patient.dob)}</Detail>
-            <Term>Height</Term>
-            <Detail>{formatHeight(patient.heightIn)}</Detail>
-            {showHistory && (
-              <>
-                <Term>Weight</Term>
-                <Detail>{currentWeight === null ? "-" : `${currentWeight} lbs`}</Detail>
-                <Term>BMI</Term>
-                <Detail>{currentBmi === null || currentBmi === 0 ? "-" : currentBmi}</Detail>
-              </>
-            )}
-            <Term>Office</Term>
-            <Detail>{patient.office}</Detail>
-            <Term>Program</Term>
-            <Detail>{patient.program ?? "-"}</Detail>
-            <Term>Last visit</Term>
-            <Detail>{fmtDateLong(patient.lastVisit)}</Detail>
-          </dl>
-        </section>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <StethoscopeIcon className="size-4 text-primary" />
+          Patient information
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-base sm:grid-cols-[auto_1fr_auto_1fr] sm:gap-x-6">
+          <Term>Gender</Term>
+          <Detail>{patient.gender}</Detail>
+          <Term>Office</Term>
+          <Detail>{patient.office}</Detail>
+          <Term>Age</Term>
+          <Detail>{age} yrs</Detail>
+          <Term>Program</Term>
+          <Detail>{patient.program ?? "-"}</Detail>
+          <Term>DOB</Term>
+          <Detail>{fmtDateLong(patient.dob)}</Detail>
+          <Term>Last visit</Term>
+          <Detail>{fmtDateLong(patient.lastVisit)}</Detail>
+          <Term>Height</Term>
+          <Detail>{formatHeight(patient.heightIn)}</Detail>
+          {showVitals ? (
+            <>
+              <Term>Weight</Term>
+              <Detail>{currentWeight === null ? "-" : `${currentWeight} lbs`}</Detail>
+              <Term>BMI</Term>
+              <Detail>{currentBmi === null || currentBmi === 0 ? "-" : currentBmi}</Detail>
+            </>
+          ) : (
+            <span className="hidden sm:col-span-2 sm:block" aria-hidden />
+          )}
+        </dl>
+      </CardContent>
+    </Card>
+  )
+}
 
-        {showHistory && (
-          <section className="flex flex-col gap-3 sm:border-l sm:border-border sm:pl-6">
-            <h2 className="flex items-center gap-2 text-base font-semibold">
-              <HeartPulseIcon className="size-4 text-primary" />
-              Medical history
-            </h2>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-base">
-              <Term>Conditions</Term>
-              <Detail>{patient.conditions.length === 0 ? "None on file" : patient.conditions.join(", ")}</Detail>
-              <Term>Drug allergies</Term>
-              <Detail>
-                {patient.drugAllergies.length === 0 ? (
-                  "None known"
-                ) : (
-                  <span className="text-destructive">{patient.drugAllergies.join(", ")}</span>
-                )}
-              </Detail>
-            </dl>
-            <MedicalHistoryNotes initial={patient.medsHistory} />
-          </section>
-        )}
+/** Medical history as its own card beneath the facts (the Sep 28 review): the two lines, then the free text. */
+function MedicalHistoryCard({ patient }: { patient: Patient }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <HeartPulseIcon className="size-4 text-primary" />
+          Medical history
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-base">
+          <Term>Conditions</Term>
+          <Detail>{patient.conditions.length === 0 ? "None on file" : patient.conditions.join(", ")}</Detail>
+          <Term>Drug allergies</Term>
+          <Detail>
+            {patient.drugAllergies.length === 0 ? (
+              "None known"
+            ) : (
+              <span className="text-destructive">{patient.drugAllergies.join(", ")}</span>
+            )}
+          </Detail>
+        </dl>
+        <MedicalHistoryNotes initial={patient.medsHistory} />
       </CardContent>
     </Card>
   )

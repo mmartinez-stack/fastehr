@@ -250,22 +250,25 @@ export function VisitRecords({
             key={v.id}
             className={cn(
               "rounded-lg border shadow-sm",
-              isSigned ? "border-foreground/15 bg-card" : "border-warning/50 bg-warning/10",
-              green && "border-l-4 border-l-success",
+              // The Provider view colours the whole card (the Sep 28 review,
+              // as the legacy chart tinted a clinical entry), not an edge.
+              green
+                ? "border-success/40 bg-success/10"
+                : isSigned
+                  ? "border-foreground/15 bg-card"
+                  : "border-warning/50 bg-warning/10",
+              green && !isSigned && "border-warning/50",
             )}
           >
-            <header className="flex flex-wrap items-center justify-between gap-2 border-b border-foreground/10 bg-muted/50 px-4 py-2.5">
+            <header
+              className={cn(
+                "flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5",
+                green ? "border-success/20 bg-success/15" : "border-foreground/10 bg-muted/50",
+              )}
+            >
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-base">
                 <span className="font-semibold">On: {fmtDateLong(v.date)}</span>
                 <span className="text-foreground/80">{v.provider}</span>
-                {v.bloodPressure && (
-                  <span className="text-muted-foreground">
-                    BP{" "}
-                    <span className="font-medium tabular-nums text-foreground">
-                      {v.bloodPressure.systolic}/{v.bloodPressure.diastolic}
-                    </span>
-                  </span>
-                )}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">{v.type}</Badge>
@@ -298,33 +301,49 @@ export function VisitRecords({
             </header>
 
             <div className="flex flex-col gap-3 px-4 py-3">
-              {/* Medication is clinical detail; an administrative entry has none
-                  to show. The visit's weight and BMI sit at the top right beside
-                  it (the Sep 14 review); the header's pair is the current one. */}
-              {kind === "provider" && (v.meds.length > 0 || visitBmi !== null) && (
-                <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-                  <div className="flex flex-wrap gap-1.5">
-                    {v.meds.map((m, i) => (
-                      <span
-                        key={i}
-                        className="rounded border border-foreground/15 bg-muted px-2 py-0.5 text-sm font-medium"
-                      >
-                        {m.name} {m.dosage}
-                      </span>
-                    ))}
+              {/* The visit's facts as the legacy card listed them (Weight,
+                  BMI, BP) beside the medication it dispensed, at the top of
+                  the note (the Sep 14 review; contrast raised on Sep 28). An
+                  administrative entry has none to show. The header card's
+                  weight and BMI are the current pair; these are this visit's. */}
+              {kind === "provider" && (v.meds.length > 0 || visitBmi !== null || v.bloodPressure) && (
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-md border border-foreground/10 bg-background/70 px-3 py-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {v.meds.length === 0 ? (
+                      <span className="text-base text-muted-foreground">No medication dispensed</span>
+                    ) : (
+                      v.meds.map((m, i) => (
+                        <span
+                          key={i}
+                          className="rounded-md border border-primary/30 bg-primary/15 px-2.5 py-1 text-base font-semibold text-foreground"
+                        >
+                          {m.name} <span className="font-medium text-foreground/80">{m.dosage}</span>
+                        </span>
+                      ))
+                    )}
                   </div>
-                  {visitBmi !== null && (
-                    <dl className="flex items-baseline gap-3 text-sm">
-                      <div className="flex items-baseline gap-1">
-                        <dt className="text-muted-foreground">Weight</dt>
-                        <dd className="font-semibold tabular-nums">{v.weight} lbs</dd>
+                  <dl className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-base">
+                    {visitBmi !== null && (
+                      <>
+                        <div className="flex items-baseline gap-1.5">
+                          <dt className="text-muted-foreground">Weight</dt>
+                          <dd className="font-semibold tabular-nums">{v.weight} lbs</dd>
+                        </div>
+                        <div className="flex items-baseline gap-1.5">
+                          <dt className="text-muted-foreground">BMI</dt>
+                          <dd className="font-semibold tabular-nums">{visitBmi}</dd>
+                        </div>
+                      </>
+                    )}
+                    {v.bloodPressure && (
+                      <div className="flex items-baseline gap-1.5">
+                        <dt className="text-muted-foreground">BP</dt>
+                        <dd className="font-semibold tabular-nums">
+                          {v.bloodPressure.systolic}/{v.bloodPressure.diastolic}
+                        </dd>
                       </div>
-                      <div className="flex items-baseline gap-1">
-                        <dt className="text-muted-foreground">BMI</dt>
-                        <dd className="font-semibold tabular-nums">{visitBmi}</dd>
-                      </div>
-                    </dl>
-                  )}
+                    )}
+                  </dl>
                 </div>
               )}
 
