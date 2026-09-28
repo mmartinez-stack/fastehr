@@ -49,6 +49,8 @@ export interface IntakeCopy {
     firstName: string
     lastName: string
     dateOfBirth: string
+    /** The mask the field shows before anything is typed; the slashes are typed for the person. */
+    dateOfBirthPlaceholder: string
     dateOfBirthHint: string
     gender: string
     phone: string
@@ -136,7 +138,8 @@ export const INTAKE_COPY: Readonly<Record<PatientLanguage, IntakeCopy>> = {
       firstName: "First name",
       lastName: "Last name",
       dateOfBirth: "Date of birth",
-      dateOfBirthHint: "Month, day, year. For example 03/21/1985.",
+      dateOfBirthPlaceholder: "MM/DD/YYYY",
+      dateOfBirthHint: "Month, day, year, digits only. For example 03/21/1985.",
       gender: "Gender",
       phone: "Mobile phone",
       phoneHint: "Ten digits, any format.",
@@ -276,7 +279,8 @@ export const INTAKE_COPY: Readonly<Record<PatientLanguage, IntakeCopy>> = {
       firstName: "Nombre",
       lastName: "Apellido",
       dateOfBirth: "Fecha de nacimiento",
-      dateOfBirthHint: "Mes, día y año. Por ejemplo 03/21/1985.",
+      dateOfBirthPlaceholder: "MM/DD/AAAA",
+      dateOfBirthHint: "Mes, día y año, solo números. Por ejemplo 03/21/1985.",
       gender: "Género",
       phone: "Teléfono celular",
       phoneHint: "Diez dígitos, en cualquier formato.",
