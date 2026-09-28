@@ -55,6 +55,7 @@ import { US_STATES } from "@/features/patients/us-states.ts"
 import { validationFrom, type FormErrors } from "@/lib/form-errors"
 import { trpc } from "@/trpc/client"
 import { INTAKE_COPY } from "./intake-copy.ts"
+import { isoDateFromTyped, maskTypedDate } from "./typed-date.ts"
 
 /**
  * The person's side of the intake (DIA-72, ADR 29 as amended): one scrolling
@@ -181,19 +182,6 @@ function toSubmitInput(value: PatientIntakeValues, token: string, language: Pati
 }
 
 /**
- * The birthdate is typed, not picked (the Sep 14 review: patients found the
- * scrolling picker confusing). Month/day/year with any separator becomes the
- * ISO date the contract expects; anything else passes through unchanged so
- * the contract answers with its `invalid_format` code and the copy explains.
- */
-export function isoDateFromTyped(typed: string): string {
-  const match = /^\s*(\d{1,2})[/.\-\s](\d{1,2})[/.\-\s](\d{4})\s*$/.exec(typed)
-  if (match === null) return typed.trim()
-  const [, month, day, year] = match
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`
-}
-
-/**
  * A failure → field errors, the contract's `medications.0.name` addressed
  * as TanStack's `medications[0].name` and looked up as `medications.name`.
  */
@@ -290,6 +278,8 @@ export function PatientIntakeForm({
       description?: string
       required?: boolean
       disabled?: boolean
+      /** Reshapes what was typed before it lands in state (the date mask). */
+      format?: (next: string, previous: string) => string
     } = {},
   ) => (
     <form.Field name={name as "firstName"}>
@@ -306,7 +296,13 @@ export function PatientIntakeForm({
             inputMode={options.inputMode}
             autoComplete={options.autoComplete}
             value={field.state.value}
-            onChange={(event) => field.handleChange(event.target.value)}
+            onChange={(event) =>
+              field.handleChange(
+                options.format === undefined
+                  ? event.target.value
+                  : options.format(event.target.value, field.state.value),
+              )
+            }
             onBlur={field.handleBlur}
             aria-invalid={!field.state.meta.isValid}
             placeholder={options.placeholder}
@@ -534,8 +530,9 @@ export function PatientIntakeForm({
         {textField("dateOfBirth", copy.labels.dateOfBirth, {
           inputMode: "numeric",
           autoComplete: "bday",
-          placeholder: "MM/DD/YYYY",
+          placeholder: copy.labels.dateOfBirthPlaceholder,
           description: copy.labels.dateOfBirthHint,
+          format: maskTypedDate,
           required: true,
         })}
         {radioField(
